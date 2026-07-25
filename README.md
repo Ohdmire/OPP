@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./public/opp-icon.svg" width="112" height="112" alt="OPP logo" />
+  <img src="./public/opp-icon.png" width="112" height="112" alt="OPP logo" />
 
   # OPP
 
@@ -83,14 +83,6 @@ Lazer 的原始文件名和资源关系保存在 Realm 中。当前版本只读�
 
 请勿把自己的 Client Secret、Token、凭据导出文件或应用数据提交到仓库。
 
-## 数据与安全边界
-
-- OPP 不会修改 `Songs`、`Skins`、Lazer `files` 或 `client.realm`。
-- WebView 不直接拥有文件系统读取权限；文件解析与媒体校验均在 Rust 后端进行。
-- 本地索引保存在 OPP 应用数据目录，不写入项目目录。
-- Skin 图片会在尺寸与内存限制下重新解码；音频会先验证格式签名。
-- 当前难度分析固定为谱面原生模式和 NoMod，不计算 PP。
-
 ## 本地开发
 
 ### 环境
@@ -151,8 +143,4 @@ OPP/
 
 ## Vibe Coding
 
-OPP 采用 **Vibe Coding / AI 协作开发** 方式推进：由人定义产品方向、边界与验收标准，AI 协助分析、实现、重构和测试。所有进入发布版本的功能都应通过可复现的静态检查、自动化测试和本机验收，而不是仅凭生成结果判断完成。
-
-## License
-
-当前仓库尚未声明开源许可证。在许可证发布前，默认保留所有权利。公开发布前请在 [发布检查清单](./docs/发布检查清单.md) 中确认许可证选择。
+OPP 采用 **Vibe Coding / AI 协作开发** 方式推进：由人定义产品方向、边界与验收标准，AI 协助分析、实现、重构和测试。
