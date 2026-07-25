@@ -13,7 +13,7 @@ import { fullNumber } from "../../shared/lib/format";
 import { desktopApi } from "../../shared/lib/tauri";
 import type { OnlineBeatmapset } from "../../shared/types/osu";
 import { useOnlineBeatmapsetDetail } from "./api";
-import { DifficultyIcon, ModeIcon } from "./BeatmapVisuals";
+import { DifficultyIcon, ModIcon, ModeIcon, modeMods } from "./BeatmapVisuals";
 import {
   durationLabel,
   normalizePreviewUrl,
@@ -42,6 +42,7 @@ export function BeatmapsetDetailDialog({
   const [calculation, setCalculation] = useState<Awaited<ReturnType<typeof desktopApi.calculateBeatmapPp>> | null>(null);
   const [calculationError, setCalculationError] = useState<string | null>(null);
   const [showCalculator, setShowCalculator] = useState(false);
+  const selectedMode = beatmapset?.beatmaps?.find((beatmap) => beatmap.id === selectedBeatmapId)?.mode ?? "osu";
 
   const calculate = async () => {
     if (!selectedBeatmapId) return;
@@ -228,10 +229,11 @@ export function BeatmapsetDetailDialog({
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1.5">{[95, 97, 98, 99, 100].map((preset) => <button className="rounded-lg border border-white/[0.08] px-2.5 py-1 text-xs text-slate-400 hover:border-cyan-300/30 hover:text-cyan-100" key={preset} onClick={() => setAccuracy(String(preset))} type="button">{preset}%</button>)}</div>
                   <div className="mt-4 flex flex-wrap gap-2">
-                    {["HD", "HR", "DT", "NC", "FL", "EZ", "HT", "NF", "SD", "SO"].map((mod) => (
-                      <button className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${mods.includes(mod) ? "border-cyan-300/40 bg-cyan-300/10 text-cyan-100" : "border-white/[0.08] text-slate-500 hover:border-white/20 hover:text-slate-300"}`} key={mod} onClick={() => toggleMod(mod)} type="button">{mod}</button>
+                    {modeMods[selectedMode].map((mod) => (
+                      <ModIcon active={mods.includes(mod)} key={mod} mod={mod} onClick={() => toggleMod(mod)} />
                     ))}
                   </div>
+                  {calculation ? <div className="mt-3 grid gap-1 text-left text-[10px] text-slate-500"><span>Star 算法：{calculation.star_algorithm} · {calculation.star_algorithm_date}</span><span>Performance 算法：{calculation.performance_algorithm} · {calculation.performance_algorithm_date}</span></div> : null}
                   {calculationError ? <p className="mt-3 text-xs text-amber-200">{calculationError}</p> : null}
                 </div>
                 </div> : null}

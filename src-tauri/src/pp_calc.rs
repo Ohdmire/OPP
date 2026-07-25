@@ -33,6 +33,10 @@ pub struct BeatmapCalculationResult {
     pub calculation_engine: String,
     pub calculated_at: String,
     pub source: String,
+    pub star_algorithm: String,
+    pub star_algorithm_date: String,
+    pub performance_algorithm: String,
+    pub performance_algorithm_date: String,
 }
 
 #[tauri::command]
@@ -53,7 +57,8 @@ pub async fn calculate_beatmap_pp(
     let started = Instant::now();
     let map = rosu_pp::Beatmap::from_bytes(&bytes)
         .map_err(|error| CommandError::new("BEATMAP_PARSE_FAILED", error.to_string()))?;
-    let bits = mod_bits(&request.mods)?;
+    let mode = format!("{:?}", map.mode).to_lowercase();
+    let bits = mod_bits(&request.mods, &mode)?;
     let difficulty = rosu_pp::Difficulty::new().mods(bits).calculate(&map);
     let max_pp = difficulty.clone().performance().calculate().pp();
     let mut performance = difficulty.performance().mods(bits);
@@ -64,12 +69,11 @@ pub async fn calculate_beatmap_pp(
     if let Some(value) = request.n100 { performance = performance.n100(value); }
     if let Some(value) = request.n50 { performance = performance.n50(value); }
     let attributes = performance.calculate();
-    let mode = format!("{:?}", map.mode).to_lowercase();
     let _elapsed = started.elapsed();
     Ok(BeatmapCalculationResult {
         beatmap_id: request.beatmap_id,
         mods: request.mods,
-        mode,
+        mode: mode.clone(),
         stars: attributes.stars(),
         pp: attributes.pp(),
         max_pp,
@@ -77,10 +81,14 @@ pub async fn calculate_beatmap_pp(
         calculation_engine: "rosu-pp 4.0.1 / ppy-osu rulesets".into(),
         calculated_at: chrono::Utc::now().to_rfc3339(),
         source: download.source,
+        star_algorithm: format!("rosu-pp 4.0.1 · {mode} star"),
+        star_algorithm_date: "2025-10-16".into(),
+        performance_algorithm: format!("rosu-pp 4.0.1 · {mode} performance"),
+        performance_algorithm_date: "2025-10-16".into(),
     })
 }
 
-fn mod_bits(mods: &[String]) -> CommandResult<u32> {
+fn mod_bits(mods: &[String], mode: &str) -> CommandResult<u32> {
     let mut bits = 0;
     for value in mods {
         let acronym = value.trim().to_ascii_uppercase();
@@ -98,6 +106,10 @@ fn mod_bits(mods: &[String]) -> CommandResult<u32> {
             "NC" => 512,
             "FL" => 1024,
             "SO" => 4096,
+            "FI" if mode == "mania" => 1 << 20,
+            "RD" if mode == "mania" => 1 << 21,
+            "MR" if mode == "mania" => 1 << 30,
+            "FI" | "RD" | "MR" => return Err(CommandError::new("MOD_NOT_AVAILABLE", format!("{acronym} is not available for {mode}"))),
             _ => return Err(CommandError::new("INVALID_MOD", format!("不支持的 Mod：{value}"))),
         };
         bits |= bit;
@@ -111,12 +123,14 @@ mod tests {
 
     #[test]
     fn parses_common_mods() {
-        assert_eq!(mod_bits(&["HD".into(), "DT".into()]).unwrap(), 72);
-        assert_eq!(mod_bits(&["NM".into()]).unwrap(), 0);
+        assert_eq!(mod_bits(&["HD".into(), "DT".into()], "osu").unwrap(), 72);
+        assert_eq!(mod_bits(&["NM".into()], "osu").unwrap(), 0);
+        assert_eq!(mod_bits(&["FI".into()], "mania").unwrap(), 1 << 20);
     }
 
     #[test]
     fn rejects_unknown_mods() {
-        assert!(mod_bits(&["UNKNOWN".into()]).is_err());
+        assert!(mod_bits(&["UNKNOWN".into()], "osu").is_err());
+        assert!(mod_bits(&["FI".into()], "osu").is_err());
     }
 }

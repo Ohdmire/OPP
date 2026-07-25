@@ -433,6 +433,10 @@ export interface BeatmapCalculationResult {
   calculation_engine: string;
   calculated_at: string;
   source: BeatmapSource;
+  star_algorithm: string;
+  star_algorithm_date: string;
+  performance_algorithm: string;
+  performance_algorithm_date: string;
 }
 
 export interface OnlineBeatmapCover {

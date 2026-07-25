@@ -125,7 +125,9 @@ impl OnlineBeatmapSearchQuery {
         push_number_range(&mut filters, "cs", self.cs_min, self.cs_max)?;
         push_number_range(&mut filters, "od", self.od_min, self.od_max)?;
         push_number_range(&mut filters, "hp", self.hp_min, self.hp_max)?;
-        push_number_range(&mut filters, "keys", self.keys_min, self.keys_max)?;
+        if self.ruleset == Some(Ruleset::Mania) {
+            push_number_range(&mut filters, "keys", self.keys_min, self.keys_max)?;
+        }
 
         let mut parameters = Vec::new();
         if !filters.is_empty() {
@@ -915,6 +917,8 @@ mod tests {
             ranked_to: "2025-12-31".into(),
             stars_min: Some(4.25),
             stars_max: Some(6.5),
+            keys_min: Some(4.0),
+            keys_max: Some(4.0),
             ..Default::default()
         }
     }
@@ -932,6 +936,8 @@ mod tests {
         assert!(q.contains("ranked<=2025-12-31"));
         assert!(q.contains("stars>=4.25"));
         assert!(q.contains("stars<=6.5"));
+        assert!(q.contains("keys>=4"));
+        assert!(q.contains("keys<=4"));
         assert!(parameters.contains(&("m".into(), "3".into())));
         assert!(parameters.contains(&("s".into(), "ranked".into())));
     }

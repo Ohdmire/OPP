@@ -27,6 +27,8 @@ function Range({ label, min, max, onMin, onMax }: { label: string; min: number |
   return <Field label={label}><div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"><input className={inputClass} inputMode="decimal" onChange={(event) => onMin(parseOptionalNumber(event.target.value))} placeholder="最小" type="number" value={min ?? ""} /><span className="text-slate-600">至</span><input className={inputClass} inputMode="decimal" onChange={(event) => onMax(parseOptionalNumber(event.target.value))} placeholder="最大" type="number" value={max ?? ""} /></div></Field>;
 }
 
+const maniaKeyOptions = [4, 5, 6, 7, 8, 9, 10] as const;
+
 const contentOptions = [
   ["", "全部内容"], ["recommended", "推荐难度"], ["converts", "包括转谱"], ["follows", "已关注谱师"], ["spotlights", "聚光灯谱面"], ["featured_artists", "精选艺术家"],
 ] as const;
@@ -45,6 +47,7 @@ export function OnlineBeatmapFilters({ query, loading, onChange, onReset, onSubm
           <div className="ml-auto flex gap-2"><Button aria-label="重置筛选" onClick={onReset} size="icon" type="button" variant="ghost"><RotateCcw className="size-4" /></Button><Button loading={loading} size="sm" type="submit">应用筛选</Button></div>
         </div>
         <div className="space-y-1 px-5">
+          {query.ruleset === "mania" ? <div className="border-t border-white/[0.08] py-4"><Field label="Mania 键数"><div className="flex flex-wrap gap-2"><button className={`rounded-lg border px-3 py-2 text-xs ${query.keys_min === null && query.keys_max === null ? "border-violet-300/50 bg-violet-300/10 text-violet-100" : "border-white/[0.09] text-slate-400"}`} onClick={() => patch({ keys_min: null, keys_max: null })} type="button">全部</button>{maniaKeyOptions.map((keys) => <button className={`rounded-lg border px-3 py-2 text-xs font-medium ${query.keys_min === keys && query.keys_max === keys ? "border-violet-300/50 bg-violet-300/10 text-violet-100" : "border-white/[0.09] text-slate-400 hover:border-violet-300/30 hover:text-violet-100"}`} key={keys} onClick={() => patch({ keys_min: keys, keys_max: keys })} type="button">{keys}K</button>)}</div></Field></div> : null}
           <div className="relative py-5"><Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-slate-500" /><input autoFocus className={`${inputClass} py-3 pl-11`} onChange={(event) => patch({ query: event.target.value })} placeholder="搜索标题、艺术家、mapper、标签或 ID" value={query.query} /></div>
 
           <Section open title="内容筛选" count={query.content_filter || query.grade || query.played ? 1 : 0}>
