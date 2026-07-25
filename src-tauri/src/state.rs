@@ -1,0 +1,40 @@
+use std::{
+    path::Path,
+    sync::{Arc, Mutex},
+};
+
+use tokio::sync::{Mutex as AsyncMutex, oneshot};
+
+use crate::{
+    avatar_cache::AvatarCache, credentials::CredentialStore, error::CommandResult,
+    local_analysis::LocalAnalysisService, osu_api::OsuApi, storage::StateStore,
+};
+
+#[derive(Default)]
+pub struct OAuthRuntime {
+    pub cancel: Option<oneshot::Sender<()>>,
+}
+
+pub struct AppState {
+    pub api: OsuApi,
+    pub avatar_cache: AvatarCache,
+    pub credentials: CredentialStore,
+    pub local_analysis: Arc<LocalAnalysisService>,
+    pub store: StateStore,
+    pub oauth: Mutex<OAuthRuntime>,
+    pub token_refresh: AsyncMutex<()>,
+}
+
+impl AppState {
+    pub fn new(app_data_dir: &Path) -> CommandResult<Self> {
+        Ok(Self {
+            api: OsuApi::new()?,
+            avatar_cache: AvatarCache::new(app_data_dir)?,
+            credentials: CredentialStore,
+            local_analysis: Arc::new(LocalAnalysisService::new(app_data_dir)?),
+            store: StateStore::load(app_data_dir)?,
+            oauth: Mutex::new(OAuthRuntime::default()),
+            token_refresh: AsyncMutex::new(()),
+        })
+    }
+}
