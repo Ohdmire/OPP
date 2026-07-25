@@ -3,6 +3,7 @@ import {
   FileChartColumn,
   Gauge,
   Map,
+  Music2,
   Palette,
   Settings,
 } from "lucide-react";
@@ -16,6 +17,7 @@ const onlineLinks = [
   { to: "/online/overview", label: "概览", icon: Gauge },
   { to: "/online/profile", label: "详细档案", icon: FileChartColumn },
   { to: "/online/scores", label: "最佳成绩", icon: BarChart3 },
+  { to: "/online/beatmaps", label: "在线谱面", icon: Music2 },
 ];
 
 function NavItem({

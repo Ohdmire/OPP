@@ -1,6 +1,6 @@
 [package]
 name = "opp"
-version = "0.2.3"
+version = "0.2.4"
 description = "A private osu! profile companion"
 authors = ["OPP"]
 edition = "2024"
@@ -29,7 +29,7 @@ chrono = { version = "0.4", features = ["serde"] }
 keyring = { version = "3", features = ["windows-native"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 thiserror = "2"
-tokio = { version = "1", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
 url = "2"
 uuid = { version = "1", features = ["v4"] }
 chardetng = "0.1"
@@ -40,6 +40,7 @@ rosu-map = "0.2.1"
 rosu-pp = "4.0.1"
 sha2 = "0.10"
 walkdir = "2"
+zip = "2"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

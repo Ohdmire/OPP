@@ -1,6 +1,7 @@
 import type { Ruleset } from "../types/osu";
 import { rulesetLabels } from "../lib/format";
 import { cn } from "../lib/cn";
+import { RulesetIcon } from "./RulesetIcon";
 
 const modes: Ruleset[] = ["osu", "taiko", "fruits", "mania"];
 
@@ -23,7 +24,7 @@ export function ModeSwitch({
         <button
           aria-selected={value === mode}
           className={cn(
-            "relative rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 outline-none transition focus-visible:ring-2 focus-visible:ring-cyan-300/50",
+            "relative inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 outline-none transition focus-visible:ring-2 focus-visible:ring-cyan-300/50",
             compact && "px-2.5 py-1.5 text-[11px]",
             value === mode &&
               "bg-white/[0.09] text-white shadow-[0_6px_22px_rgba(0,0,0,.25)]",
@@ -33,7 +34,8 @@ export function ModeSwitch({
           role="tab"
           type="button"
         >
-          {rulesetLabels[mode]}
+          <RulesetIcon mode={mode} className="size-4" />
+          <span>{rulesetLabels[mode]}</span>
         </button>
       ))}
     </div>

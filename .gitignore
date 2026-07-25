@@ -40,7 +40,7 @@ src-tauri/gen/
 credentials.json
 secrets.json
 state.json
-local-analysis/
+/.local-analysis/
 
 # Logs and crash output
 logs/

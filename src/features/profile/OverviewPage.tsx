@@ -8,6 +8,8 @@ import {
   RefreshCw,
   ShieldAlert,
   Target,
+  TrendingDown,
+  TrendingUp,
   Trophy,
   WifiOff,
   type LucideIcon,
@@ -44,6 +46,7 @@ import {
 } from "../../shared/lib/format";
 import type { UserStatistics } from "../../shared/types/osu";
 import { useOwnProfile } from "./api";
+import { buildRankHistory, calculateRankTrend } from "./rankHistory";
 import { selectedStatistics } from "./statistics";
 
 function StatCard({
@@ -139,13 +142,14 @@ export function OverviewPage() {
     [profile, ruleset],
   );
 
-  const rankData = useMemo(
-    () =>
-      (profile?.rank_history?.data ?? []).map((rank, index, source) => ({
-        label: `${source.length - index} 天前`,
-        rank,
-      })),
+  const rankHistory = useMemo(
+    () => profile?.rank_history?.data ?? [],
     [profile],
+  );
+  const rankData = useMemo(() => buildRankHistory(rankHistory), [rankHistory]);
+  const rankTrend = useMemo(
+    () => calculateRankTrend(rankHistory),
+    [rankHistory],
   );
 
   const monthlyData = useMemo(
@@ -324,7 +328,20 @@ export function OverviewPage() {
               eyebrow="Rank history"
               title="排名轨迹"
             />
-            <Badge tone="cyan">{rankData.length} 个采样点</Badge>
+            <div className="flex items-center gap-2">
+              {rankTrend.direction !== "flat" ? (
+                <Badge tone={rankTrend.direction === "up" ? "success" : "warning"}>
+                  {rankTrend.direction === "up" ? (
+                    <TrendingUp className="size-3.5" />
+                  ) : (
+                    <TrendingDown className="size-3.5" />
+                  )}
+                  {rankTrend.direction === "up" ? "上升" : "下降"}{" "}
+                  {fullNumber(rankTrend.amount)} 名
+                </Badge>
+              ) : null}
+              <Badge tone="cyan">{rankData.length} 个采样点</Badge>
+            </div>
           </div>
           <div className="mt-5 h-64">
             {rankData.length ? (
@@ -346,7 +363,8 @@ export function OverviewPage() {
                   />
                   <YAxis
                     axisLine={false}
-                    domain={["dataMax", "dataMin"]}
+                    domain={["dataMin", "dataMax"]}
+                    reversed
                     tick={{ fill: "#596177", fontSize: 10 }}
                     tickFormatter={(value) => `#${compactNumber(value)}`}
                     tickLine={false}

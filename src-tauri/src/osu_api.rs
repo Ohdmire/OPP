@@ -1,7 +1,9 @@
 use std::time::Duration;
 
-use reqwest::{Response, StatusCode};
+use reqwest::{Response, StatusCode, header::CONTENT_DISPOSITION};
 use serde::de::DeserializeOwned;
+use serde_json::Value;
+use url::Url;
 
 use crate::{
     error::{CommandError, CommandResult},
@@ -10,6 +12,11 @@ use crate::{
 
 const API_BASE_URL: &str = "https://osu.ppy.sh/api/v2";
 const TOKEN_URL: &str = "https://osu.ppy.sh/oauth/token";
+
+pub struct DownloadedBeatmapset {
+    pub bytes: Vec<u8>,
+    pub suggested_filename: Option<String>,
+}
 
 pub struct OsuApi {
     client: reqwest::Client,
@@ -20,7 +27,7 @@ pub struct OsuApi {
 impl OsuApi {
     pub fn new() -> CommandResult<Self> {
         let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(20))
+            .timeout(Duration::from_secs(120))
             .user_agent(concat!(
                 "OPP/",
                 env!("CARGO_PKG_VERSION"),
@@ -79,7 +86,6 @@ impl OsuApi {
                 ("client_secret", client_secret),
                 ("grant_type", "refresh_token"),
                 ("refresh_token", refresh_token),
-                ("scope", "public identify"),
             ])
             .send()
             .await
@@ -107,6 +113,106 @@ impl OsuApi {
             self.api_base_url
         );
         self.authorized_get(&url, access_token).await
+    }
+
+    pub async fn search_beatmapsets(
+        &self,
+        access_token: &str,
+        parameters: &[(String, String)],
+    ) -> CommandResult<Value> {
+        let mut url = Url::parse(&format!("{}/beatmapsets/search", self.api_base_url))
+            .map_err(|error| CommandError::new("INVALID_URL", error.to_string()))?;
+        url.query_pairs_mut().extend_pairs(
+            parameters
+                .iter()
+                .map(|(key, value)| (key.as_str(), value.as_str())),
+        );
+        self.authorized_get(url.as_str(), access_token).await
+    }
+
+    pub async fn get_beatmapset(
+        &self,
+        access_token: &str,
+        beatmapset_id: u64,
+    ) -> CommandResult<Value> {
+        let url = format!("{}/beatmapsets/{beatmapset_id}", self.api_base_url);
+        self.authorized_get(&url, access_token).await
+    }
+
+    pub async fn download_beatmapset(
+        &self,
+        access_token: &str,
+        beatmapset_id: u64,
+    ) -> CommandResult<DownloadedBeatmapset> {
+        const MAX_ATTEMPTS: u32 = 3;
+        for attempt in 0..MAX_ATTEMPTS {
+            let response = self
+                .client
+                .get(format!(
+                    "{}/beatmapsets/{beatmapset_id}/download",
+                    self.api_base_url
+                ))
+                .bearer_auth(access_token)
+                .header("Accept", "application/octet-stream")
+                .header("x-api-version", "20220705")
+                .send()
+                .await;
+
+            let response = match response {
+                Ok(response) => response,
+                Err(error) if attempt + 1 < MAX_ATTEMPTS => {
+                    tokio::time::sleep(Duration::from_secs(1_u64 << attempt)).await;
+                    let _ = error;
+                    continue;
+                }
+                Err(error) => return Err(CommandError::network(error.to_string())),
+            };
+
+            if response.status().is_success() {
+                let suggested_filename = response
+                    .headers()
+                    .get(CONTENT_DISPOSITION)
+                    .and_then(|value| value.to_str().ok())
+                    .and_then(filename_from_content_disposition);
+                let bytes = response
+                    .bytes()
+                    .await
+                    .map_err(|error| CommandError::network(error.to_string()))?;
+                return Ok(DownloadedBeatmapset {
+                    bytes: bytes.to_vec(),
+                    suggested_filename,
+                });
+            }
+
+            if attempt + 1 < MAX_ATTEMPTS
+                && (response.status() == StatusCode::TOO_MANY_REQUESTS
+                    || response.status().is_server_error())
+            {
+                let retry_after = response
+                    .headers()
+                    .get("retry-after")
+                    .and_then(|value| value.to_str().ok())
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .unwrap_or(1_u64 << attempt)
+                    .min(30);
+                tokio::time::sleep(Duration::from_secs(retry_after)).await;
+                continue;
+            }
+
+            let error = Self::map_status(&response, "BEATMAP_DOWNLOAD_FAILED");
+            if response.status() == StatusCode::FORBIDDEN {
+                return Err(CommandError::new(
+                    "DOWNLOAD_SCOPE_REQUIRED",
+                    "osu! 不允许第三方 OAuth 应用访问官方谱面下载端点，请在 osu! 客户端或官网中下载该谱面。",
+                ));
+            }
+            return Err(error);
+        }
+
+        Err(CommandError::new(
+            "BEATMAP_DOWNLOAD_FAILED",
+            "谱面下载重试次数已用尽",
+        ))
     }
 
     pub async fn revoke_current_token(&self, access_token: &str) -> CommandResult<()> {
@@ -179,6 +285,14 @@ impl OsuApi {
     }
 }
 
+fn filename_from_content_disposition(value: &str) -> Option<String> {
+    value.split(';').find_map(|part| {
+        let (key, value) = part.trim().split_once('=')?;
+        key.eq_ignore_ascii_case("filename")
+            .then(|| value.trim_matches('"').to_string())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -219,5 +333,14 @@ mod tests {
             profile.extra.get("future_field"),
             Some(&serde_json::json!(123))
         );
+    }
+
+    #[test]
+    fn extracts_download_filename() {
+        assert_eq!(
+            filename_from_content_disposition("attachment; filename=\"123 Artist - Title.osz\""),
+            Some("123 Artist - Title.osz".into())
+        );
+        assert_eq!(filename_from_content_disposition("attachment"), None);
     }
 }

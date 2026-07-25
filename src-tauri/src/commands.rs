@@ -248,7 +248,7 @@ fn enforce_manual_cooldown(state: &AppState, key: &str) -> CommandResult<()> {
     })?
 }
 
-async fn ensure_access_token(state: &AppState) -> CommandResult<String> {
+pub(crate) async fn ensure_access_token(state: &AppState) -> CommandResult<String> {
     let _refresh_guard = state.token_refresh.lock().await;
     let tokens = state
         .credentials

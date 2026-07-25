@@ -5,7 +5,7 @@
 
   **面向 osu! 玩家的个人档案与本地资源分析桌面工具**
 
-  [![Version](https://img.shields.io/badge/version-0.2.3-ff6aa7?style=for-the-badge)](./src-tauri/tauri.conf.json)
+  [![Version](https://img.shields.io/badge/version-0.2.4-ff6aa7?style=for-the-badge)](./src-tauri/tauri.conf.json)
   [![Platform](https://img.shields.io/badge/platform-Windows-5ce1e6?style=for-the-badge&logo=windows11&logoColor=white)](#运行要求)
   [![Tauri](https://img.shields.io/badge/Tauri-2-a673ff?style=for-the-badge&logo=tauri&logoColor=white)](https://tauri.app/)
   [![Vibe Coding](https://img.shields.io/badge/Vibe_Coding-AI_Collaborative-8b5cf6?style=for-the-badge)](#vibe-coding)
@@ -33,10 +33,16 @@ OPP 是一个使用 Tauri、Rust 与 React 构建的 Windows 桌面应用。它�
 
 - 自动检测 osu!stable 与 osu!lazer，也可以手动选择目录。
 - 按 BeatmapSet 聚合同一集合的不同难度。
-- 分析 CS、AR、OD、HP、BPM、时长、物件、NPS、NoMod 星数与最大连击。
+- 分析 CS、AR、OD、HP、BPM、时长、物件、NPS、NoMod 星数、最大连击与理论满分 PP。
 - 按需计算各模式原生 strain 时间序列。
 - 支持标题、艺术家、Mapper、标签、ID、星数、BPM、时长和结构参数筛选。
 - Stable 谱面集使用经过后端校验和缩放的本地背景图。
+- 在数据源与谱面详情中标注计算引擎版本、发布日期、`ppy/osu` 上游提交日期、规则集版本与实际计算时间。
+
+当前算法口径为 [`rosu-pp 4.0.1`](https://github.com/MaxOhn/rosu-pp/tree/v4.0.1)，对应
+[`ppy/osu@28c846b`](https://github.com/ppy/osu/commit/28c846b4d9366484792e27f4729cd1afa2cdeb66)
+（2025-10-13）算法快照。PP 表示谱面原生模式下 `NoMod`、满分、最大连击、零 miss
+的理论值，不代表某一次实际成绩。
 
 ### 本地皮肤
 

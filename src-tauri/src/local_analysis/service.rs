@@ -31,13 +31,13 @@ use super::{
         SkinSort, SortDirection,
     },
     parser::{
-        DIFFICULTY_ALGORITHM, calculate_strains, looks_like_beatmap, looks_like_skin_config,
-        parse_beatmap, parse_skin, read_prefix, sha256,
+        DIFFICULTY_ALGORITHM, calculate_strains, calculation_version, looks_like_beatmap,
+        looks_like_skin_config, parse_beatmap, parse_skin, read_prefix, sha256,
     },
     sources::{ResolvedSource, SourceResolver},
 };
 
-const INDEX_SCHEMA: u32 = 4;
+const INDEX_SCHEMA: u32 = 5;
 const MAX_QUERY_LIMIT: usize = 500;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1382,6 +1382,7 @@ fn build_summary(
         source_bytes,
         diagnostic_count,
         mode_counts,
+        calculation: calculation_version(),
     }
 }
 
@@ -1694,6 +1695,7 @@ SliderTickRate:1
             ruleset: Ruleset::Osu,
             format_version: 14,
             stars: Some(stars),
+            max_pp: Some(100.0),
             max_combo: Some(1),
             bpm: 180.0,
             length_ms: 1_000.0,
@@ -1759,6 +1761,7 @@ SliderTickRate:1
                 source_bytes: 0,
                 diagnostic_count: 0,
                 mode_counts: BTreeMap::new(),
+                calculation: calculation_version(),
             },
             diagnostics: Vec::new(),
             entries: Vec::new(),

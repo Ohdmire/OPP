@@ -5,7 +5,14 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import type {
   AppSettings,
   AuthStatus,
+  BeatmapDownloadProgress,
+  BeatmapDownloadRequest,
+  BeatmapDownloadResult,
+  BeatmapCalculationRequest,
+  BeatmapCalculationResult,
+  BeatmapSourceStatus,
   Cached,
+  CollectedBeatmapsets,
   CommandError,
   DisconnectResult,
   BeatmapQuery,
@@ -20,6 +27,9 @@ import type {
   LocalSkinSummary,
   LocalSourceStatus,
   OAuthResult,
+  OnlineBeatmapSearchQuery,
+  OnlineBeatmapSearchResponse,
+  OnlineBeatmapset,
   OsuClient,
   OwnProfile,
   Page,
@@ -88,6 +98,25 @@ export const desktopApi = {
       ruleset,
       forceRefresh,
     }),
+  searchOnlineBeatmapsets: (query: OnlineBeatmapSearchQuery) =>
+    call<OnlineBeatmapSearchResponse>("search_online_beatmapsets", { query }),
+  collectOnlineBeatmapsets: (
+    query: OnlineBeatmapSearchQuery,
+    limit: number,
+  ) =>
+    call<CollectedBeatmapsets>("collect_online_beatmapsets", { query, limit }),
+  getOnlineBeatmapset: (beatmapsetId: number) =>
+    call<OnlineBeatmapset>("get_online_beatmapset", { beatmapsetId }),
+  getOnlineBeatmap: (beatmapId: number) =>
+    call<Record<string, unknown>>("get_online_beatmap", { beatmapId }),
+  getOnlineBeatmapProviderStatus: () =>
+    call<BeatmapSourceStatus[]>("get_online_beatmap_provider_status"),
+  calculateBeatmapPp: (request: BeatmapCalculationRequest) =>
+    call<BeatmapCalculationResult>("calculate_beatmap_pp", { request }),
+  downloadOnlineBeatmapsets: (request: BeatmapDownloadRequest) =>
+    call<BeatmapDownloadResult>("download_online_beatmapsets", { request }),
+  cancelOnlineBeatmapDownload: () =>
+    call<void>("cancel_online_beatmap_download"),
   clearProfileCache: () => call<void>("clear_profile_cache"),
   getSettings: () => call<AppSettings>("get_settings"),
   updateSettings: (settings: AppSettings) =>
@@ -149,6 +178,21 @@ export const desktopApi = {
     });
     return typeof selected === "string" ? selected : null;
   },
+  chooseBeatmapDownloadDirectory: async (defaultPath?: string | null) => {
+    if (!isTauri()) {
+      throw {
+        code: "TAURI_REQUIRED",
+        message: "目录选择器仅可在 OPP 桌面应用中使用",
+      } satisfies CommandError;
+    }
+    const selected = await openDialog({
+      directory: true,
+      multiple: false,
+      defaultPath: defaultPath ?? undefined,
+      title: "选择谱面下载目录",
+    });
+    return typeof selected === "string" ? selected : null;
+  },
   openExternal: async (url: string) => {
     if (isTauri()) await openUrl(url);
     else window.open(url, "_blank", "noopener,noreferrer");
@@ -165,6 +209,15 @@ export const desktopApi = {
     if (!isTauri()) return () => undefined;
     return listen<LocalScanProgress>("local-scan-progress", (event) =>
       handler(event.payload),
+    );
+  },
+  onBeatmapDownloadProgress: async (
+    handler: (progress: BeatmapDownloadProgress) => void,
+  ): Promise<UnlistenFn> => {
+    if (!isTauri()) return () => undefined;
+    return listen<BeatmapDownloadProgress>(
+      "beatmap-download-progress",
+      (event) => handler(event.payload),
     );
   },
 };

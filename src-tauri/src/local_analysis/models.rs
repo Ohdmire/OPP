@@ -102,6 +102,19 @@ pub struct ScanDiagnostic {
     pub resource_id: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LocalCalculationVersion {
+    pub engine: String,
+    pub engine_version: String,
+    pub engine_released_at: String,
+    pub upstream_repository: String,
+    pub upstream_revision: String,
+    pub upstream_date: String,
+    pub ruleset_versions: BTreeMap<String, u32>,
+    pub modifiers: String,
+    pub performance_assumption: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LocalLibrarySummary {
     pub client: LocalClient,
@@ -116,6 +129,7 @@ pub struct LocalLibrarySummary {
     pub source_bytes: u64,
     pub diagnostic_count: usize,
     pub mode_counts: BTreeMap<String, usize>,
+    pub calculation: LocalCalculationVersion,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -143,6 +157,7 @@ pub struct LocalBeatmapSummary {
     pub ruleset: Ruleset,
     pub format_version: i32,
     pub stars: Option<f64>,
+    pub max_pp: Option<f64>,
     pub max_combo: Option<u32>,
     pub bpm: f64,
     pub length_ms: f64,
@@ -178,6 +193,8 @@ pub struct LocalBeatmapDetail {
     pub average_nps: f64,
     pub peak_nps: f64,
     pub difficulty_algorithm: String,
+    pub calculation: LocalCalculationVersion,
+    pub calculated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub strains: Option<StrainAnalysis>,
 }

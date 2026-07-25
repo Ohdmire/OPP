@@ -4,7 +4,7 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
     sync::oneshot,
-    time::{Duration, timeout},
+    time::{Duration, Instant, timeout},
 };
 use url::Url;
 use uuid::Uuid;
@@ -49,12 +49,20 @@ pub async fn begin(app: AppHandle) -> CommandResult<PendingOAuth> {
         if let Some(previous) = runtime.cancel.take() {
             let _ = previous.send(());
         }
+        runtime.state = Some(csrf_state.clone());
         runtime.cancel = Some(cancel_tx);
     }
 
     let app_for_task = app.clone();
+    let session_state = csrf_state.clone();
     tauri::async_runtime::spawn(async move {
-        let result = wait_for_callback(app_for_task.clone(), listener, csrf_state, cancel_rx).await;
+        let result = wait_for_callback(
+            app_for_task.clone(),
+            listener,
+            session_state.clone(),
+            cancel_rx,
+        )
+        .await;
         let event = match result {
             Ok(()) => OAuthResult {
                 ok: true,
@@ -71,7 +79,10 @@ pub async fn begin(app: AppHandle) -> CommandResult<PendingOAuth> {
 
         let state = app_for_task.state::<AppState>();
         if let Ok(mut runtime) = state.oauth.lock() {
-            runtime.cancel = None;
+            if runtime.state.as_deref() == Some(session_state.as_str()) {
+                runtime.cancel = None;
+                runtime.state = None;
+            }
         }
     });
 
@@ -89,6 +100,7 @@ pub fn cancel(app_state: &AppState) -> CommandResult<()> {
     if let Some(cancel) = runtime.cancel.take() {
         let _ = cancel.send(());
     }
+    runtime.state = None;
     Ok(())
 }
 
@@ -110,31 +122,55 @@ async fn wait_for_callback(
     expected_state: String,
     mut cancel_rx: oneshot::Receiver<()>,
 ) -> CommandResult<()> {
-    let accepted = tokio::select! {
-        accepted = timeout(Duration::from_secs(300), listener.accept()) => {
-            match accepted {
-                Ok(Ok(value)) => value,
-                Ok(Err(error)) => return Err(CommandError::new("CALLBACK_FAILED", error.to_string())),
-                Err(_) => return Err(CommandError::new("AUTH_TIMEOUT", "授权等待已超时")),
+    let deadline = Instant::now() + Duration::from_secs(300);
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err(CommandError::new("AUTH_TIMEOUT", "授权等待已超时"));
+        }
+        let accepted = tokio::select! {
+            accepted = timeout(remaining, listener.accept()) => {
+                match accepted {
+                    Ok(Ok(value)) => value,
+                    Ok(Err(error)) => return Err(CommandError::new("CALLBACK_FAILED", error.to_string())),
+                    Err(_) => return Err(CommandError::new("AUTH_TIMEOUT", "授权等待已超时")),
+                }
             }
-        }
-        _ = &mut cancel_rx => {
-            return Err(CommandError::new("AUTH_CANCELLED", "授权已取消"));
-        }
-    };
+            _ = &mut cancel_rx => {
+                return Err(CommandError::new("AUTH_CANCELLED", "授权已取消"));
+            }
+        };
 
-    let (mut stream, _) = accepted;
-    let result = process_callback(&app, &mut stream, &expected_state).await;
-    let (title, message, success) = match &result {
-        Ok(()) => (
-            "连接成功",
-            "OPP 已安全连接到你的 osu! 账号，可以关闭此页面。",
-            true,
-        ),
-        Err(error) => ("连接失败", error.message.as_str(), false),
-    };
-    write_browser_response(&mut stream, title, message, success).await;
-    result
+        let (mut stream, _) = accepted;
+        let result = process_callback(&app, &mut stream, &expected_state).await;
+        let ignored_callback = is_ignorable_callback(&result);
+        let (title, message, success) = match &result {
+            Ok(()) => (
+                "连接成功",
+                "OPP 已安全连接到你的 osu! 账号，可以关闭此页面。",
+                true,
+            ),
+            Err(error) if ignored_callback => ("授权请求未匹配", error.message.as_str(), false),
+            Err(error) => ("连接失败", error.message.as_str(), false),
+        };
+        write_browser_response(&mut stream, title, message, success).await;
+
+        if ignored_callback {
+            continue;
+        }
+        return result;
+    }
+}
+
+fn is_ignorable_callback(result: &CommandResult<()>) -> bool {
+    matches!(
+        result,
+        Err(error)
+            if matches!(
+                error.code.as_str(),
+                "INVALID_OAUTH_STATE" | "CALLBACK_PATH_INVALID"
+            )
+    )
 }
 
 async fn process_callback(
@@ -216,8 +252,14 @@ fn parse_callback_request(request: &str) -> CommandResult<CallbackQuery> {
         .ok_or_else(|| CommandError::new("CALLBACK_FAILED", "OAuth 回调格式无效"))?;
     let url = Url::parse(&format!("http://127.0.0.1{path}"))
         .map_err(|error| CommandError::new("CALLBACK_FAILED", error.to_string()))?;
-    if url.path() != "/oauth/callback" {
-        return Err(CommandError::new("CALLBACK_FAILED", "OAuth 回调路径无效"));
+    if !matches!(url.path(), "/oauth/callback" | "/oauth/callback/") {
+        return Err(CommandError::new(
+            "CALLBACK_PATH_INVALID",
+            format!(
+                "收到的回调路径是 {}，请将 osu! OAuth Callback URL 设置为 {CALLBACK_URL}",
+                url.path()
+            ),
+        ));
     }
     let values = url
         .query_pairs()
@@ -280,6 +322,10 @@ mod tests {
             values.get("redirect_uri").map(|value| value.as_ref()),
             Some(CALLBACK_URL)
         );
+        assert_eq!(
+            values.get("scope").map(|value| value.as_ref()),
+            Some("public identify")
+        );
     }
 
     #[test]
@@ -294,6 +340,39 @@ mod tests {
         )
         .expect("denied callback");
         assert_eq!(denied.error.as_deref(), Some("access_denied"));
+    }
+
+    #[test]
+    fn only_stale_or_unrelated_callbacks_are_ignored_while_waiting() {
+        assert!(is_ignorable_callback(&Err(CommandError::new(
+            "INVALID_OAUTH_STATE",
+            "stale",
+        ))));
+        assert!(is_ignorable_callback(&Err(CommandError::new(
+            "CALLBACK_PATH_INVALID",
+            "wrong path",
+        ))));
+        assert!(!is_ignorable_callback(&Err(CommandError::new(
+            "AUTH_DENIED",
+            "denied",
+        ))));
+    }
+
+    #[test]
+    fn accepts_the_callback_path_with_or_without_a_trailing_slash() {
+        for path in ["/oauth/callback", "/oauth/callback/"] {
+            let callback =
+                parse_callback_request(&format!("GET {path}?code=abc&state=xyz HTTP/1.1\\r\\n"))
+                    .expect("valid callback path");
+            assert_eq!(callback.code.as_deref(), Some("abc"));
+        }
+    }
+
+    #[test]
+    fn reports_the_received_invalid_callback_path() {
+        let error = parse_callback_request("GET / HTTP/1.1\\r\\n").unwrap_err();
+        assert_eq!(error.code, "CALLBACK_PATH_INVALID");
+        assert!(error.message.contains(CALLBACK_URL));
     }
 
     #[test]

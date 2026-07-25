@@ -5,6 +5,7 @@ use std::{
 };
 
 use chardetng::EncodingDetector;
+use chrono::Utc;
 use rosu_map::section::{general::GameMode, hit_objects::HitObjectKind};
 use rosu_pp::{Difficulty, any::Strains};
 use sha2::{Digest, Sha256};
@@ -13,12 +14,32 @@ use walkdir::WalkDir;
 use crate::models::Ruleset;
 
 use super::models::{
-    Completeness, HitObjectCounts, LocalBeatmapDetail, LocalBeatmapSummary, LocalClient,
-    LocalResourceRef, LocalSkinDetail, LocalSkinSummary, SkinConfigEntry, SkinConfigSection,
-    SkinInventory, StrainAnalysis, StrainSeries,
+    Completeness, HitObjectCounts, LocalBeatmapDetail, LocalBeatmapSummary,
+    LocalCalculationVersion, LocalClient, LocalResourceRef, LocalSkinDetail, LocalSkinSummary,
+    SkinConfigEntry, SkinConfigSection, SkinInventory, StrainAnalysis, StrainSeries,
 };
 
-pub const DIFFICULTY_ALGORITHM: &str = "rosu-pp 4.0.1 / NoMod";
+pub const DIFFICULTY_ALGORITHM: &str =
+    "rosu-pp 4.0.1 (2026-04-12) / ppy-osu@28c846b (2025-10-13) / NoMod + max SS pp";
+
+pub fn calculation_version() -> LocalCalculationVersion {
+    LocalCalculationVersion {
+        engine: "rosu-pp".into(),
+        engine_version: "4.0.1".into(),
+        engine_released_at: "2026-04-12".into(),
+        upstream_repository: "ppy/osu".into(),
+        upstream_revision: "28c846b4d9366484792e27f4729cd1afa2cdeb66".into(),
+        upstream_date: "2025-10-13".into(),
+        ruleset_versions: BTreeMap::from([
+            ("osu".into(), 20_250_306),
+            ("taiko".into(), 20_250_306),
+            ("fruits".into(), 20_250_306),
+            ("mania".into(), 20_241_007),
+        ]),
+        modifiers: "NoMod".into(),
+        performance_assumption: "满分 / 最大连击 / 0 miss".into(),
+    }
+}
 
 pub struct ParsedBeatmap {
     pub summary: LocalBeatmapSummary,
@@ -216,6 +237,7 @@ pub fn parse_beatmap(
 
     let mut warning = None;
     let mut stars = None;
+    let mut max_pp = None;
     let mut max_combo = None;
     let mut bpm = 0.0;
     let mut analysis_status = "ready".to_string();
@@ -227,6 +249,7 @@ pub fn parse_beatmap(
                 Ok(attributes) => {
                     stars = Some(attributes.stars());
                     max_combo = Some(attributes.max_combo());
+                    max_pp = Some(attributes.performance().calculate().pp());
                 }
                 Err(error) => {
                     analysis_status = "skipped_suspicious".to_string();
@@ -256,6 +279,7 @@ pub fn parse_beatmap(
         ruleset: ruleset(map.mode),
         format_version: map.format_version,
         stars,
+        max_pp,
         max_combo,
         bpm,
         length_ms,
@@ -289,6 +313,8 @@ pub fn parse_beatmap(
         average_nps: summary.average_nps,
         peak_nps: summary.peak_nps,
         difficulty_algorithm: DIFFICULTY_ALGORITHM.to_string(),
+        calculation: calculation_version(),
+        calculated_at: Utc::now().to_rfc3339(),
         strains: None,
     };
 
@@ -617,7 +643,14 @@ SliderTickRate:1
         assert!(parsed.detail.average_nps > 0.0);
         assert!(parsed.detail.peak_nps >= 1.0);
         assert!(parsed.summary.stars.is_some());
+        assert!(parsed.summary.max_pp.is_some_and(|pp| pp > 0.0));
         assert!(parsed.summary.max_combo.is_some());
+        assert_eq!(parsed.detail.calculation.engine_version, "4.0.1");
+        assert_eq!(
+            parsed.detail.calculation.ruleset_versions["osu"],
+            20_250_306
+        );
+        assert!(parsed.detail.calculated_at.contains('T'));
     }
 
     #[test]
@@ -654,6 +687,10 @@ SliderTickRate:1
             )
             .expect("beatmap");
             assert_eq!(parsed.summary.ruleset, ruleset);
+            assert!(
+                parsed.summary.max_pp.is_some_and(|pp| pp > 0.0),
+                "{ruleset} should expose a positive NoMod full-combo pp value"
+            );
             let strains = calculate_strains(source.as_bytes()).expect("strains");
             assert!(strains.section_length_ms > 0.0);
             assert_eq!(

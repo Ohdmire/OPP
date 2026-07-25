@@ -5,7 +5,10 @@ mod error;
 mod local_analysis;
 mod models;
 mod oauth;
+mod online_beatmaps;
 mod osu_api;
+mod pp_calc;
+mod providers;
 mod state;
 mod storage;
 
@@ -19,6 +22,12 @@ use local_analysis::{
     get_local_summary, query_local_beatmap_sets, query_local_beatmaps, query_local_skins,
     reset_local_source, scan_local_source, set_local_source,
 };
+use online_beatmaps::{
+    cancel_online_beatmap_download, collect_online_beatmapsets, download_online_beatmapsets,
+    get_online_beatmap, get_online_beatmap_provider_status, get_online_beatmapset,
+    search_online_beatmapsets,
+};
+use pp_calc::calculate_beatmap_pp;
 use state::AppState;
 use tauri::Manager;
 
@@ -40,6 +49,14 @@ pub fn run() {
             disconnect_osu,
             get_own_profile,
             get_best_scores,
+            search_online_beatmapsets,
+            collect_online_beatmapsets,
+            get_online_beatmapset,
+            get_online_beatmap,
+            get_online_beatmap_provider_status,
+            calculate_beatmap_pp,
+            download_online_beatmapsets,
+            cancel_online_beatmap_download,
             clear_profile_cache,
             get_settings,
             update_settings,

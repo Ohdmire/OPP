@@ -25,6 +25,11 @@ const ScoresPage = lazy(() =>
     default: module.ScoresPage,
   })),
 );
+const OnlineBeatmapsPage = lazy(() =>
+  import("./features/online-beatmaps/OnlineBeatmapsPage").then((module) => ({
+    default: module.OnlineBeatmapsPage,
+  })),
+);
 const LocalAnalysisPage = lazy(() =>
   import("./features/local-analysis/LocalAnalysisPage").then((module) => ({
     default: module.LocalAnalysisPage,
@@ -70,6 +75,7 @@ function ConnectedApp() {
             <Route path="/online/overview" element={<OverviewPage />} />
             <Route path="/online/profile" element={<ProfileDetailsPage />} />
             <Route path="/online/scores" element={<ScoresPage />} />
+            <Route path="/online/beatmaps" element={<OnlineBeatmapsPage />} />
             <Route path="/local" element={<Navigate replace to="/local/maps" />} />
             <Route path="/local/maps" element={<LocalAnalysisPage section="maps" />} />
             <Route path="/local/skins" element={<LocalAnalysisPage section="skins" />} />

@@ -1,0 +1,29 @@
+import { Apple, CircleDot, Drum, Grid3X3, Star } from "lucide-react";
+import type { Ruleset } from "../../shared/types/osu";
+
+const visuals: Record<Ruleset, { label: string; className: string; Icon: typeof CircleDot }> = {
+  osu: { label: "osu!", className: "text-pink-200 bg-pink-300/10 border-pink-300/25", Icon: CircleDot },
+  taiko: { label: "taiko", className: "text-orange-200 bg-orange-300/10 border-orange-300/25", Icon: Drum },
+  fruits: { label: "catch", className: "text-emerald-200 bg-emerald-300/10 border-emerald-300/25", Icon: Apple },
+  mania: { label: "mania", className: "text-violet-200 bg-violet-300/10 border-violet-300/25", Icon: Grid3X3 },
+};
+
+export function ModeIcon({ mode, showLabel = false }: { mode: Ruleset; showLabel?: boolean }) {
+  const visual = visuals[mode] ?? visuals.osu;
+  const Icon = visual.Icon;
+  return <span className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-medium ${visual.className}`} title={visual.label}><Icon className="size-4" />{showLabel ? visual.label : null}</span>;
+}
+
+function difficultyTone(stars: number) {
+  if (stars < 2) return "text-slate-300 border-slate-300/25 bg-slate-300/10";
+  if (stars < 3) return "text-sky-200 border-sky-300/25 bg-sky-300/10";
+  if (stars < 4) return "text-cyan-200 border-cyan-300/25 bg-cyan-300/10";
+  if (stars < 5) return "text-emerald-200 border-emerald-300/25 bg-emerald-300/10";
+  if (stars < 6) return "text-yellow-200 border-yellow-300/25 bg-yellow-300/10";
+  if (stars < 7) return "text-orange-200 border-orange-300/25 bg-orange-300/10";
+  return "text-red-200 border-red-300/25 bg-red-300/10";
+}
+
+export function DifficultyIcon({ stars }: { stars: number }) {
+  return <span className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 font-mono text-xs font-semibold ${difficultyTone(stars)}`} title={`${stars.toFixed(2)} stars`}><Star className="size-3.5 fill-current" />{stars.toFixed(2)}</span>;
+}
