@@ -39,6 +39,11 @@ export interface AppSettings {
   reduce_motion: boolean;
 }
 
+export interface DefaultFileClients {
+  beatmap: OsuClient;
+  skin: OsuClient;
+}
+
 export interface UserSnapshot {
   captured_at: string;
   username: string;

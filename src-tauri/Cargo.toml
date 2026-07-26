@@ -1,8 +1,8 @@
 [package]
 name = "opp"
-version = "0.2.6"
+version = "0.2.7"
 description = "An all-in-one osu! toolkit"
-authors = ["OPP"]
+authors = ["l1rics"]
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

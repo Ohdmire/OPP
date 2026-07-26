@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, DatabaseZap, ExternalLink, FolderOpen, LogOut, MonitorCog, RotateCcwKey, Trash2 } from "lucide-react";
 import { useMode } from "../../app/ModeContext";
 import { PageHeader } from "../../shared/components/PageHeader";
+import { ModeSwitch } from "../../shared/components/ModeSwitch";
 import { Badge, Button, Card, DataLine, SectionTitle } from "../../shared/components/ui";
 import { desktopApi } from "../../shared/lib/tauri";
 import { authQueryKey, useAuthStatus } from "../auth/api";
@@ -13,14 +14,14 @@ import { settingsQueryKey, useSettings } from "./api";
 const REPOSITORY = "https://github.com/L1rics06/OPP";
 
 function GameDirectoryCard() {
-  const { client } = useMode();
+  const { client, ruleset, setRuleset } = useMode();
   const queryClient = useQueryClient();
   const source = useLocalSources().data?.find((item) => item.client === client);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const choose = async () => { setBusy(true); setNotice(null); try { const selected = await desktopApi.chooseLocalDirectory(source?.install_root ?? source?.data_root); if (selected) { await desktopApi.setLocalSource(client, selected); await queryClient.invalidateQueries({ queryKey: localSourcesKey }); setNotice("已切换到手动目录"); } } catch (error) { setNotice((error as { message?: string }).message ?? String(error)); } finally { setBusy(false); } };
   const reset = async () => { setBusy(true); setNotice(null); try { await desktopApi.resetLocalSource(client); await queryClient.invalidateQueries({ queryKey: localSourcesKey }); setNotice("已恢复自动检测"); } catch (error) { setNotice((error as { message?: string }).message ?? String(error)); } finally { setBusy(false); } };
-  return <Card className="p-6"><div className="flex items-start justify-between gap-3"><SectionTitle title={`${client === "stable" ? "Stable" : "Lazer"} 游戏目录`} description="用于启动当前客户端、读取截图和回放。" /><Badge tone={source?.mode === "override" ? "pink" : "cyan"}>{source?.mode === "override" ? "手动" : "自动"}</Badge></div><div className="mt-4 rounded-xl border border-white/[0.06] bg-white/[0.025] p-3"><p className="truncate font-mono text-xs text-slate-400">{source?.install_root ?? source?.data_root ?? "正在检测游戏目录…"}</p><p className="mt-2 text-xs text-slate-600">{source?.valid ? "目录可用" : source?.validation_errors?.[0] ?? "尚未检测到有效目录"}</p></div><div className="mt-4 flex gap-2"><Button disabled={busy} loading={busy} onClick={choose} size="sm"><FolderOpen className="size-3.5" />手动选择</Button>{source?.mode === "override" ? <Button disabled={busy} onClick={reset} size="sm">恢复自动</Button> : null}</div>{notice ? <p className="mt-3 text-xs text-cyan-200">{notice}</p> : null}</Card>;
+  return <Card className="p-6"><div className="mb-5 rounded-xl border border-white/[0.06] bg-white/[0.025] p-4"><SectionTitle title="默认模式" description="选择应用打开时默认展示的 osu! 模式。" /><div className="mt-4"><ModeSwitch value={ruleset} onChange={setRuleset} /></div></div><div className="flex items-start justify-between gap-3"><SectionTitle title={`${client === "stable" ? "Stable" : "Lazer"} 游戏目录`} description="用于启动当前客户端、读取截图和回放。" /><Badge tone={source?.mode === "override" ? "pink" : "cyan"}>{source?.mode === "override" ? "手动" : "自动"}</Badge></div><div className="mt-4 rounded-xl border border-white/[0.06] bg-white/[0.025] p-3"><p className="truncate font-mono text-xs text-slate-400">{source?.install_root ?? source?.data_root ?? "正在检测游戏目录…"}</p><p className="mt-2 text-xs text-slate-600">{source?.valid ? "目录可用" : source?.validation_errors?.[0] ?? "尚未检测到有效目录"}</p></div><div className="mt-4 flex gap-2"><Button disabled={busy} loading={busy} onClick={choose} size="sm"><FolderOpen className="size-3.5" />手动选择</Button>{source?.mode === "override" ? <Button disabled={busy} onClick={reset} size="sm">恢复自动</Button> : null}</div>{notice ? <p className="mt-3 text-xs text-cyan-200">{notice}</p> : null}</Card>;
 }
 
 function LinkRow({ name, detail, url }: { name: string; detail: string; url: string }) { return <button className="flex w-full items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.025] p-3 text-left transition hover:border-cyan-300/20 hover:bg-white/[0.05]" onClick={() => void desktopApi.openExternal(url)} type="button"><span><span className="block text-sm font-semibold text-cyan-100">{name}</span><span className="mt-1 block text-xs text-slate-500">{detail}</span></span><ExternalLink className="size-4 text-slate-500" /></button>; }

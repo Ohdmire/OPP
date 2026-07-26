@@ -29,6 +29,7 @@ import type {
   GameReplayPayload,
   GameSessionSummary,
   GameScreenshotPayload,
+  DefaultFileClients,
   LocalSourceStatus,
   OAuthResult,
   OnlineBeatmapSearchQuery,
@@ -136,6 +137,11 @@ export const desktopApi = {
     call<GameScreenshotPayload>("read_game_screenshot", { client, path }),
   openMediaInExplorer: (client: OsuClient, path: string) =>
     call<void>("open_media_in_explorer", { client, path }),
+  openLocalResourceInExplorer: (client: OsuClient, logicalPath: string) =>
+    call<void>("open_local_resource_in_explorer", { client, logicalPath }),
+  getDefaultFileClients: () => call<DefaultFileClients>("get_default_file_clients"),
+  setDefaultFileClient: (kind: "beatmap" | "skin", client: OsuClient) =>
+    call<void>("set_default_file_client", { kind, client }),
   getLocalSources: () =>
     call<LocalSourceStatus[]>("get_local_sources"),
   setLocalSource: (client: OsuClient, path: string) =>

@@ -78,11 +78,11 @@ pub async fn begin(app: AppHandle) -> CommandResult<PendingOAuth> {
         let _ = app_for_task.emit("oauth-result", event);
 
         let state = app_for_task.state::<AppState>();
-        if let Ok(mut runtime) = state.oauth.lock() {
-            if runtime.state.as_deref() == Some(session_state.as_str()) {
-                runtime.cancel = None;
-                runtime.state = None;
-            }
+        if let Ok(mut runtime) = state.oauth.lock()
+            && runtime.state.as_deref() == Some(session_state.as_str())
+        {
+            runtime.cancel = None;
+            runtime.state = None;
         }
     });
 

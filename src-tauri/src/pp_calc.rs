@@ -46,12 +46,16 @@ pub async fn calculate_beatmap_pp(
 ) -> CommandResult<BeatmapCalculationResult> {
     let download = match state.providers.catboy_osu(request.beatmap_id).await {
         Ok(download) => download,
-        Err(catboy) => state.providers.nerinyan_osu(request.beatmap_id).await.map_err(|nerinyan| {
-            CommandError::new(
-                "BEATMAP_CALCULATION_SOURCE_FAILED",
-                format!("Catboy: {}; Nerinyan: {}", catboy.message, nerinyan.message),
-            )
-        })?,
+        Err(catboy) => state
+            .providers
+            .nerinyan_osu(request.beatmap_id)
+            .await
+            .map_err(|nerinyan| {
+                CommandError::new(
+                    "BEATMAP_CALCULATION_SOURCE_FAILED",
+                    format!("Catboy: {}; Nerinyan: {}", catboy.message, nerinyan.message),
+                )
+            })?,
     };
     let bytes = download.bytes;
     let started = Instant::now();
@@ -62,12 +66,24 @@ pub async fn calculate_beatmap_pp(
     let difficulty = rosu_pp::Difficulty::new().mods(bits).calculate(&map);
     let max_pp = difficulty.clone().performance().calculate().pp();
     let mut performance = difficulty.performance().mods(bits);
-    if let Some(value) = request.accuracy { performance = performance.accuracy(value.clamp(0.0, 100.0)); }
-    if let Some(value) = request.misses { performance = performance.misses(value); }
-    if let Some(value) = request.combo { performance = performance.combo(value); }
-    if let Some(value) = request.n300 { performance = performance.n300(value); }
-    if let Some(value) = request.n100 { performance = performance.n100(value); }
-    if let Some(value) = request.n50 { performance = performance.n50(value); }
+    if let Some(value) = request.accuracy {
+        performance = performance.accuracy(value.clamp(0.0, 100.0));
+    }
+    if let Some(value) = request.misses {
+        performance = performance.misses(value);
+    }
+    if let Some(value) = request.combo {
+        performance = performance.combo(value);
+    }
+    if let Some(value) = request.n300 {
+        performance = performance.n300(value);
+    }
+    if let Some(value) = request.n100 {
+        performance = performance.n100(value);
+    }
+    if let Some(value) = request.n50 {
+        performance = performance.n50(value);
+    }
     let attributes = performance.calculate();
     let _elapsed = started.elapsed();
     Ok(BeatmapCalculationResult {
@@ -109,8 +125,18 @@ fn mod_bits(mods: &[String], mode: &str) -> CommandResult<u32> {
             "FI" if mode == "mania" => 1 << 20,
             "RD" if mode == "mania" => 1 << 21,
             "MR" if mode == "mania" => 1 << 30,
-            "FI" | "RD" | "MR" => return Err(CommandError::new("MOD_NOT_AVAILABLE", format!("{acronym} is not available for {mode}"))),
-            _ => return Err(CommandError::new("INVALID_MOD", format!("不支持的 Mod：{value}"))),
+            "FI" | "RD" | "MR" => {
+                return Err(CommandError::new(
+                    "MOD_NOT_AVAILABLE",
+                    format!("{acronym} is not available for {mode}"),
+                ));
+            }
+            _ => {
+                return Err(CommandError::new(
+                    "INVALID_MOD",
+                    format!("不支持的 Mod：{value}"),
+                ));
+            }
         };
         bits |= bit;
     }

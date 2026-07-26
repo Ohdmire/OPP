@@ -7,9 +7,8 @@ use tokio::sync::{Mutex as AsyncMutex, oneshot};
 
 use crate::{
     avatar_cache::AvatarCache, credentials::CredentialStore, error::CommandResult,
-    game_session::GameSessionRuntime,
-    local_analysis::LocalAnalysisService, osu_api::OsuApi, providers::ProviderRegistry,
-    storage::StateStore,
+    game_session::GameSessionRuntime, local_analysis::LocalAnalysisService, osu_api::OsuApi,
+    providers::ProviderRegistry, storage::StateStore,
 };
 
 #[derive(Default)]

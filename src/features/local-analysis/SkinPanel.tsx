@@ -3,6 +3,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileAudio2,
+  FolderSearch,
   Image,
   Layers3,
   LoaderCircle,
@@ -22,6 +23,7 @@ import {
 } from "../../shared/components/ui";
 import { cn } from "../../shared/lib/cn";
 import { dateTime, fullNumber } from "../../shared/lib/format";
+import { desktopApi } from "../../shared/lib/tauri";
 import type {
   LocalSkinAssetSummary,
   LocalSkinSummary,
@@ -71,43 +73,19 @@ function SkinSwatches({ skin }: { skin: LocalSkinSummary }) {
   );
 }
 
-function SkinListItem({
-  active,
-  skin,
-  onSelect,
-}: {
-  active: boolean;
-  skin: LocalSkinSummary;
-  onSelect: () => void;
-}) {
+function SkinListItem({ active, skin, onSelect }: { active: boolean; skin: LocalSkinSummary; onSelect: () => void }) {
   return (
-    <button
-      className={cn(
-        "w-full rounded-2xl border p-4 text-left transition",
-        active
-          ? "border-pink-300/25 bg-gradient-to-br from-pink-300/[0.09] to-violet-300/[0.05] shadow-[0_14px_30px_rgba(0,0,0,.16)]"
-          : "border-white/[0.06] bg-white/[0.025] hover:border-white/[0.12] hover:bg-white/[0.045]",
-      )}
-      onClick={onSelect}
-      type="button"
-    >
-      <div className="flex items-start gap-3">
-        <div className="grid size-10 shrink-0 place-items-center rounded-xl border border-pink-300/15 bg-pink-300/10 text-pink-200">
-          <Palette className="size-4" />
+    <div className={cn("w-full rounded-2xl border p-4 text-left transition", active ? "border-pink-300/25 bg-gradient-to-br from-pink-300/[0.09] to-violet-300/[0.05] shadow-[0_14px_30px_rgba(0,0,0,.16)]" : "border-white/[0.06] bg-white/[0.025] hover:border-white/[0.12] hover:bg-white/[0.045]")}>
+      <button className="w-full text-left" onClick={onSelect} type="button">
+        <div className="flex items-start gap-3">
+          <div className="grid size-10 shrink-0 place-items-center rounded-xl border border-pink-300/15 bg-pink-300/10 text-pink-200"><Palette className="size-4" /></div>
+          <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-semibold text-white">{skin.name}</h3><p className="mt-1 truncate text-[11px] text-slate-500">{skin.author} · {skin.version}</p></div>
+          <SkinSwatches skin={skin} />
         </div>
-        <div className="min-w-0 flex-1">
-          <h3 className="truncate text-sm font-semibold text-white">{skin.name}</h3>
-          <p className="mt-1 truncate text-[11px] text-slate-500">
-            {skin.author} · {skin.version}
-          </p>
-        </div>
-        <SkinSwatches skin={skin} />
-      </div>
-      <div className="mt-4 flex items-center justify-between text-[10px] text-slate-600">
-        <span>{skin.resource_count === null ? "资源未知" : `${skin.resource_count} 个资源`}</span>
-        <span>{formatBytes(skin.total_bytes)}</span>
-      </div>
-    </button>
+        <div className="mt-4 flex items-center justify-between text-[10px] text-slate-600"><span>{skin.resource_count === null ? "资源未知" : `${skin.resource_count} 个资源`}</span><span>{formatBytes(skin.total_bytes)}</span></div>
+      </button>
+      <Button aria-label="在资源管理器中打开 Skin" className="mt-3 w-full" disabled={!skin.resource.logical_path} onClick={() => { const path = skin.resource.logical_path; if (path) void desktopApi.openLocalResourceInExplorer(skin.resource.client, path); }} size="sm"><FolderSearch className="size-3.5" />打开 Skin 文件</Button>
+    </div>
   );
 }
 

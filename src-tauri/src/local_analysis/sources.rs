@@ -409,16 +409,16 @@ fn detect_stable_install() -> Option<PathBuf> {
 }
 
 fn detect_lazer_install() -> Option<PathBuf> {
-    registry_install(|name| {
+    let registry = registry_install(|name| {
         let name = name.to_ascii_lowercase();
-        name.contains("osu!") && name.contains("lazer")
+        name.contains("osu!") && (name.contains("lazer") || name == "osu!")
     })
-    .or_else(|| {
-        env::var_os("LOCALAPPDATA")
-            .map(PathBuf::from)
-            .map(|path| path.join("osulazer"))
-    })
-    .filter(|path| path.exists())
+    .filter(|path| looks_like_lazer_install(path));
+    let mut local_candidates = env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .into_iter()
+        .flat_map(|root| [root.join("osu"), root.join("osu!"), root.join("osulazer")]);
+    registry.or_else(|| local_candidates.find(|path| looks_like_lazer_install(path)))
 }
 
 #[cfg(windows)]

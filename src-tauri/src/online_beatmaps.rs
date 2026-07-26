@@ -165,7 +165,13 @@ impl OnlineBeatmapSearchQuery {
         }
 
         if !self.content_filter.trim().is_empty() {
-            let allowed = ["recommended", "converts", "follows", "spotlights", "featured_artists"];
+            let allowed = [
+                "recommended",
+                "converts",
+                "follows",
+                "spotlights",
+                "featured_artists",
+            ];
             if !allowed.contains(&self.content_filter.trim()) {
                 return Err(CommandError::new("INVALID_FILTER", "未知的内容筛选"));
             }
@@ -230,7 +236,6 @@ impl OnlineBeatmapSearchQuery {
         }
         Ok(parameters)
     }
-
 }
 
 #[derive(Debug, Serialize)]
@@ -306,24 +311,45 @@ async fn download_with_adapters(
     provider: &str,
 ) -> CommandResult<crate::providers::ProviderBytes> {
     let result = match provider {
-        "nerinyan" => {
-            match state.providers.nerinyan_osz(beatmapset_id).await {
-                Ok(download) => Ok(download),
-                Err(first) => state.providers.catboy_osz(beatmapset_id).await.map_err(|second| (first, second)),
-            }
+        "nerinyan" => match state.providers.nerinyan_osz(beatmapset_id).await {
+            Ok(download) => Ok(download),
+            Err(first) => state
+                .providers
+                .catboy_osz(beatmapset_id)
+                .await
+                .map_err(|second| (first, second)),
+        },
+        "catboy" => match state.providers.catboy_osz(beatmapset_id).await {
+            Ok(download) => Ok(download),
+            Err(first) => state
+                .providers
+                .nerinyan_osz(beatmapset_id)
+                .await
+                .map_err(|second| (first, second)),
+        },
+        _ => {
+            return Err(CommandError::new(
+                "DOWNLOAD_ADAPTER_DISABLED",
+                "未启用镜像下载适配器，请先选择 Catboy 或 Nerinyan",
+            ));
         }
-        "catboy" => {
-            match state.providers.catboy_osz(beatmapset_id).await {
-                Ok(download) => Ok(download),
-                Err(first) => state.providers.nerinyan_osz(beatmapset_id).await.map_err(|second| (first, second)),
-            }
-        }
-        _ => return Err(CommandError::new("DOWNLOAD_ADAPTER_DISABLED", "未启用镜像下载适配器，请先选择 Catboy 或 Nerinyan")),
     };
-    result.map_err(|(first, second)| CommandError::new(
-        "BEATMAP_DOWNLOAD_FAILED",
-        format!("{}: {}; {}: {}", provider, first.message, if provider == "catboy" { "nerinyan" } else { "catboy" }, second.message),
-    ))
+    result.map_err(|(first, second)| {
+        CommandError::new(
+            "BEATMAP_DOWNLOAD_FAILED",
+            format!(
+                "{}: {}; {}: {}",
+                provider,
+                first.message,
+                if provider == "catboy" {
+                    "nerinyan"
+                } else {
+                    "catboy"
+                },
+                second.message
+            ),
+        )
+    })
 }
 
 fn normalize_official_response(value: &mut Value) {
@@ -338,7 +364,10 @@ fn normalize_official_response(value: &mut Value) {
 fn annotate_source(value: &mut Value, source: &str) {
     if let Some(object) = value.as_object_mut() {
         object.insert("opp_source".into(), Value::String(source.into()));
-        object.insert("opp_fetched_at".into(), Value::String(chrono::Utc::now().to_rfc3339()));
+        object.insert(
+            "opp_fetched_at".into(),
+            Value::String(chrono::Utc::now().to_rfc3339()),
+        );
     }
 }
 
@@ -350,9 +379,15 @@ pub async fn search_online_beatmapsets(
     search_with_adapters(&query, &state).await
 }
 
-async fn search_with_adapters(query: &OnlineBeatmapSearchQuery, state: &AppState) -> CommandResult<Value> {
+async fn search_with_adapters(
+    query: &OnlineBeatmapSearchQuery,
+    state: &AppState,
+) -> CommandResult<Value> {
     let access_token = ensure_access_token(state).await?;
-    let mut value = state.api.search_beatmapsets(&access_token, &query.to_api_parameters()?).await?;
+    let mut value = state
+        .api
+        .search_beatmapsets(&access_token, &query.to_api_parameters()?)
+        .await?;
     normalize_official_response(&mut value);
     Ok(value)
 }
@@ -422,7 +457,10 @@ pub async fn get_online_beatmapset(
     state: State<'_, AppState>,
 ) -> CommandResult<Value> {
     let access_token = ensure_access_token(&state).await?;
-    let mut value = state.api.get_beatmapset(&access_token, beatmapset_id).await?;
+    let mut value = state
+        .api
+        .get_beatmapset(&access_token, beatmapset_id)
+        .await?;
     annotate_source(&mut value, "official");
     Ok(value)
 }
@@ -988,6 +1026,11 @@ mod tests {
     fn content_filters_use_official_parameters() {
         let mut query = query();
         query.content_filter = "spotlights".into();
-        assert!(query.to_api_parameters().unwrap().contains(&("c".into(), "spotlights".into())));
+        assert!(
+            query
+                .to_api_parameters()
+                .unwrap()
+                .contains(&("c".into(), "spotlights".into()))
+        );
     }
 }

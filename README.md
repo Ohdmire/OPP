@@ -10,47 +10,32 @@
   [![Tauri](https://img.shields.io/badge/Tauri-2-a673ff?style=for-the-badge&logo=tauri&logoColor=white)](https://tauri.app/)
   [![Vibe Coding](https://img.shields.io/badge/Vibe_Coding-AI_Collaborative-8b5cf6?style=for-the-badge)](#vibe-coding)
 
-  [功能](#功能概览) · [开始使用](#开始使用) · [开发](#本地开发) · [需求路线](./docs/需求分析.md) · [发布检查](./docs/发布检查清单.md)
+  [功能](#功能概览) · [开始使用](#开始使用) · [开发](#本地开发) · [快速入门](./docs/快速入门.md)
 </div>
 
 ---
 
 OPP 是一个使用 Tauri、Rust 与 React 构建的 Windows 桌面应用。它将 osu! API v2 个人资料与本机 osu!stable / osu!lazer 资源放在同一个分析空间中，同时保持本地文件只读。
 
+开发、模块边界与 AI 协作约定见 [项目快速入门](./docs/快速入门.md)。
+
 > [!IMPORTANT]
 > OPP 是独立的社区项目，与 ppy Pty Ltd 或 osu! 官方无隶属关系。osu! 是 ppy Pty Ltd 的商标。
 
 ## 功能概览
 
-### 在线资料
+- 通过官方 osu! API v2 OAuth 登录,查看个人全面数据
+- 提供铺面镜像下载批量下载，提供强大筛选器
+- 内置 pp calculator 支持不同模式MOD
+- 支持本地铺面，皮肤，截图，回放预览，管理
+- 支持启动双端游戏，自动记录一次游戏数据变化
+- 内置各种实用小工具
 
-- 通过官方 osu! API v2 OAuth 登录。
-- 浏览四模式个人统计、地区与全球排名。
-- 查看 Top 100 最佳成绩以及完整成绩字段。
-- 将 Client Secret、Access Token 和 Refresh Token 保存到 Windows 凭据管理器。
-
-### 本地谱面
-
-- 自动检测 osu!stable 与 osu!lazer，也可以手动选择目录。
-- 按 BeatmapSet 聚合同一集合的不同难度。
-- 分析 CS、AR、OD、HP、BPM、时长、物件、NPS、NoMod 星数、最大连击与理论满分 PP。
-- 按需计算各模式原生 strain 时间序列。
-- 支持标题、艺术家、Mapper、标签、ID、星数、BPM、时长和结构参数筛选。
-- Stable 谱面集使用经过后端校验和缩放的本地背景图。
-- 在数据源与谱面详情中标注计算引擎版本、发布日期、`ppy/osu` 上游提交日期、规则集版本与实际计算时间。
 
 当前算法口径为 [`rosu-pp 4.0.1`](https://github.com/MaxOhn/rosu-pp/tree/v4.0.1)，对应
 [`ppy/osu@28c846b`](https://github.com/ppy/osu/commit/28c846b4d9366484792e27f4729cd1afa2cdeb66)
 （2025-10-13）算法快照。PP 表示谱面原生模式下 `NoMod`、满分、最大连击、零 miss
 的理论值，不代表某一次实际成绩。
-
-### 本地皮肤
-
-- 解析 legacy `skin.ini`，保留 Section、键顺序、重复键和颜色。
-- 统计 Stable Skin 的递归资源数量、体积与扩展名分布。
-- 分页预览 PNG、JPG、WebP、GIF、BMP 图片。
-- 试听 WAV、MP3、OGG 音效。
-- 使用不透明资源 ID 和独立媒体接口，为后续视觉编辑与资源替换做准备。
 
 ## Stable 与 Lazer 的区别
 
@@ -142,24 +127,22 @@ OPP/
 
 ## 需求与贡献
 
-- 当前需求池与优先级见 [需求分析](./docs/需求分析.md)。
-- 发布前检查事项见 [发布检查清单](./docs/发布检查清单.md)。
 - Bug 与功能建议请通过 GitHub Issues 提交，并附上 OPP 版本、osu! 客户端类型和复现步骤。
-- 涉及本地资源写入、Realm 读取、第三方下载源或版权内容的功能，需要先明确安全与合规边界。
 
-## Vibe Coding
 
-OPP 采用 **Vibe Coding / AI 协作开发** 方式推进：由人定义产品方向、边界与验收标准，AI 协助分析、实现、重构和测试。
-## v0.2.5 界面更新
+### 计划实现功能
+- 支持 o!rdr API，从而实现生成回放视频支持
+- 成绩图片生成器
+- Skin 编辑替换
+- 更为专业的玩家数据分析
+- Mania 工具链
+- Rework Queue
+- 好友功能
+- ...
+- 终极设想：支持插件功能
 
-本地截图与回放现在采用“左侧对象列表 + 右侧主体预览”的工作区布局。列表按最近修改时间排序，刷新后会自动选中最新对象；选中对象后可以：
 
-- 在 Windows 文件资源管理器中定位并选中文件。
-- 复制文件绝对路径。
-- 截图直接复制为图片到系统剪贴板。
-- 在右侧查看截图，或查看回放原始数据的读取结果。
 
-设置页新增“关于”子界面，集中说明版本、仓库、MIT 协议、osu! API、前端与 Rust 依赖、参考项目以及感谢信息。项目仓库为 [L1rics06/OPP](https://github.com/L1rics06/OPP)，完整协议文本见 [`LICENSE`](./LICENSE)。
 
 ### 开源依赖与致谢
 

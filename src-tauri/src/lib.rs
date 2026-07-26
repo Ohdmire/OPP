@@ -1,8 +1,8 @@
 mod avatar_cache;
 mod commands;
 mod credentials;
-mod game_session;
 mod error;
+mod game_session;
 mod local_analysis;
 mod models;
 mod oauth;
@@ -12,10 +12,15 @@ mod pp_calc;
 mod providers;
 mod state;
 mod storage;
+mod tools;
 
 use commands::{
     begin_oauth_login, cancel_oauth_login, clear_profile_cache, disconnect_osu, get_auth_status,
     get_best_scores, get_own_profile, get_settings, save_oauth_credentials, update_settings,
+};
+use game_session::{
+    get_game_session_status, list_game_media, open_media_in_explorer, read_game_replay,
+    read_game_screenshot, start_game_session,
 };
 use local_analysis::{
     cancel_local_scan, get_local_beatmap_background, get_local_beatmap_detail,
@@ -29,9 +34,9 @@ use online_beatmaps::{
     search_online_beatmapsets,
 };
 use pp_calc::calculate_beatmap_pp;
-use game_session::{get_game_session_status, list_game_media, open_media_in_explorer, read_game_replay, read_game_screenshot, start_game_session};
 use state::AppState;
 use tauri::Manager;
+use tools::{get_default_file_clients, open_local_resource_in_explorer, set_default_file_client};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -82,6 +87,9 @@ pub fn run() {
             get_local_skin_detail,
             get_local_skin_preview,
             get_local_skin_asset,
+            open_local_resource_in_explorer,
+            get_default_file_clients,
+            set_default_file_client,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run OPP");

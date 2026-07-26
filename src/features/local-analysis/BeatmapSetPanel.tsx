@@ -9,6 +9,7 @@ import {
   ChevronRight,
   ChevronUp,
   CircleDot,
+  FolderSearch,
   Gauge,
   Hash,
   ListFilter,
@@ -30,6 +31,7 @@ import {
 } from "../../shared/components/ui";
 import { BeatmapDifficultyStrip, BeatmapInfoBar } from "../../shared/components/BeatmapSetVisuals";
 import { fullNumber, rulesetLabels } from "../../shared/lib/format";
+import { desktopApi } from "../../shared/lib/tauri";
 import { DifficultyIcon, ModeIcon } from "../online-beatmaps/BeatmapVisuals";
 import type {
   BeatmapQuery,
@@ -213,6 +215,15 @@ function BeatmapSetCard({
             </span>
           ) : null}
         </div>
+        <Button
+          aria-label="在资源管理器中打开谱面"
+          disabled={!set.difficulties[0]?.resource.logical_path}
+          onClick={() => { const path = set.difficulties[0]?.resource.logical_path; if (path) void desktopApi.openLocalResourceInExplorer(client, path); }}
+          size="sm"
+        >
+          <FolderSearch className="size-3.5" />
+          打开文件
+        </Button>
         <Button
           aria-expanded={expanded}
           onClick={() => setExpanded((value) => !value)}
