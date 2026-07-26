@@ -70,6 +70,17 @@ pub struct GameReplayPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplayMapInfo {
+    pub path: String,
+    pub beatmap_hash: String,
+    pub username: String,
+    pub beatmap_id: Option<i32>,
+    pub beatmap_resource_id: Option<String>,
+    pub beatmap_title: Option<String>,
+    pub submitted: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameScreenshotPayload {
     pub path: String,
     pub file_name: String,
@@ -240,7 +251,7 @@ pub async fn get_game_session_status(
     Ok(Some(summary))
 }
 
-fn media_roots(state: &AppState, client: LocalClient) -> CommandResult<Vec<PathBuf>> {
+pub(crate) fn media_roots(state: &AppState, client: LocalClient) -> CommandResult<Vec<PathBuf>> {
     let source = state.local_analysis.source_status(client)?;
     let mut roots = Vec::new();
     let mut add = |path: PathBuf| {
@@ -282,12 +293,100 @@ fn media_roots(state: &AppState, client: LocalClient) -> CommandResult<Vec<PathB
     Ok(roots)
 }
 
-fn within_root(candidate: &Path, root: &Path) -> bool {
+pub(crate) fn within_root(candidate: &Path, root: &Path) -> bool {
     let candidate = candidate.to_string_lossy().to_ascii_lowercase();
     let root = root.to_string_lossy().to_ascii_lowercase();
     candidate == root
         || candidate.starts_with(&(root.clone() + "\\"))
         || candidate.starts_with(&(root + "/"))
+}
+
+pub(crate) fn load_game_replay_file(
+    client: LocalClient,
+    path: &str,
+    state: &AppState,
+) -> CommandResult<Vec<u8>> {
+    let candidate = PathBuf::from(path)
+        .canonicalize()
+        .map_err(|error| CommandError::new("REPLAY_NOT_FOUND", error.to_string()))?;
+    let allowed = media_roots(state, client)?.into_iter().any(|root| {
+        within_root(&candidate, &root)
+            && candidate
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("osr"))
+    });
+    if !allowed {
+        return Err(CommandError::new(
+            "REPLAY_PATH_NOT_ALLOWED",
+            "回放文件不在 osu! 的 Replays 目录中",
+        ));
+    }
+    let metadata = fs::metadata(&candidate)
+        .map_err(|error| CommandError::new("REPLAY_READ_FAILED", error.to_string()))?;
+    if metadata.len() > 32 * 1024 * 1024 {
+        return Err(CommandError::new(
+            "REPLAY_TOO_LARGE",
+            "回放文件超过 32 MB，已拒绝上传",
+        ));
+    }
+    fs::read(&candidate).map_err(|error| CommandError::new("REPLAY_READ_FAILED", error.to_string()))
+}
+
+pub(crate) fn parse_replay_metadata(bytes: &[u8]) -> CommandResult<(String, String)> {
+    fn read_string(bytes: &[u8], offset: &mut usize) -> CommandResult<String> {
+        let marker = *bytes
+            .get(*offset)
+            .ok_or_else(|| CommandError::new("REPLAY_PARSE_FAILED", "回放文件结构不完整"))?;
+        *offset += 1;
+        if marker == 0 {
+            return Ok(String::new());
+        }
+        if marker != 0x0b {
+            return Err(CommandError::new(
+                "REPLAY_PARSE_FAILED",
+                "回放文件字符串标记无效",
+            ));
+        }
+        let mut length = 0usize;
+        let mut shift = 0;
+        loop {
+            let byte = *bytes.get(*offset).ok_or_else(|| {
+                CommandError::new("REPLAY_PARSE_FAILED", "回放文件长度字段不完整")
+            })?;
+            *offset += 1;
+            length |= usize::from(byte & 0x7f) << shift;
+            if byte & 0x80 == 0 {
+                break;
+            }
+            shift += 7;
+            if shift > usize::BITS - 7 {
+                return Err(CommandError::new(
+                    "REPLAY_PARSE_FAILED",
+                    "回放文件字符串过长",
+                ));
+            }
+        }
+        let end = offset
+            .checked_add(length)
+            .ok_or_else(|| CommandError::new("REPLAY_PARSE_FAILED", "回放文件长度溢出"))?;
+        let value = std::str::from_utf8(
+            bytes
+                .get(*offset..end)
+                .ok_or_else(|| CommandError::new("REPLAY_PARSE_FAILED", "回放文件字符串越界"))?,
+        )
+        .map_err(|_| CommandError::new("REPLAY_PARSE_FAILED", "回放文件字符串编码无效"))?
+        .to_string();
+        *offset = end;
+        Ok(value)
+    }
+    if bytes.len() < 5 {
+        return Err(CommandError::new("REPLAY_PARSE_FAILED", "回放文件过短"));
+    }
+    let mut offset = 5;
+    let beatmap_hash = read_string(bytes, &mut offset)?;
+    let username = read_string(bytes, &mut offset)?;
+    Ok((beatmap_hash, username))
 }
 
 #[tauri::command]
@@ -359,8 +458,7 @@ pub fn read_game_replay(
             "回放文件不在 osu! 数据目录内",
         ));
     }
-    let bytes =
-        fs::read(&candidate).map_err(|e| CommandError::new("REPLAY_READ_FAILED", e.to_string()))?;
+    let bytes = load_game_replay_file(client, &path, &state)?;
     Ok(GameReplayPayload {
         path: candidate.display().to_string(),
         file_name: candidate
@@ -370,7 +468,34 @@ pub fn read_game_replay(
             .into(),
         bytes_base64: STANDARD.encode(bytes),
         video_ready: false,
-        note: "已读取原始 .osr 数据；视频生成接口预留中".into(),
+        note: "已读取原始 .osr 数据；可在“回放渲染”页面提交给 o!rdr 生成视频。".into(),
+    })
+}
+
+#[tauri::command]
+pub fn inspect_game_replay(
+    client: LocalClient,
+    path: String,
+    state: State<'_, AppState>,
+) -> CommandResult<ReplayMapInfo> {
+    let bytes = load_game_replay_file(client, &path, &state)?;
+    let (beatmap_hash, username) = parse_replay_metadata(&bytes)?;
+    let beatmap = state
+        .local_analysis
+        .find_beatmap_by_md5(client, &beatmap_hash)?;
+    Ok(ReplayMapInfo {
+        path,
+        beatmap_hash: beatmap_hash.clone(),
+        username,
+        beatmap_id: beatmap.as_ref().and_then(|map| map.beatmap_id),
+        beatmap_resource_id: beatmap.as_ref().map(|map| map.resource.resource_id.clone()),
+        beatmap_title: beatmap.as_ref().map(|map| {
+            format!(
+                "{} — {} [{}]",
+                map.artist_unicode, map.title_unicode, map.difficulty_name
+            )
+        }),
+        submitted: beatmap.as_ref().and_then(|map| map.beatmap_id).is_some(),
     })
 }
 

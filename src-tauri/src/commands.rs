@@ -233,6 +233,69 @@ pub fn update_settings(
     Ok(settings)
 }
 
+#[tauri::command]
+pub async fn export_replay_video(
+    video_url: String,
+    file_name: String,
+    state: State<'_, AppState>,
+) -> CommandResult<String> {
+    let parsed = url::Url::parse(video_url.trim())
+        .map_err(|_| CommandError::new("INVALID_VIDEO_URL", "视频链接无效"))?;
+    if parsed.scheme() != "https"
+        || !parsed
+            .host_str()
+            .is_some_and(|host| host == "issou.best" || host.ends_with(".issou.best"))
+    {
+        return Err(CommandError::new(
+            "VIDEO_HOST_NOT_ALLOWED",
+            "仅允许导出 o!rdr 官方视频链接",
+        ));
+    }
+    let directory = state
+        .store
+        .snapshot()?
+        .settings
+        .replay_export_directory
+        .ok_or_else(|| {
+            CommandError::new(
+                "REPLAY_EXPORT_DIRECTORY_NOT_SET",
+                "请先在设置中选择回放导出位置",
+            )
+        })?;
+    std::fs::create_dir_all(&directory)?;
+    let safe_name: String = file_name
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || ".-_()[]".contains(character) {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let safe_name = if safe_name.trim_matches(['.', '_']).is_empty() {
+        "opp-replay.mp4".into()
+    } else if safe_name.to_ascii_lowercase().ends_with(".mp4") {
+        safe_name
+    } else {
+        format!("{safe_name}.mp4")
+    };
+    let target = std::path::Path::new(&directory).join(safe_name);
+    let response = reqwest::Client::new()
+        .get(parsed)
+        .send()
+        .await
+        .map_err(|error| CommandError::network(format!("视频下载失败：{error}")))?
+        .error_for_status()
+        .map_err(|error| CommandError::network(format!("视频下载失败：{error}")))?;
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| CommandError::network(format!("视频读取失败：{error}")))?;
+    std::fs::write(&target, bytes)?;
+    Ok(target.display().to_string())
+}
+
 fn enforce_manual_cooldown(state: &AppState, key: &str) -> CommandResult<()> {
     let now = Utc::now();
     state.store.update(|persisted| {

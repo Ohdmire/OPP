@@ -27,6 +27,7 @@ import type {
   LocalSkinSummary,
   GameMediaItem,
   GameReplayPayload,
+  ReplayMapInfo,
   GameSessionSummary,
   GameScreenshotPayload,
   DefaultFileClients,
@@ -40,6 +41,9 @@ import type {
   Page,
   PendingOAuth,
   Ruleset,
+  ReplayRenderJob,
+  ReplayRenderProgress,
+  ReplayRenderRequest,
   Score,
   SkinQuery,
 } from "../types/osu";
@@ -133,8 +137,12 @@ export const desktopApi = {
   listGameMedia: (client: OsuClient) => call<GameMediaItem[]>("list_game_media", { client }),
   readGameReplay: (client: OsuClient, path: string) =>
     call<GameReplayPayload>("read_game_replay", { client, path }),
+  inspectGameReplay: (client: OsuClient, path: string) =>
+    call<ReplayMapInfo>("inspect_game_replay", { client, path }),
   readGameScreenshot: (client: OsuClient, path: string) =>
     call<GameScreenshotPayload>("read_game_screenshot", { client, path }),
+  submitReplayRender: (request: ReplayRenderRequest) =>
+    call<ReplayRenderJob>("submit_replay_render", { request }),
   openMediaInExplorer: (client: OsuClient, path: string) =>
     call<void>("open_media_in_explorer", { client, path }),
   openLocalResourceInExplorer: (client: OsuClient, logicalPath: string) =>
@@ -199,6 +207,15 @@ export const desktopApi = {
     });
     return typeof selected === "string" ? selected : null;
   },
+  chooseDirectory: async (title: string, defaultPath?: string | null) => {
+    if (!isTauri()) {
+      throw { code: "TAURI_REQUIRED", message: "目录选择器仅可在 OPP 桌面应用中使用" } satisfies CommandError;
+    }
+    const selected = await openDialog({ directory: true, multiple: false, defaultPath: defaultPath ?? undefined, title });
+    return typeof selected === "string" ? selected : null;
+  },
+  exportReplayVideo: (videoUrl: string, fileName: string) =>
+    call<string>("export_replay_video", { videoUrl, fileName }),
   chooseBeatmapDownloadDirectory: async (defaultPath?: string | null) => {
     if (!isTauri()) {
       throw {
@@ -239,6 +256,14 @@ export const desktopApi = {
     return listen<BeatmapDownloadProgress>(
       "beatmap-download-progress",
       (event) => handler(event.payload),
+    );
+  },
+  onReplayRenderProgress: async (
+    handler: (progress: ReplayRenderProgress) => void,
+  ): Promise<UnlistenFn> => {
+    if (!isTauri()) return () => undefined;
+    return listen<ReplayRenderProgress>("ordr-render-progress", (event) =>
+      handler(event.payload),
     );
   },
 };

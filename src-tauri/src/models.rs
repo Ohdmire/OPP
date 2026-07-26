@@ -126,6 +126,10 @@ pub struct Cached<T> {
 pub struct AppSettings {
     #[serde(default)]
     pub reduce_motion: bool,
+    #[serde(default)]
+    pub beatmap_download_directory: Option<String>,
+    #[serde(default)]
+    pub replay_export_directory: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

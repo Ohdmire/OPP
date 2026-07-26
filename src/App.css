@@ -46,6 +46,26 @@ button {
   cursor: pointer;
 }
 
+select {
+  min-height: 44px;
+  color-scheme: dark;
+  color: #f8fafc;
+  background-color: #111827;
+  border-color: rgba(148, 163, 184, 0.28);
+}
+
+select:focus {
+  border-color: rgba(103, 232, 249, 0.75);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12);
+  outline: none;
+}
+
+select option {
+  padding: 10px 12px;
+  color: #f8fafc;
+  background: #111827;
+}
+
 ::selection {
   color: white;
   background: rgba(255, 106, 167, 0.45);

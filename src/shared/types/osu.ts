@@ -37,6 +37,8 @@ export interface OAuthResult {
 
 export interface AppSettings {
   reduce_motion: boolean;
+  beatmap_download_directory: string | null;
+  replay_export_directory: string | null;
 }
 
 export interface DefaultFileClients {
@@ -84,6 +86,43 @@ export interface GameReplayPayload {
   video_ready: boolean;
   note: string;
 }
+export interface ReplayMapInfo {
+  path: string;
+  beatmap_hash: string;
+  username: string;
+  beatmap_id: number | null;
+  beatmap_resource_id: string | null;
+  beatmap_title: string | null;
+  submitted: boolean;
+}
+
+export type RenderSkinKind = "official" | "custom";
+export type RenderDeveloperMode = "success" | "api_failure" | "websocket_failure";
+
+export interface ReplayRenderOptions {
+  resolution: "720x480" | "960x540" | "1280x720" | "1920x1080";
+  global_volume: number; music_volume: number; hitsound_volume: number;
+  show_hit_error_meter: boolean; show_unstable_rate: boolean; show_score: boolean; show_hp_bar: boolean;
+  show_combo_counter: boolean; show_pp_counter: boolean; show_scoreboard: boolean; show_borders: boolean;
+  show_mods: boolean; show_result_screen: boolean; show_hit_counter: boolean; show_key_overlay: boolean;
+  show_avatars_on_scoreboard: boolean; show_aim_error_meter: boolean; show_strain_graph: boolean; show_slider_breaks: boolean;
+  use_skin_cursor: boolean; use_skin_colors: boolean; use_skin_hitsounds: boolean; use_beatmap_colors: boolean;
+  cursor_rainbow: boolean; cursor_trail: boolean; cursor_trail_glow: boolean; cursor_ripples: boolean; cursor_size: number;
+  draw_follow_points: boolean; draw_combo_numbers: boolean; slider_snaking_in: boolean; slider_snaking_out: boolean;
+  slider_merge: boolean; objects_rainbow: boolean; flash_objects: boolean; use_slider_hitcircle_color: boolean; beat_scaling: boolean;
+  seizure_warning: boolean; load_storyboard: boolean; load_video: boolean;
+  intro_bg_dim: number; ingame_bg_dim: number; break_bg_dim: number;
+  bg_parallax: boolean; show_danser_logo: boolean; skip_intro: boolean; play_nightcore_samples: boolean; ignore_fail: boolean;
+}
+
+export interface ReplayRenderRequest {
+  client: OsuClient; replay_path: string; username: string;
+  options: ReplayRenderOptions; skin_kind: RenderSkinKind; skin: string;
+  verification_key: string | null; developer_mode: RenderDeveloperMode | null;
+}
+
+export interface ReplayRenderJob { render_id: number; status: string; description: string; }
+export interface ReplayRenderProgress { render_id: number; status: string; description: string; video_url: string | null; }
 
 export interface GameScreenshotPayload {
   path: string;

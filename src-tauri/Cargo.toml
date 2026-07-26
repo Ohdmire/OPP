@@ -1,6 +1,6 @@
 [package]
 name = "opp"
-version = "0.2.7"
+version = "0.2.8"
 description = "An all-in-one osu! toolkit"
 authors = ["l1rics"]
 edition = "2024"
@@ -41,6 +41,8 @@ rosu-pp = "4.0.1"
 sha2 = "0.10"
 walkdir = "2"
 zip = "2"
+rosu-render = "0.5.1"
+md-5 = "0.10"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

@@ -7,6 +7,7 @@ import { PageHeader } from "../../shared/components/PageHeader";
 import { Badge, Button, Card, EmptyState, SectionTitle } from "../../shared/components/ui";
 import { desktopApi } from "../../shared/lib/tauri";
 import type { GameMediaItem, GameReplayPayload, GameScreenshotPayload } from "../../shared/types/osu";
+import { MediaSubnav } from "./MediaSubnav";
 
 function formatBytes(value: number) {
   if (value < 1024) return `${value} B`;
@@ -115,10 +116,7 @@ export function LocalMediaPage({ kind }: { kind: "screenshot" | "replay" }) {
         description={kind === "screenshot" ? "浏览并操作 osu! 游戏截图" : "浏览 osu! 回放文件并查看读取结果"}
         actions={<Button aria-label="刷新媒体" onClick={() => void refresh()} size="icon"><RefreshCw className="size-4" /></Button>}
       />
-      <nav className="mb-5 flex gap-2 border-b border-white/[0.06] pb-3">
-        <NavLink className={({ isActive }) => `rounded-xl px-4 py-2 text-sm transition ${isActive ? "bg-cyan-300/10 text-cyan-100" : "text-slate-500 hover:bg-white/[0.04] hover:text-slate-200"}`} to="/local/media/screenshots"><Image className="mr-2 inline size-4" />截图</NavLink>
-        <NavLink className={({ isActive }) => `rounded-xl px-4 py-2 text-sm transition ${isActive ? "bg-pink-300/10 text-pink-100" : "text-slate-500 hover:bg-white/[0.04] hover:text-slate-200"}`} to="/local/media/replays"><FileVideo className="mr-2 inline size-4" />回放</NavLink>
-      </nav>
+      <MediaSubnav />
       {error ? <div className="mb-5"><ErrorPanel error={error} onRetry={() => void refresh()} /></div> : null}
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(250px,300px)_minmax(0,1fr)] gap-5">
         <Card className="flex min-h-0 flex-col overflow-hidden p-3">
@@ -130,8 +128,8 @@ export function LocalMediaPage({ kind }: { kind: "screenshot" | "replay" }) {
             {filteredItems.length ? filteredItems.map((item) => (
               <button className={`w-full rounded-xl border p-3 text-left transition ${selected?.path === item.path ? "border-cyan-300/25 bg-cyan-300/[0.08]" : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.14] hover:bg-white/[0.04]"}`} key={item.path} onClick={() => void read(item)} type="button">
                 <p className="truncate text-sm font-medium text-slate-200">{fileName(item.path)}</p>
-                <p className="mt-1 truncate font-mono text-[10px] text-slate-600">{item.path}</p>
-                <p className="mt-2 text-[10px] text-slate-500">{formatBytes(item.size)} · {formatDate(item.modified_at)}</p>
+                <p className="mt-1 truncate font-mono text-sm text-slate-500">{item.path}</p>
+                <p className="mt-2 text-sm text-slate-400">{formatBytes(item.size)} · {formatDate(item.modified_at)}</p>
               </button>
             )) : <EmptyState title={`暂无${kind === "screenshot" ? "截图" : "回放"}`} description="在 osu! 中生成媒体后点击刷新。" />}
           </div>
@@ -140,8 +138,8 @@ export function LocalMediaPage({ kind }: { kind: "screenshot" | "replay" }) {
         <Card className="flex min-h-0 min-w-0 flex-col overflow-hidden p-6">
           {selected ? <>
             <div className="flex flex-wrap items-start justify-between gap-4 border-b border-white/[0.06] pb-5">
-              <div className="min-w-0"><h2 className="truncate text-xl font-semibold text-white">{fileName(selected.path)}</h2><p className="mt-2 truncate font-mono text-xs text-slate-500">{selected.path}</p><p className="mt-1 text-xs text-slate-600">{formatBytes(selected.size)} · {formatDate(selected.modified_at)}</p></div>
-              <div className="flex gap-2"><Button onClick={() => void openExplorer()} size="sm"><FolderSearch className="size-3.5" />资源管理器</Button><Button onClick={() => void copyPath()} size="sm"><Clipboard className="size-3.5" />复制路径</Button>{payload && "mime_type" in payload ? <Button onClick={() => void copyImage()} size="sm"><Image className="size-3.5" />复制图片</Button> : null}</div>
+              <div className="min-w-0"><h2 className="truncate text-xl font-semibold text-white">{fileName(selected.path)}</h2><p className="mt-2 truncate font-mono text-sm text-slate-400">{selected.path}</p><p className="mt-1 text-sm text-slate-400">{formatBytes(selected.size)} · {formatDate(selected.modified_at)}</p></div>
+              <div className="flex flex-wrap gap-2"><Button onClick={() => void openExplorer()} size="sm"><FolderSearch className="size-4" />资源管理器</Button><Button onClick={() => void copyPath()} size="sm"><Clipboard className="size-4" />复制路径</Button>{kind === "replay" ? <NavLink className="inline-flex min-h-8 items-center justify-center gap-2 rounded-xl border border-violet-300/20 bg-violet-300/10 px-4 text-sm font-medium text-violet-100" to={`/local/media/render?replay=${encodeURIComponent(selected.path)}`}><FileVideo className="size-4" />导出回放</NavLink> : null}{payload && "mime_type" in payload ? <Button onClick={() => void copyImage()} size="sm"><Image className="size-4" />复制图片</Button> : null}</div>
             </div>
             {notice ? <p className="mt-4 rounded-lg border border-cyan-300/15 bg-cyan-300/[0.06] px-3 py-2 text-xs text-cyan-100">{notice}</p> : null}
             <div className="grid min-h-0 flex-1 place-items-center py-6">

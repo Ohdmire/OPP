@@ -11,6 +11,7 @@ const ScoresPage = lazy(() => import("../features/scores/ScoresPage").then((modu
 const OnlineBeatmapsPage = lazy(() => import("../features/online-beatmaps/OnlineBeatmapsPage").then((module) => ({ default: module.OnlineBeatmapsPage })));
 const LocalAnalysisPage = lazy(() => import("../features/local-analysis/LocalAnalysisPage").then((module) => ({ default: module.LocalAnalysisPage })));
 const LocalMediaPage = lazy(() => import("../features/local-media/LocalMediaPage").then((module) => ({ default: module.LocalMediaPage })));
+const ReplayRenderPage = lazy(() => import("../features/local-media/ReplayRenderPage").then((module) => ({ default: module.ReplayRenderPage })));
 const SettingsPage = lazy(() => import("../features/settings/SettingsPage").then((module) => ({ default: module.SettingsPage })));
 const GameSessionPage = lazy(() => import("../features/game/GameSessionPage").then((module) => ({ default: module.GameSessionPage })));
 const ToolsPage = lazy(() => import("../features/tools/ToolsPage").then((module) => ({ default: module.ToolsPage })));
@@ -31,6 +32,7 @@ export function AppRoutes() {
           <Route path="/local/media" element={<Navigate replace to="/local/media/screenshots" />} />
           <Route path="/local/media/screenshots" element={<LocalMediaPage kind="screenshot" />} />
           <Route path="/local/media/replays" element={<LocalMediaPage kind="replay" />} />
+          <Route path="/local/media/render" element={<ReplayRenderPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/game" element={<GameSessionPage />} />
           <Route path="/tools" element={<ToolsPage />} />

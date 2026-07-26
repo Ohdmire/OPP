@@ -18,6 +18,7 @@ use std::{
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use chrono::Utc;
 use image::{ImageFormat, ImageReader, Limits, codecs::jpeg::JpegEncoder, imageops::FilterType};
+use md5::{Digest, Md5};
 use rayon::prelude::*;
 use walkdir::WalkDir;
 
@@ -492,6 +493,29 @@ impl LocalAnalysisService {
                 .map_err(|message| CommandError::new("LOCAL_DIFFICULTY_ERROR", message))?,
         );
         Ok(detail)
+    }
+
+    pub fn find_beatmap_by_md5(
+        &self,
+        client: LocalClient,
+        beatmap_md5: &str,
+    ) -> CommandResult<Option<LocalBeatmapSummary>> {
+        let index = self.require_current_index(client)?;
+        let target = beatmap_md5.trim().to_ascii_lowercase();
+        for entry in &index.entries {
+            let IndexedData::Beatmap { summary, detail: _ } = &entry.data else {
+                continue;
+            };
+            let Ok(bytes) = fs::read(&entry.physical_path) else {
+                continue;
+            };
+            let mut digest = Md5::new();
+            digest.update(bytes);
+            if format!("{:x}", digest.finalize()) == target {
+                return Ok(Some(summary.clone()));
+            }
+        }
+        Ok(None)
     }
 
     pub fn beatmap_background(

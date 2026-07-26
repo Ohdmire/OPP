@@ -10,17 +10,19 @@ mod online_beatmaps;
 mod osu_api;
 mod pp_calc;
 mod providers;
+mod replay_render;
 mod state;
 mod storage;
 mod tools;
 
 use commands::{
-    begin_oauth_login, cancel_oauth_login, clear_profile_cache, disconnect_osu, get_auth_status,
-    get_best_scores, get_own_profile, get_settings, save_oauth_credentials, update_settings,
+    begin_oauth_login, cancel_oauth_login, clear_profile_cache, disconnect_osu,
+    export_replay_video, get_auth_status, get_best_scores, get_own_profile, get_settings,
+    save_oauth_credentials, update_settings,
 };
 use game_session::{
-    get_game_session_status, list_game_media, open_media_in_explorer, read_game_replay,
-    read_game_screenshot, start_game_session,
+    get_game_session_status, inspect_game_replay, list_game_media, open_media_in_explorer,
+    read_game_replay, read_game_screenshot, start_game_session,
 };
 use local_analysis::{
     cancel_local_scan, get_local_beatmap_background, get_local_beatmap_detail,
@@ -34,6 +36,7 @@ use online_beatmaps::{
     search_online_beatmapsets,
 };
 use pp_calc::calculate_beatmap_pp;
+use replay_render::submit_replay_render;
 use state::AppState;
 use tauri::Manager;
 use tools::{get_default_file_clients, open_local_resource_in_explorer, set_default_file_client};
@@ -62,10 +65,12 @@ pub fn run() {
             get_online_beatmap,
             get_online_beatmap_provider_status,
             calculate_beatmap_pp,
+            submit_replay_render,
             start_game_session,
             get_game_session_status,
             list_game_media,
             read_game_replay,
+            inspect_game_replay,
             read_game_screenshot,
             open_media_in_explorer,
             download_online_beatmapsets,
@@ -73,6 +78,7 @@ pub fn run() {
             clear_profile_cache,
             get_settings,
             update_settings,
+            export_replay_video,
             get_local_sources,
             set_local_source,
             reset_local_source,
