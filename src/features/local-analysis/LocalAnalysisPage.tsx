@@ -357,7 +357,7 @@ function LocalAnalysisClientPage({ section }: { section: LocalSection }) {
   return (
     <>
       <PageHeader
-        actions={<Badge tone={section === "maps" ? "cyan" : "pink"}>OPP v0.2.4</Badge>}
+        actions={<Badge tone={section === "maps" ? "cyan" : "pink"}>OPP v0.2.6</Badge>}
         description={
           section === "maps"
             ? "按谱面集浏览本机难度与结构"

@@ -39,6 +39,54 @@ export interface AppSettings {
   reduce_motion: boolean;
 }
 
+export interface UserSnapshot {
+  captured_at: string;
+  username: string;
+  pp: number | null;
+  global_rank: number | null;
+  hit_accuracy: number | null;
+  play_count: number | null;
+  play_time: number | null;
+  total_hits: number | null;
+  maximum_combo: number | null;
+  best_pp: number | null;
+  best_count: number;
+}
+
+export interface GameSessionSummary {
+  started_at: string;
+  ended_at: string | null;
+  ruleset: Ruleset;
+  client: string;
+  executable: string;
+  start: UserSnapshot;
+  end: UserSnapshot | null;
+  running: boolean;
+}
+
+export interface GameMediaItem {
+  client: OsuClient;
+  path: string;
+  kind: "replay" | "screenshot";
+  modified_at: string | null;
+  size: number;
+}
+
+export interface GameReplayPayload {
+  path: string;
+  file_name: string;
+  bytes_base64: string;
+  video_ready: boolean;
+  note: string;
+}
+
+export interface GameScreenshotPayload {
+  path: string;
+  file_name: string;
+  mime_type: string;
+  bytes_base64: string;
+}
+
 export interface DisconnectResult {
   revoked: boolean;
   warning: string | null;

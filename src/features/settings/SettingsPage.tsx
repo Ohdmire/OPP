@@ -1,192 +1,40 @@
 import { useState } from "react";
 import * as Switch from "@radix-ui/react-switch";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  Check,
-  Copy,
-  DatabaseZap,
-  ExternalLink,
-  LogOut,
-  MonitorCog,
-  RotateCcwKey,
-  Trash2,
-} from "lucide-react";
+import { Check, Copy, DatabaseZap, ExternalLink, FolderOpen, LogOut, MonitorCog, RotateCcwKey, Trash2 } from "lucide-react";
+import { useMode } from "../../app/ModeContext";
 import { PageHeader } from "../../shared/components/PageHeader";
-import {
-  Badge,
-  Button,
-  Card,
-  DataLine,
-  SectionTitle,
-} from "../../shared/components/ui";
+import { Badge, Button, Card, DataLine, SectionTitle } from "../../shared/components/ui";
 import { desktopApi } from "../../shared/lib/tauri";
 import { authQueryKey, useAuthStatus } from "../auth/api";
-import { useSettings, settingsQueryKey } from "./api";
+import { localSourcesKey, useLocalSources } from "../local-analysis/api";
+import { settingsQueryKey, useSettings } from "./api";
+
+const REPOSITORY = "https://github.com/L1rics06/OPP";
+
+function GameDirectoryCard() {
+  const { client } = useMode();
+  const queryClient = useQueryClient();
+  const source = useLocalSources().data?.find((item) => item.client === client);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const choose = async () => { setBusy(true); setNotice(null); try { const selected = await desktopApi.chooseLocalDirectory(source?.install_root ?? source?.data_root); if (selected) { await desktopApi.setLocalSource(client, selected); await queryClient.invalidateQueries({ queryKey: localSourcesKey }); setNotice("已切换到手动目录"); } } catch (error) { setNotice((error as { message?: string }).message ?? String(error)); } finally { setBusy(false); } };
+  const reset = async () => { setBusy(true); setNotice(null); try { await desktopApi.resetLocalSource(client); await queryClient.invalidateQueries({ queryKey: localSourcesKey }); setNotice("已恢复自动检测"); } catch (error) { setNotice((error as { message?: string }).message ?? String(error)); } finally { setBusy(false); } };
+  return <Card className="p-6"><div className="flex items-start justify-between gap-3"><SectionTitle title={`${client === "stable" ? "Stable" : "Lazer"} 游戏目录`} description="用于启动当前客户端、读取截图和回放。" /><Badge tone={source?.mode === "override" ? "pink" : "cyan"}>{source?.mode === "override" ? "手动" : "自动"}</Badge></div><div className="mt-4 rounded-xl border border-white/[0.06] bg-white/[0.025] p-3"><p className="truncate font-mono text-xs text-slate-400">{source?.install_root ?? source?.data_root ?? "正在检测游戏目录…"}</p><p className="mt-2 text-xs text-slate-600">{source?.valid ? "目录可用" : source?.validation_errors?.[0] ?? "尚未检测到有效目录"}</p></div><div className="mt-4 flex gap-2"><Button disabled={busy} loading={busy} onClick={choose} size="sm"><FolderOpen className="size-3.5" />手动选择</Button>{source?.mode === "override" ? <Button disabled={busy} onClick={reset} size="sm">恢复自动</Button> : null}</div>{notice ? <p className="mt-3 text-xs text-cyan-200">{notice}</p> : null}</Card>;
+}
+
+function LinkRow({ name, detail, url }: { name: string; detail: string; url: string }) { return <button className="flex w-full items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.025] p-3 text-left transition hover:border-cyan-300/20 hover:bg-white/[0.05]" onClick={() => void desktopApi.openExternal(url)} type="button"><span><span className="block text-sm font-semibold text-cyan-100">{name}</span><span className="mt-1 block text-xs text-slate-500">{detail}</span></span><ExternalLink className="size-4 text-slate-500" /></button>; }
+
+function AboutPage() {
+  return <div className="space-y-5"><Card className="overflow-hidden p-6"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs uppercase tracking-[0.18em] text-cyan-200">OPP Desktop</p><h2 className="mt-2 text-3xl font-semibold text-white">一站式 osu! 工具集合</h2><p className="mt-2 text-sm text-slate-400">版本 0.2.6 · Windows · MIT License</p></div><Badge tone="cyan">开源项目</Badge></div><div className="mt-6 flex flex-wrap gap-2"><Button onClick={() => void desktopApi.openExternal(REPOSITORY)}><ExternalLink className="size-4" />打开仓库</Button><Button onClick={() => void desktopApi.openExternal("https://opensource.org/license/mit")}><ExternalLink className="size-4" />查看 MIT 协议</Button></div></Card><div className="grid gap-5 lg:grid-cols-2"><Card className="p-6"><SectionTitle title="API 与依赖" description="项目中实际使用的主要第三方服务、库与运行时。" /><div className="mt-5 space-y-3 text-sm text-slate-300"><p><b className="text-white">平台 API：</b>osu! API v2、OAuth 2.0。</p><p><b className="text-white">前端：</b>React、React Router、TanStack Query、Radix UI、Lucide、Recharts、Tailwind CSS、Tauri。</p><p><b className="text-white">Rust：</b>rosu-map、rosu-pp、reqwest、image、walkdir、zip、Serde、Tokio、Keyring。</p></div></Card><Card className="p-6"><SectionTitle title="参考代码与上游项目" description="感谢这些项目提供实现、算法与文档。" /><div className="mt-5 space-y-3"><LinkRow name="ppy/osu" detail="osu! 客户端与规则集参考" url="https://github.com/ppy/osu" /><LinkRow name="rosu-pp" detail="本地 PP 计算实现" url="https://github.com/MaxOhn/rosu-pp" /><LinkRow name="Tauri" detail="桌面应用与插件文档" url="https://tauri.app/" /></div></Card></div><Card className="p-6"><SectionTitle title="感谢" description="感谢平台维护者、开源贡献者以及参与测试和反馈的 osu! 社区用户。" /></Card></div>;
+}
 
 export function SettingsPage() {
-  const queryClient = useQueryClient();
-  const auth = useAuthStatus();
-  const settings = useSettings();
-  const [clearing, setClearing] = useState(false);
-  const [disconnecting, setDisconnecting] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-
-  const updateMotion = async (reduceMotion: boolean) => {
-    const next = await desktopApi.updateSettings({ reduce_motion: reduceMotion });
-    queryClient.setQueryData(settingsQueryKey, next);
-  };
-
-  const clearCache = async () => {
-    setClearing(true);
-    setNotice(null);
-    try {
-      await desktopApi.clearProfileCache();
-      await queryClient.invalidateQueries({ queryKey: ["own-profile"] });
-      await queryClient.invalidateQueries({ queryKey: ["best-scores"] });
-      setNotice("本地缓存已清除。");
-    } finally {
-      setClearing(false);
-    }
-  };
-
-  const disconnect = async () => {
-    setDisconnecting(true);
-    setNotice(null);
-    try {
-      const result = await desktopApi.disconnectOsu(true);
-      queryClient.removeQueries({ queryKey: ["own-profile"] });
-      queryClient.removeQueries({ queryKey: ["best-scores"] });
-      if (auth.data) {
-        queryClient.setQueryData(authQueryKey, {
-          ...auth.data,
-          connected: false,
-          user_id: null,
-          username: null,
-        });
-      } else {
-        await queryClient.invalidateQueries({ queryKey: authQueryKey });
-      }
-      if (result.warning) setNotice(`远程撤销失败：${result.warning}`);
-    } finally {
-      setDisconnecting(false);
-    }
-  };
-
-  const copyCallback = async () => {
-    const value = auth.data?.callback_url;
-    if (!value) return;
-    await navigator.clipboard.writeText(value);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
-  };
-
-  return (
-    <>
-      <PageHeader description="" eyebrow="" title="设置" />
-
-      {notice ? (
-        <div className="mb-5 rounded-xl border border-cyan-300/15 bg-cyan-300/[0.06] px-4 py-3 text-xs text-cyan-100">
-          {notice}
-        </div>
-      ) : null}
-
-      <div className="grid grid-cols-[1.1fr_.9fr] gap-5">
-        <Card className="p-6">
-          <div className="flex items-start justify-between">
-            <SectionTitle title="osu! 账号" />
-            <Badge tone={auth.data?.connected ? "success" : "warning"}>
-              {auth.data?.connected ? "已连接" : "未连接"}
-            </Badge>
-          </div>
-          <div className="mt-5">
-            <DataLine label="账号" value={auth.data?.username ?? "—"} />
-            <DataLine label="用户 ID" value={auth.data?.user_id ?? "—"} />
-            <DataLine label="Client ID" value={auth.data?.client_id ?? "—"} />
-            <DataLine
-              label="回调地址"
-              value={
-                <button
-                  className="inline-flex items-center gap-1.5 font-mono text-[11px] text-cyan-200 hover:text-cyan-100"
-                  onClick={copyCallback}
-                  type="button"
-                >
-                  {auth.data?.callback_url}
-                  {copied ? (
-                    <Check className="size-3" />
-                  ) : (
-                    <Copy className="size-3" />
-                  )}
-                </button>
-              }
-            />
-          </div>
-          <div className="mt-5 flex gap-3">
-            <Button
-              onClick={() =>
-                desktopApi.openExternal("https://osu.ppy.sh/home/account/edit")
-              }
-            >
-              <ExternalLink className="size-4" />
-              管理 OAuth
-            </Button>
-            <Button
-              loading={disconnecting}
-              onClick={disconnect}
-              variant="danger"
-            >
-              <LogOut className="size-4" />
-              断开账号
-            </Button>
-          </div>
-        </Card>
-
-        <div className="space-y-5">
-          <Card className="p-6">
-            <SectionTitle title="显示" />
-            <div className="mt-5 flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.025] p-4">
-              <div className="flex items-center gap-3">
-                <span className="grid size-9 place-items-center rounded-xl bg-white/[0.05] text-violet-200">
-                  <MonitorCog className="size-4" />
-                </span>
-                <p className="text-sm font-medium text-white">减少动态效果</p>
-              </div>
-              <Switch.Root
-                aria-label="减少动态效果"
-                checked={settings.data?.reduce_motion ?? false}
-                className="relative h-6 w-11 rounded-full bg-white/10 outline-none transition data-[state=checked]:bg-cyan-300/60 focus-visible:ring-2 focus-visible:ring-cyan-300/40"
-                onCheckedChange={updateMotion}
-              >
-                <Switch.Thumb className="block size-5 translate-x-0.5 rounded-full bg-white shadow-lg transition-transform data-[state=checked]:translate-x-[22px]" />
-              </Switch.Root>
-            </div>
-          </Card>
-
-          <Card className="p-6">
-            <SectionTitle title="缓存" />
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-white/[0.06] bg-white/[0.025] p-4">
-                <DatabaseZap className="size-4 text-cyan-200" />
-                <p className="mt-3 text-sm font-semibold text-white">资料</p>
-                <p className="mt-1 text-xs text-slate-600">5 分钟</p>
-              </div>
-              <div className="rounded-xl border border-white/[0.06] bg-white/[0.025] p-4">
-                <RotateCcwKey className="size-4 text-pink-200" />
-                <p className="mt-3 text-sm font-semibold text-white">成绩</p>
-                <p className="mt-1 text-xs text-slate-600">10 分钟</p>
-              </div>
-            </div>
-            <Button
-              className="mt-5"
-              loading={clearing}
-              onClick={clearCache}
-            >
-              <Trash2 className="size-4" />
-              清除缓存
-            </Button>
-          </Card>
-        </div>
-      </div>
-    </>
-  );
+  const queryClient = useQueryClient(); const auth = useAuthStatus(); const settings = useSettings();
+  const [tab, setTab] = useState<"general" | "about">("general"); const [clearing, setClearing] = useState(false); const [disconnecting, setDisconnecting] = useState(false); const [copied, setCopied] = useState(false); const [notice, setNotice] = useState<string | null>(null);
+  const updateMotion = async (reduceMotion: boolean) => queryClient.setQueryData(settingsQueryKey, await desktopApi.updateSettings({ reduce_motion: reduceMotion }));
+  const clearCache = async () => { setClearing(true); try { await desktopApi.clearProfileCache(); await queryClient.invalidateQueries({ queryKey: ["own-profile"] }); await queryClient.invalidateQueries({ queryKey: ["best-scores"] }); setNotice("本地缓存已清除"); } finally { setClearing(false); } };
+  const disconnect = async () => { setDisconnecting(true); try { const result = await desktopApi.disconnectOsu(true); queryClient.removeQueries({ queryKey: ["own-profile"] }); queryClient.removeQueries({ queryKey: ["best-scores"] }); if (auth.data) queryClient.setQueryData(authQueryKey, { ...auth.data, connected: false, user_id: null, username: null }); if (result.warning) setNotice(`远程撤销失败：${result.warning}`); } finally { setDisconnecting(false); } };
+  const copyCallback = async () => { const value = auth.data?.callback_url; if (!value) return; await navigator.clipboard.writeText(value); setCopied(true); window.setTimeout(() => setCopied(false), 1500); };
+  return <><PageHeader description="账号、游戏目录、显示和项目说明" eyebrow="Application" title="设置" /><div className="mb-5 flex gap-2 border-b border-white/[0.06] pb-3"><button className={`rounded-xl px-4 py-2 text-sm ${tab === "general" ? "bg-cyan-300/10 text-cyan-100" : "text-slate-500"}`} onClick={() => setTab("general")} type="button">常规</button><button className={`rounded-xl px-4 py-2 text-sm ${tab === "about" ? "bg-cyan-300/10 text-cyan-100" : "text-slate-500"}`} onClick={() => setTab("about")} type="button">关于</button></div>{tab === "about" ? <AboutPage /> : <>{notice ? <div className="mb-5 rounded-xl border border-cyan-300/15 bg-cyan-300/[0.06] px-4 py-3 text-xs text-cyan-100">{notice}</div> : null}<div className="grid grid-cols-[1.1fr_.9fr] gap-5"><Card className="p-6"><div className="flex items-start justify-between"><SectionTitle title="osu! 账号" /><Badge tone={auth.data?.connected ? "success" : "warning"}>{auth.data?.connected ? "已连接" : "未连接"}</Badge></div><div className="mt-5"><DataLine label="账号" value={auth.data?.username ?? "—"} /><DataLine label="用户 ID" value={auth.data?.user_id ?? "—"} /><DataLine label="Client ID" value={auth.data?.client_id ?? "—"} /><DataLine label="回调地址" value={<button className="inline-flex items-center gap-1.5 font-mono text-[11px] text-cyan-200" onClick={copyCallback} type="button">{auth.data?.callback_url}{copied ? <Check className="size-3" /> : <Copy className="size-3" />}</button>} /></div><div className="mt-5 flex gap-3"><Button onClick={() => void desktopApi.openExternal("https://osu.ppy.sh/home/account/edit")}><ExternalLink className="size-4" />管理 OAuth</Button><Button loading={disconnecting} onClick={() => void disconnect()} variant="danger"><LogOut className="size-4" />断开账号</Button></div></Card><div className="space-y-5"><GameDirectoryCard /><Card className="p-6"><SectionTitle title="显示" /><div className="mt-5 flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.025] p-4"><div className="flex items-center gap-3"><MonitorCog className="size-4 text-violet-200" /><p className="text-sm font-medium text-white">减少动态效果</p></div><Switch.Root aria-label="减少动态效果" checked={settings.data?.reduce_motion ?? false} className="relative h-6 w-11 rounded-full bg-white/10 data-[state=checked]:bg-cyan-300/60" onCheckedChange={(value) => void updateMotion(value)}><Switch.Thumb className="block size-5 translate-x-0.5 rounded-full bg-white transition-transform" /></Switch.Root></div></Card><Card className="p-6"><SectionTitle title="缓存" /><div className="mt-5 grid grid-cols-2 gap-3"><div className="rounded-xl border border-white/[0.06] bg-white/[0.025] p-4"><DatabaseZap className="size-4 text-cyan-200" /><p className="mt-3 text-sm font-semibold text-white">资料</p><p className="mt-1 text-xs text-slate-600">5 分钟</p></div><div className="rounded-xl border border-white/[0.06] bg-white/[0.025] p-4"><RotateCcwKey className="size-4 text-pink-200" /><p className="mt-3 text-sm font-semibold text-white">成绩</p><p className="mt-1 text-xs text-slate-600">10 分钟</p></div></div><Button className="mt-5" loading={clearing} onClick={() => void clearCache}><Trash2 className="size-4" />清除缓存</Button></Card></div></div></>}</>;
 }

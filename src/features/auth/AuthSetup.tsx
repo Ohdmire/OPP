@@ -109,7 +109,7 @@ export function AuthSetup({ status }: { status: AuthStatus }) {
               <div>
                 <p className="text-lg font-semibold text-white">OPP</p>
                 <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                  osu! profile companion
+                  一站式 osu! 工具集合
                 </p>
               </div>
             </div>

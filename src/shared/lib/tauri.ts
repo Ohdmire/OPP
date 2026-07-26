@@ -25,6 +25,10 @@ import type {
   LocalSkinDetail,
   LocalSkinPreview,
   LocalSkinSummary,
+  GameMediaItem,
+  GameReplayPayload,
+  GameSessionSummary,
+  GameScreenshotPayload,
   LocalSourceStatus,
   OAuthResult,
   OnlineBeatmapSearchQuery,
@@ -121,6 +125,17 @@ export const desktopApi = {
   getSettings: () => call<AppSettings>("get_settings"),
   updateSettings: (settings: AppSettings) =>
     call<AppSettings>("update_settings", { settings }),
+  startGameSession: (ruleset: Ruleset, client: OsuClient) =>
+    call<GameSessionSummary>("start_game_session", { ruleset, client }),
+  getGameSessionStatus: () =>
+    call<GameSessionSummary | null>("get_game_session_status"),
+  listGameMedia: (client: OsuClient) => call<GameMediaItem[]>("list_game_media", { client }),
+  readGameReplay: (client: OsuClient, path: string) =>
+    call<GameReplayPayload>("read_game_replay", { client, path }),
+  readGameScreenshot: (client: OsuClient, path: string) =>
+    call<GameScreenshotPayload>("read_game_screenshot", { client, path }),
+  openMediaInExplorer: (client: OsuClient, path: string) =>
+    call<void>("open_media_in_explorer", { client, path }),
   getLocalSources: () =>
     call<LocalSourceStatus[]>("get_local_sources"),
   setLocalSource: (client: OsuClient, path: string) =>

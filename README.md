@@ -3,9 +3,9 @@
 
   # OPP
 
-  **面向 osu! 玩家的个人档案与本地资源分析桌面工具**
+  **一站式 osu! 工具集合**
 
-  [![Version](https://img.shields.io/badge/version-0.2.4-ff6aa7?style=for-the-badge)](./src-tauri/tauri.conf.json)
+  [![Version](https://img.shields.io/badge/version-0.2.6-ff6aa7?style=for-the-badge)](./src-tauri/tauri.conf.json)
   [![Platform](https://img.shields.io/badge/platform-Windows-5ce1e6?style=for-the-badge&logo=windows11&logoColor=white)](#运行要求)
   [![Tauri](https://img.shields.io/badge/Tauri-2-a673ff?style=for-the-badge&logo=tauri&logoColor=white)](https://tauri.app/)
   [![Vibe Coding](https://img.shields.io/badge/Vibe_Coding-AI_Collaborative-8b5cf6?style=for-the-badge)](#vibe-coding)
@@ -150,3 +150,17 @@ OPP/
 ## Vibe Coding
 
 OPP 采用 **Vibe Coding / AI 协作开发** 方式推进：由人定义产品方向、边界与验收标准，AI 协助分析、实现、重构和测试。
+## v0.2.5 界面更新
+
+本地截图与回放现在采用“左侧对象列表 + 右侧主体预览”的工作区布局。列表按最近修改时间排序，刷新后会自动选中最新对象；选中对象后可以：
+
+- 在 Windows 文件资源管理器中定位并选中文件。
+- 复制文件绝对路径。
+- 截图直接复制为图片到系统剪贴板。
+- 在右侧查看截图，或查看回放原始数据的读取结果。
+
+设置页新增“关于”子界面，集中说明版本、仓库、MIT 协议、osu! API、前端与 Rust 依赖、参考项目以及感谢信息。项目仓库为 [L1rics06/OPP](https://github.com/L1rics06/OPP)，完整协议文本见 [`LICENSE`](./LICENSE)。
+
+### 开源依赖与致谢
+
+OPP 使用 osu! API v2 与 OAuth 2.0，并使用 React、React Router、TanStack Query、Radix UI、Lucide、Recharts、Tailwind CSS、Tauri、rosu-map、rosu-pp、reqwest、image、walkdir 和 zip 等开源项目。谱面规则与算法实现参考 [ppy/osu](https://github.com/ppy/osu)、[rosu-pp](https://github.com/MaxOhn/rosu-pp)，桌面能力参考 [Tauri 文档](https://tauri.app/)。感谢所有上游维护者、贡献者以及参与测试和反馈的 osu! 社区用户。

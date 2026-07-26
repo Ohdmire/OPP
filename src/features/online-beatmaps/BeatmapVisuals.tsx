@@ -8,6 +8,8 @@ const visuals: Record<Ruleset, { label: string; className: string; Icon: typeof 
   mania: { label: "mania", className: "text-violet-200 bg-violet-300/10 border-violet-300/25", Icon: Grid3X3 },
 };
 
+// Shared mod metadata is intentionally exported alongside the icon components.
+// eslint-disable-next-line react-refresh/only-export-components
 export const modeMods: Record<Ruleset, string[]> = {
   osu: ["HD", "HR", "DT", "NC", "FL", "EZ", "HT", "NF", "SD", "SO"],
   taiko: ["HD", "HR", "DT", "NC", "FL", "EZ", "HT", "NF", "SD", "SO"],

@@ -195,7 +195,9 @@ function BeatmapSetCard({
       </div>
 
       <div className="flex items-center gap-2 border-t border-white/[0.055] bg-black/10 px-5 py-3">
-        <BeatmapDifficultyStrip difficulties={set.difficulties.map((difficulty) => ({ id: difficulty.resource.resource_id, mode: difficulty.ruleset, stars: difficulty.stars, label: difficulty.difficulty_name, onClick: () => onOpen(difficulty.resource.resource_id) }))} />
+        <div className="min-w-0 flex-1">
+          <BeatmapDifficultyStrip difficulties={set.difficulties.map((difficulty) => ({ id: difficulty.resource.resource_id, mode: difficulty.ruleset, stars: difficulty.stars, label: difficulty.difficulty_name, onClick: () => onOpen(difficulty.resource.resource_id) }))} />
+        </div>
         <div className="hidden">
           {set.difficulties.slice(0, 8).map((difficulty) => (
             <span
@@ -214,6 +216,7 @@ function BeatmapSetCard({
         <Button
           aria-expanded={expanded}
           onClick={() => setExpanded((value) => !value)}
+          className="ml-auto shrink-0"
           size="sm"
         >
           {expanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}

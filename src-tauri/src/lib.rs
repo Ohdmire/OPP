@@ -1,6 +1,7 @@
 mod avatar_cache;
 mod commands;
 mod credentials;
+mod game_session;
 mod error;
 mod local_analysis;
 mod models;
@@ -28,6 +29,7 @@ use online_beatmaps::{
     search_online_beatmapsets,
 };
 use pp_calc::calculate_beatmap_pp;
+use game_session::{get_game_session_status, list_game_media, open_media_in_explorer, read_game_replay, read_game_screenshot, start_game_session};
 use state::AppState;
 use tauri::Manager;
 
@@ -55,6 +57,12 @@ pub fn run() {
             get_online_beatmap,
             get_online_beatmap_provider_status,
             calculate_beatmap_pp,
+            start_game_session,
+            get_game_session_status,
+            list_game_media,
+            read_game_replay,
+            read_game_screenshot,
+            open_media_in_explorer,
             download_online_beatmapsets,
             cancel_online_beatmap_download,
             clear_profile_cache,

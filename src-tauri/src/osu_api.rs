@@ -31,7 +31,7 @@ impl OsuApi {
             .user_agent(concat!(
                 "OPP/",
                 env!("CARGO_PKG_VERSION"),
-                " (personal osu profile companion)"
+                " (all-in-one osu! toolkit)"
             ))
             .build()
             .map_err(|error| CommandError::network(error.to_string()))?;

@@ -11,7 +11,7 @@ import {
 import { Badge, Button, DataLine } from "../../shared/components/ui";
 import { fullNumber } from "../../shared/lib/format";
 import { desktopApi } from "../../shared/lib/tauri";
-import type { OnlineBeatmapset } from "../../shared/types/osu";
+import type { OnlineBeatmap, OnlineBeatmapset } from "../../shared/types/osu";
 import { useOnlineBeatmapsetDetail } from "./api";
 import { DifficultyIcon, ModIcon, ModeIcon, modeMods } from "./BeatmapVisuals";
 import {
@@ -19,6 +19,18 @@ import {
   normalizePreviewUrl,
   starRange,
 } from "./filters";
+
+function DifficultyMetrics({ beatmap }: { beatmap: OnlineBeatmap }) {
+  const metrics = [
+    ["BPM", beatmap.bpm?.toFixed(0) ?? "—"],
+    ["长度", durationLabel(beatmap.total_length)],
+    ["AR / OD", `${beatmap.ar?.toFixed(1) ?? "—"} / ${beatmap.accuracy?.toFixed(1) ?? "—"}`],
+    ["CS / HP", `${beatmap.cs?.toFixed(1) ?? "—"} / ${beatmap.drain?.toFixed(1) ?? "—"}`],
+    ["物件", fullNumber((beatmap.count_circles ?? 0) + (beatmap.count_sliders ?? 0) + (beatmap.count_spinners ?? 0))],
+    ["通过 / 游玩", `${fullNumber(beatmap.passcount ?? 0)} / ${fullNumber(beatmap.playcount ?? 0)}`],
+  ];
+  return <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">{metrics.map(([label, value]) => <div className="rounded-xl border border-white/[0.06] bg-black/10 px-2.5 py-2" key={label}><p className="text-[10px] text-slate-600">{label}</p><p className="mt-1 truncate font-mono text-xs text-slate-300">{value}</p></div>)}</div>;
+}
 
 export function BeatmapsetDetailDialog({
   beatmapsetId,
@@ -170,12 +182,13 @@ export function BeatmapsetDetailDialog({
                       )
                       .map((beatmap) => (
                         <div
-                          className="grid grid-cols-[minmax(0,1fr)_70px_72px_62px_62px_42px] items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.025] px-4 py-3 text-sm"
+                          className="grid grid-cols-1 gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4 text-sm transition hover:border-cyan-300/20 hover:bg-cyan-300/[0.035]"
                           key={beatmap.id}
                           onClick={() => { setSelectedBeatmapId(beatmap.id); setCalculation(null); }}
                           role="button"
                           tabIndex={0}
                         >
+                          <DifficultyMetrics beatmap={beatmap} />
                           <div className="col-span-2 flex min-w-0 items-center gap-3">
                             <ModeIcon mode={beatmap.mode} />
                             <DifficultyIcon stars={beatmap.difficulty_rating} />

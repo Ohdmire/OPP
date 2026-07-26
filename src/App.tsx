@@ -35,11 +35,13 @@ const LocalAnalysisPage = lazy(() =>
     default: module.LocalAnalysisPage,
   })),
 );
+const LocalMediaPage = lazy(() => import("./features/local-media/LocalMediaPage").then((module) => ({ default: module.LocalMediaPage })));
 const SettingsPage = lazy(() =>
   import("./features/settings/SettingsPage").then((module) => ({
     default: module.SettingsPage,
   })),
 );
+const GameSessionPage = lazy(() => import("./features/game/GameSessionPage").then((module) => ({ default: module.GameSessionPage })));
 
 function Splash() {
   return (
@@ -79,7 +81,11 @@ function ConnectedApp() {
             <Route path="/local" element={<Navigate replace to="/local/maps" />} />
             <Route path="/local/maps" element={<LocalAnalysisPage section="maps" />} />
             <Route path="/local/skins" element={<LocalAnalysisPage section="skins" />} />
+            <Route path="/local/media" element={<Navigate replace to="/local/media/screenshots" />} />
+            <Route path="/local/media/screenshots" element={<LocalMediaPage kind="screenshot" />} />
+            <Route path="/local/media/replays" element={<LocalMediaPage kind="replay" />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/game" element={<GameSessionPage />} />
             <Route path="*" element={<Navigate replace to="/online/overview" />} />
           </Route>
         </Routes>
