@@ -6,9 +6,13 @@ use std::{
 use tokio::sync::{Mutex as AsyncMutex, oneshot};
 
 use crate::{
-    avatar_cache::AvatarCache, credentials::CredentialStore, error::CommandResult,
-    game_session::GameSessionRuntime, local_analysis::LocalAnalysisService, osu_api::OsuApi,
-    providers::ProviderRegistry, storage::StateStore,
+    account::{AvatarCache, CredentialStore},
+    error::CommandResult,
+    game_session::GameSessionRuntime,
+    local_analysis::LocalAnalysisService,
+    online_beatmaps::providers::ProviderRegistry,
+    osu_api::OsuApi,
+    storage::StateStore,
 };
 
 #[derive(Default)]

@@ -1,6 +1,7 @@
-mod models;
-mod tools;
 mod download;
+mod models;
+pub(crate) mod providers;
+mod tools;
 
 use std::{
     collections::HashSet,
@@ -12,23 +13,22 @@ use std::{
 };
 
 use crate::{
-    commands::ensure_access_token,
+    account::ensure_access_token,
     error::{CommandError, CommandResult},
     state::AppState,
 };
 
+use download::{download_file_name, download_with_adapters};
 use models::{
     BeatmapDownloadFailure, BeatmapDownloadProgress, BeatmapDownloadRequest, BeatmapDownloadResult,
     CollectedBeatmapsets, DownloadProgressCounts, OnlineBeatmapSearchQuery,
 };
 use serde_json::Value;
-use download::{download_file_name,download_with_adapters};
-use tools::{
-    MAX_BATCH_ITEMS, MAX_COLLECT_RESULTS, annotate_source,
-    emit_progress, find_existing_beatmapset, prepare_destination,
-    progress_for_item, search_with_adapters,
-};
 use tauri::{AppHandle, Manager, State};
+use tools::{
+    MAX_BATCH_ITEMS, MAX_COLLECT_RESULTS, annotate_source, emit_progress, find_existing_beatmapset,
+    prepare_destination, progress_for_item, search_with_adapters,
+};
 use uuid::Uuid;
 
 #[tauri::command]
@@ -125,7 +125,7 @@ pub async fn get_online_beatmap(
 #[tauri::command]
 pub async fn get_online_beatmap_provider_status(
     state: State<'_, AppState>,
-) -> CommandResult<Vec<crate::providers::ProviderStatus>> {
+) -> CommandResult<Vec<providers::ProviderStatus>> {
     Ok(state.providers.statuses().await)
 }
 

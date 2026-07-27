@@ -51,6 +51,7 @@ use service_query::{
 };
 
 #[derive(Debug)]
+/// 文件发现阶段的中间结果：候选文件、源文件统计与可展示的诊断信息。
 struct Discovery {
     candidates: Vec<Candidate>,
     source_file_count: usize,
@@ -58,6 +59,7 @@ struct Discovery {
     diagnostics: Vec<ScanDiagnostic>,
 }
 
+/// 扫描进度发送器：节流事件频率，并保证前端看到的百分比单调递增。
 struct ProgressReporter {
     emit_event: Arc<dyn Fn(LocalScanProgress) + Send + Sync>,
     client: LocalClient,
@@ -75,6 +77,7 @@ impl ProgressReporter {
         }
     }
 
+    /// 常规更新最多每 100ms 一次；阶段结束时可用 `force` 立即发送。
     fn emit(&self, phase: &str, processed: usize, total: usize, percent: f64, force: bool) {
         let Ok(mut last_emit) = self.last_emit.lock() else {
             return;
@@ -98,6 +101,10 @@ impl ProgressReporter {
     }
 }
 
+/// 本地库扫描与查询服务。
+///
+/// 维护按客户端隔离的索引、皮肤资源定位表和可取消的扫描任务；CPU 密集的
+/// 解析工作由专用 Rayon 线程池完成，避免阻塞 Tauri 运行时。
 pub struct LocalAnalysisService {
     cache_dir: PathBuf,
     sources: SourceResolver,
@@ -873,6 +880,7 @@ impl LocalAnalysisService {
     }
 }
 
+/// 遍历已解析的数据源，筛选出可能的谱面和皮肤配置文件。
 fn discover(
     source: &ResolvedSource,
     client: LocalClient,
@@ -1031,6 +1039,7 @@ fn discover_stable_tree(
     Ok(())
 }
 
+/// 按候选类型解析单个文件；失败会编码为索引诊断而不是中止整个扫描。
 fn process_candidate(client: LocalClient, candidate: &Candidate) -> IndexedEntry {
     let mut diagnostics = Vec::new();
     let data = match &candidate.kind {
@@ -1194,6 +1203,7 @@ fn process_unknown(
     }
 }
 
+/// 从完整索引聚合库级统计；推断分组会单独记录，避免与在线谱面集混淆。
 fn build_summary(
     client: LocalClient,
     source_root: &str,

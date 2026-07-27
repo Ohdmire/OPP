@@ -70,6 +70,7 @@ export const languageOptions = [
   { value: 14, label: "Other" },
 ] as const;
 
+/** 创建与后端查询契约一致的初始筛选条件，重置筛选时也以此为基准。 */
 export function createDefaultSearchQuery(
   ruleset: Ruleset,
 ): OnlineBeatmapSearchQuery {
@@ -119,12 +120,14 @@ export function createDefaultSearchQuery(
   };
 }
 
+/** 将输入框文本转换为可选数值；空值和无效值统一表示为未筛选。 */
 export function parseOptionalNumber(value: string): number | null {
   if (!value.trim()) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/** 统计偏离默认值的筛选项数量，供筛选按钮显示状态提示。 */
 export function activeFilterCount(query: OnlineBeatmapSearchQuery): number {
   const defaults = createDefaultSearchQuery(query.ruleset ?? "osu");
   const ignored = new Set(["query", "ruleset", "cursor_string", "sort"]);
@@ -136,6 +139,7 @@ export function activeFilterCount(query: OnlineBeatmapSearchQuery): number {
   }).length;
 }
 
+/** 补全 osu! API 可能返回的协议相对或站内相对预览地址。 */
 export function normalizePreviewUrl(value?: string): string | null {
   if (!value) return null;
   if (value.startsWith("//")) return `https:${value}`;
@@ -143,6 +147,7 @@ export function normalizePreviewUrl(value?: string): string | null {
   return value;
 }
 
+/** 从谱面集的各难度计算并格式化星级范围。 */
 export function starRange(beatmaps?: OnlineBeatmap[]): string {
   const ratings = (beatmaps ?? [])
     .map((beatmap) => beatmap.difficulty_rating)

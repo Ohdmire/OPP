@@ -43,6 +43,9 @@ pub enum CapabilityLevel {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+/// 不同 osu! 客户端可被本地扫描器可靠读取的功能范围。
+///
+/// `Partial` 表示可读取部分数据，但不应将缺失数据当作不存在。
 pub struct LocalCapabilities {
     pub beatmaps: CapabilityLevel,
     pub difficulty: CapabilityLevel,
@@ -73,6 +76,7 @@ impl LocalCapabilities {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// 某个客户端本地数据源的解析结果与可用状态，直接提供给前端展示。
 pub struct LocalSourceStatus {
     pub client: LocalClient,
     pub mode: SourceMode,
@@ -87,6 +91,7 @@ pub struct LocalSourceStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// 扫描索引中资源的稳定引用；`resource_id` 用于后续按需读取内容。
 pub struct LocalResourceRef {
     pub resource_id: String,
     pub client: LocalClient,
@@ -116,6 +121,7 @@ pub struct LocalCalculationVersion {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// 一次扫描生成的库级汇总，包含数据完整度和统计口径。
 pub struct LocalLibrarySummary {
     pub client: LocalClient,
     pub completeness: Completeness,
@@ -142,6 +148,7 @@ pub struct HitObjectCounts {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// 谱面的轻量列表项；详情、背景与 strain 数据均通过资源引用按需获取。
 pub struct LocalBeatmapSummary {
     pub resource: LocalResourceRef,
     pub set_key: String,
@@ -173,6 +180,7 @@ pub struct LocalBeatmapSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// 单张谱面的完整分析结果，保留计算时使用的算法版本以便结果可追溯。
 pub struct LocalBeatmapDetail {
     pub summary: LocalBeatmapSummary,
     pub source: String,
@@ -227,6 +235,7 @@ pub struct StrainSeries {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// 按固定时间段切分的难度曲线，`series` 的键会随游戏模式变化。
 pub struct StrainAnalysis {
     pub section_length_ms: f64,
     pub series: Vec<StrainSeries>,
@@ -288,6 +297,7 @@ pub struct LocalSkinAssetPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// 皮肤的列表摘要；当客户端无法枚举完整资源时以 `completeness` 标明。
 pub struct LocalSkinSummary {
     pub resource: LocalResourceRef,
     pub completeness: Completeness,
@@ -311,6 +321,7 @@ pub struct LocalSkinDetail {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// 通用偏移量分页响应，`total` 是过滤后但分页前的总数。
 pub struct Page<T> {
     pub items: Vec<T>,
     pub total: usize,
@@ -342,6 +353,7 @@ pub enum BeatmapSort {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
+/// 本地谱面列表的筛选、排序与分页条件。
 pub struct BeatmapQuery {
     pub client: LocalClient,
     pub search: String,
@@ -431,6 +443,7 @@ impl Default for SkinQuery {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// 扫描期间发往前端的单调进度快照，百分比不会因阶段切换而倒退。
 pub struct LocalScanProgress {
     pub client: LocalClient,
     pub phase: String,

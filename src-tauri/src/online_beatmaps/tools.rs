@@ -11,7 +11,7 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 
 use crate::{
-    commands::ensure_access_token,
+    account::ensure_access_token,
     error::{CommandError, CommandResult},
     models::Ruleset,
     state::AppState,
@@ -184,8 +184,6 @@ impl OnlineBeatmapSearchQuery {
     }
 }
 
-
-
 pub fn normalize_official_response(value: &mut Value) {
     annotate_source(value, "official");
     if let Some(items) = value.get_mut("beatmapsets").and_then(Value::as_array_mut) {
@@ -354,8 +352,6 @@ pub fn find_existing_beatmapset(destination: &Path, beatmapset_id: u64) -> Optio
         })
 }
 
-
-
 pub fn sanitize_filename(value: &str) -> String {
     let mut sanitized = value
         .chars()
@@ -468,8 +464,6 @@ mod tests {
         invalid_extra.extras = vec!["background".into()];
         assert!(invalid_extra.to_api_parameters().is_err());
     }
-
-
 
     #[test]
     fn content_filters_use_official_parameters() {

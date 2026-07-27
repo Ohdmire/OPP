@@ -33,7 +33,7 @@ pub async fn download_with_adapters(
     state: &AppState,
     beatmapset_id: u64,
     provider: &str,
-) -> CommandResult<crate::providers::ProviderBytes> {
+) -> CommandResult<super::providers::ProviderBytes> {
     let result = match provider {
         "nerinyan" => match state.providers.nerinyan_osz(beatmapset_id).await {
             Ok(download) => Ok(download),

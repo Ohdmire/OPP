@@ -41,6 +41,7 @@ pub fn calculation_version() -> LocalCalculationVersion {
     }
 }
 
+/// 解析一张谱面时同时产出的列表摘要、详情和非致命警告。
 pub struct ParsedBeatmap {
     pub summary: LocalBeatmapSummary,
     pub detail: LocalBeatmapDetail,
@@ -56,6 +57,9 @@ fn short_hash(value: &str) -> String {
     digest[..16].to_string()
 }
 
+/// 将 osu! 配置及谱面文本解码为 UTF-8。
+///
+/// 优先识别 UTF-16 BOM 与空字节特征，再尝试 UTF-8，最后使用编码探测兜底。
 pub fn decode_text(bytes: &[u8]) -> String {
     if bytes.starts_with(&[0xff, 0xfe])
         || (bytes.len() >= 4
@@ -140,6 +144,7 @@ fn count_hit_objects(map: &rosu_map::Beatmap) -> HitObjectCounts {
     counts
 }
 
+/// 使用滑动的一秒窗口计算峰值 NPS，而非按自然秒边界分桶。
 fn peak_nps(map: &rosu_map::Beatmap) -> f64 {
     let mut window = VecDeque::new();
     let mut peak = 0usize;
@@ -158,6 +163,10 @@ fn peak_nps(map: &rosu_map::Beatmap) -> f64 {
     peak as f64
 }
 
+/// 生成谱面集分组键。
+///
+/// 已提交谱面优先使用在线谱面集 ID；没有 ID 时 Stable 用目录分组，Lazer
+/// 用元数据哈希推断分组，并明确标记该推断结果。
 fn set_key(client: LocalClient, map: &rosu_map::Beatmap, logical_path: &str) -> (String, bool) {
     if map.beatmap_set_id > 0 {
         return (format!("online:{}", map.beatmap_set_id), false);
@@ -180,6 +189,7 @@ fn set_key(client: LocalClient, map: &rosu_map::Beatmap, logical_path: &str) -> 
     (format!("inferred:{}", short_hash(&inferred)), true)
 }
 
+/// 解析 `.osu` 文件并计算基础指标；难度计算失败只降级为警告，不阻断索引。
 pub fn parse_beatmap(
     client: LocalClient,
     bytes: &[u8],
@@ -325,6 +335,7 @@ pub fn parse_beatmap(
     })
 }
 
+/// 按游戏模式导出 rosu-pp 的分段难度曲线，供前端绘制 strain 图。
 pub fn calculate_strains(bytes: &[u8]) -> Result<StrainAnalysis, String> {
     let map = rosu_pp::Beatmap::from_bytes(bytes)
         .map_err(|error| format!("无法为谱面计算 strain：{error}"))?;
@@ -391,6 +402,7 @@ fn parse_color(value: &str) -> Option<Vec<u8>> {
     (components.len() == 3 || components.len() == 4).then_some(components)
 }
 
+/// 解析 `skin.ini` 的分节键值对；重复键会按原始顺序保留。
 pub fn parse_skin_config(text: &str) -> Vec<SkinConfigSection> {
     let mut sections = Vec::<SkinConfigSection>::new();
     let mut current = SkinConfigSection {
@@ -437,6 +449,7 @@ fn config_value(sections: &[SkinConfigSection], key: &str) -> Option<String> {
         .map(|entry| entry.value.clone())
 }
 
+/// 递归统计皮肤目录中的资源数量、字节数与扩展名分布。
 pub fn inventory_skin(path: &Path) -> Result<SkinInventory, String> {
     let mut file_count = 0usize;
     let mut total_bytes = 0u64;
@@ -467,6 +480,7 @@ pub fn inventory_skin(path: &Path) -> Result<SkinInventory, String> {
     })
 }
 
+/// 解析皮肤配置，并在可访问皮肤根目录时补充资源清单。
 pub fn parse_skin(
     client: LocalClient,
     bytes: &[u8],

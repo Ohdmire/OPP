@@ -14,6 +14,9 @@ use crate::{
     state::AppState,
 };
 
+mod events;
+use events::ReplayRenderProgress;
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RenderSkinKind {
@@ -167,14 +170,6 @@ pub struct ReplayRenderJob {
     pub render_id: u32,
     pub status: String,
     pub description: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct ReplayRenderProgress {
-    pub render_id: u32,
-    pub status: String,
-    pub description: String,
-    pub video_url: Option<String>,
 }
 
 fn options_from(input: ReplayRenderOptions) -> CommandResult<RenderOptions> {

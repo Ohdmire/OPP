@@ -1,21 +1,17 @@
-mod avatar_cache;
-mod commands;
-mod credentials;
+mod account;
 mod error;
 mod game_session;
 mod local_analysis;
 mod models;
-mod oauth;
 mod online_beatmaps;
 mod osu_api;
 mod pp_calc;
-mod providers;
 mod replay_render;
 mod state;
 mod storage;
 mod tools;
 
-use commands::{
+use account::{
     begin_oauth_login, cancel_oauth_login, clear_profile_cache, disconnect_osu,
     export_replay_video, get_auth_status, get_best_scores, get_own_profile, get_settings,
     save_oauth_credentials, update_settings,

@@ -9,6 +9,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Deserialize)]
+/// 前端提交的在线谱面 PP 计算参数；未填写的表现字段由 rosu-pp 使用默认值。
 pub struct BeatmapCalculationRequest {
     pub beatmap_id: u64,
     #[serde(default)]
@@ -22,6 +23,7 @@ pub struct BeatmapCalculationRequest {
 }
 
 #[derive(Debug, Clone, Serialize)]
+/// PP 计算结果及其来源、算法版本，便于界面解释与问题追踪。
 pub struct BeatmapCalculationResult {
     pub beatmap_id: u64,
     pub mods: Vec<String>,
@@ -40,6 +42,9 @@ pub struct BeatmapCalculationResult {
 }
 
 #[tauri::command]
+/// 下载谱面并计算指定 Mod 与成绩假设下的星数、PP 和最大 PP。
+///
+/// 下载源按 Catboy、Nerinyan 的顺序回退，避免单一提供方不可用导致功能失效。
 pub async fn calculate_beatmap_pp(
     request: BeatmapCalculationRequest,
     state: State<'_, AppState>,
@@ -104,6 +109,7 @@ pub async fn calculate_beatmap_pp(
     })
 }
 
+/// 将前端传入的 Mod 缩写合并为 rosu-pp 位掩码，并校验模式专属 Mod。
 fn mod_bits(mods: &[String], mode: &str) -> CommandResult<u32> {
     let mut bits = 0;
     for value in mods {
