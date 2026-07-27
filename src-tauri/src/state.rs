@@ -13,6 +13,7 @@ use crate::{
     online_beatmaps::providers::ProviderRegistry,
     osu_api::OsuApi,
     storage::StateStore,
+    tosu::TosuRuntime,
 };
 
 #[derive(Default)]
@@ -32,6 +33,7 @@ pub struct AppState {
     pub beatmap_download: Mutex<Option<Arc<AtomicBool>>>,
     pub token_refresh: AsyncMutex<()>,
     pub game_session: GameSessionRuntime,
+    pub tosu: Arc<TosuRuntime>,
 }
 
 impl AppState {
@@ -47,6 +49,7 @@ impl AppState {
             beatmap_download: Mutex::new(None),
             token_refresh: AsyncMutex::new(()),
             game_session: GameSessionRuntime::default(),
+            tosu: Arc::new(TosuRuntime::default()),
         })
     }
 }

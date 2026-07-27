@@ -15,6 +15,7 @@ const ReplayRenderPage = lazy(() => import("../features/local-media/ReplayRender
 const SettingsPage = lazy(() => import("../features/settings/SettingsPage").then((module) => ({ default: module.SettingsPage })));
 const GameSessionPage = lazy(() => import("../features/game/GameSessionPage").then((module) => ({ default: module.GameSessionPage })));
 const ToolsPage = lazy(() => import("../features/tools/ToolsPage").then((module) => ({ default: module.ToolsPage })));
+const TosuPage = lazy(() => import("../features/tools/TosuPage").then((module) => ({ default: module.TosuPage })));
 
 export function AppRoutes() {
   return (
@@ -36,6 +37,7 @@ export function AppRoutes() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/game" element={<GameSessionPage />} />
           <Route path="/tools" element={<ToolsPage />} />
+          <Route path="/tosu" element={<TosuPage />} />
           <Route path="*" element={<Navigate replace to="/online/overview" />} />
         </Route>
       </Routes>

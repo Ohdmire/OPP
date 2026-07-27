@@ -14,7 +14,7 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::Utc;
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::{
     account::ensure_access_token,
@@ -22,6 +22,7 @@ use crate::{
     local_analysis::LocalClient,
     models::{Ruleset, Score},
     state::AppState,
+    tosu::start_managed_tosu,
 };
 
 pub use models::GameSessionRuntime;
@@ -111,7 +112,9 @@ fn executable(client: LocalClient, root: &str) -> Option<PathBuf> {
 pub async fn start_game_session(
     ruleset: Ruleset,
     client: LocalClient,
+    launch_tosu: Option<bool>,
     state: State<'_, AppState>,
+    app: AppHandle,
 ) -> CommandResult<GameSessionSummary> {
     if process_running(client) {
         return Err(CommandError::new("GAME_ALREADY_RUNNING", "osu! 已经在运行"));
@@ -122,6 +125,9 @@ pub async fn start_game_session(
     })?;
     let exe = executable(client, &root)
         .ok_or_else(|| CommandError::new("GAME_NOT_FOUND", "安装目录中未找到 osu! 可执行文件"))?;
+    if launch_tosu.unwrap_or(state.store.snapshot()?.settings.launch_tosu_with_game) {
+        start_managed_tosu(&state, app)?;
+    }
     let start = snapshot(&state, ruleset).await?;
     let mut launch = Command::new(&exe);
     launch.current_dir(&root);

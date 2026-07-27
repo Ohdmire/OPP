@@ -130,6 +130,24 @@ pub struct AppSettings {
     pub beatmap_download_directory: Option<String>,
     #[serde(default)]
     pub replay_export_directory: Option<String>,
+    #[serde(default)]
+    pub tosu_executable_path: Option<String>,
+    #[serde(default = "default_tosu_api_base_url")]
+    pub tosu_api_base_url: String,
+    #[serde(default)]
+    pub launch_tosu_with_game: bool,
+    #[serde(default)]
+    pub tosu_lyrics_executable_path: Option<String>,
+    #[serde(default = "default_launch_tosu_lyrics")]
+    pub launch_tosu_lyrics_with_tosu: bool,
+}
+
+fn default_tosu_api_base_url() -> String {
+    "http://127.0.0.1:24050".into()
+}
+
+fn default_launch_tosu_lyrics() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

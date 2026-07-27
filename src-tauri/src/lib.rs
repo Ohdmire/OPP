@@ -10,6 +10,7 @@ mod replay_render;
 mod state;
 mod storage;
 mod tools;
+mod tosu;
 
 use account::{
     begin_oauth_login, cancel_oauth_login, clear_profile_cache, disconnect_osu,
@@ -36,6 +37,10 @@ use replay_render::submit_replay_render;
 use state::AppState;
 use tauri::Manager;
 use tools::{get_default_file_clients, open_local_resource_in_explorer, set_default_file_client};
+use tosu::{
+    get_tosu_logs, get_tosu_status, set_tosu_executable, set_tosu_lyrics_executable, start_tosu,
+    stop_tosu,
+};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -92,6 +97,12 @@ pub fn run() {
             open_local_resource_in_explorer,
             get_default_file_clients,
             set_default_file_client,
+            get_tosu_status,
+            get_tosu_logs,
+            set_tosu_executable,
+            set_tosu_lyrics_executable,
+            start_tosu,
+            stop_tosu,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run OPP");

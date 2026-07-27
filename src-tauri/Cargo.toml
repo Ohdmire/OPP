@@ -1,6 +1,6 @@
 [package]
 name = "opp"
-version = "0.2.8"
+version = "0.3.0"
 description = "An all-in-one osu! toolkit"
 authors = ["l1rics"]
 edition = "2024"
@@ -30,6 +30,8 @@ keyring = { version = "3", features = ["windows-native"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 thiserror = "2"
 tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-native-roots"] }
+futures-util = "0.3"
 url = "2"
 uuid = { version = "1", features = ["v4"] }
 chardetng = "0.1"

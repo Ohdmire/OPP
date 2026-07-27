@@ -39,6 +39,41 @@ export interface AppSettings {
   reduce_motion: boolean;
   beatmap_download_directory: string | null;
   replay_export_directory: string | null;
+  tosu_executable_path: string | null;
+  tosu_api_base_url: string;
+  launch_tosu_with_game: boolean;
+  tosu_lyrics_executable_path: string | null;
+  launch_tosu_lyrics_with_tosu: boolean;
+}
+
+export interface TosuLyricsStatus {
+  installed: boolean;
+  executable_path: string | null;
+  running: boolean;
+  owned_by_opp: boolean;
+  proxy_url: string;
+}
+
+export interface TosuStatus {
+  installed: boolean;
+  executable_path: string | null;
+  api_base_url: string;
+  api_reachable: boolean;
+  running: boolean;
+  owned_by_opp: boolean;
+  dashboard_url: string;
+  last_error: string | null;
+  lyrics: TosuLyricsStatus;
+}
+
+export interface TosuLogEntry { at: string; stream: string; level: "info" | "warning" | "error"; message: string; }
+
+export interface TosuLiveSnapshot {
+  state: string | null; mode: string | null; artist: string | null; title: string | null; difficulty: string | null;
+  song_time_ms: number | null; song_length_ms: number | null;
+  score: number | null; combo: number | null; max_combo: number | null; accuracy: number | null;
+  misses: number | null; hit_300: number | null; hit_100: number | null; hit_50: number | null;
+  pp_current: number | null; pp_fc: number | null; mods: string | null;
 }
 
 export interface DefaultFileClients {

@@ -5,7 +5,7 @@
 
   **一站式 osu! 工具集合**
 
-  [![Version](https://img.shields.io/badge/version-0.2.8-ff6aa7?style=for-the-badge)](./src-tauri/tauri.conf.json)
+  [![Version](https://img.shields.io/badge/version-0.3.0-ff6aa7?style=for-the-badge)](./src-tauri/tauri.conf.json)
   [![Platform](https://img.shields.io/badge/platform-Windows-5ce1e6?style=for-the-badge&logo=windows11&logoColor=white)](#运行要求)
   [![Tauri](https://img.shields.io/badge/Tauri-2-a673ff?style=for-the-badge&logo=tauri&logoColor=white)](https://tauri.app/)
   [![Vibe Coding](https://img.shields.io/badge/Vibe_Coding-AI_Collaborative-8b5cf6?style=for-the-badge)](#vibe-coding)
@@ -15,7 +15,7 @@
 
 ---
 
-OPP 是一个使用 Tauri、Rust 与 React 构建的 Windows 桌面应用。它将 osu! API v2 个人资料与本机 osu!stable / osu!lazer 资源放在同一个分析空间中，同时保持本地文件只读。
+OPP 是一个使用 Tauri、Rust 与 React 构建的 Windows 桌面应用。它集成了你游玩osu！时可能需要的工具。
 
 开发、模块边界与 AI 协作约定见 [项目快速入门](./docs/快速入门.md)。
 
@@ -29,8 +29,8 @@ OPP 是一个使用 Tauri、Rust 与 React 构建的 Windows 桌面应用。它�
 - 内置 pp calculator 支持不同模式MOD
 - 支持本地铺面，皮肤，截图，回放预览，管理
 - 支持启动双端游戏，自动记录一次游戏数据变化
+- 支持tosu以及tosu-lyrics一件配置启动
 - 内置各种实用小工具
-
 
 当前算法口径为 [`rosu-pp 4.0.1`](https://github.com/MaxOhn/rosu-pp/tree/v4.0.1)，对应
 [`ppy/osu@28c846b`](https://github.com/ppy/osu/commit/28c846b4d9366484792e27f4729cd1afa2cdeb66)
@@ -127,21 +127,20 @@ OPP/
 
 ## 需求与贡献
 
-- Bug 与功能建议请通过 GitHub Issues 提交，并附上 OPP 版本、osu! 客户端类型和复现步骤。
+任何对OPP有新功能的想法，建议，或者是bug，欢迎在issue处指出！
 
 
 ### 计划实现功能
 - ~~支持 o!rdr API，从而实现生成回放视频支持~~ v0.2.8已实现
 - 前端UI重新设计（急需懂前端的朋友帮助QAQ）
 - 成绩图片生成器
-- tosu支持？
+- ~~tosu支持？~~ v0.3.0 已实现
 - Skin 编辑替换
 - 更为专业的玩家数据分析
 - Mania 工具链
 - Rework Queue
 - 好友功能
 - ...
-- 终极设想：支持插件功能
 
 ### 超级大饼
 
@@ -155,9 +154,14 @@ OPP/
 
 目前有[osu-difficulty-lab](https://github.com/osuplusplus/osu-difficulty-lab)正在尝试建立一套实验难度体系，用来建立铺面索引
 
+### 关联仓库
 
+- [OPP](https://github.com/L1rics06/OPP)
+- [ppy/osu](https://github.com/ppy/osu)
+- [tosuapp/tosu](https://github.com/tosuapp/tosu)
+- [HollisMeynell/tosu-lyrics](https://github.com/HollisMeynell/tosu-lyrics)
+- [MaxOhn/rosu-pp](https://github.com/MaxOhn/rosu-pp)
+- [MaxOhn/rosu-map](https://github.com/MaxOhn/rosu-map)
+- [Tauri](https://github.com/tauri-apps/tauri)
 
-
-### 开源依赖与致谢
-
-OPP 使用 osu! API v2 与 OAuth 2.0，并使用 React、React Router、TanStack Query、Radix UI、Lucide、Recharts、Tailwind CSS、Tauri、rosu-map、rosu-pp、reqwest、image、walkdir 和 zip 等开源项目。谱面规则与算法实现参考 [ppy/osu](https://github.com/ppy/osu)、[rosu-pp](https://github.com/MaxOhn/rosu-pp)，桌面能力参考 [Tauri 文档](https://tauri.app/)。感谢所有上游维护者、贡献者以及参与测试和反馈的 osu! 社区用户。
+感谢所有上游维护者、贡献者以及参与测试和反馈的 osu! 社区用户。

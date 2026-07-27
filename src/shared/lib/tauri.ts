@@ -46,6 +46,9 @@ import type {
   ReplayRenderRequest,
   Score,
   SkinQuery,
+  TosuLiveSnapshot,
+  TosuLogEntry,
+  TosuStatus,
 } from "../types/osu";
 
 export const isTauri = () => "__TAURI_INTERNALS__" in window;
@@ -130,8 +133,8 @@ export const desktopApi = {
   getSettings: () => call<AppSettings>("get_settings"),
   updateSettings: (settings: AppSettings) =>
     call<AppSettings>("update_settings", { settings }),
-  startGameSession: (ruleset: Ruleset, client: OsuClient) =>
-    call<GameSessionSummary>("start_game_session", { ruleset, client }),
+  startGameSession: (ruleset: Ruleset, client: OsuClient, launchTosu?: boolean) =>
+    call<GameSessionSummary>("start_game_session", { ruleset, client, launchTosu }),
   getGameSessionStatus: () =>
     call<GameSessionSummary | null>("get_game_session_status"),
   listGameMedia: (client: OsuClient) => call<GameMediaItem[]>("list_game_media", { client }),
@@ -150,6 +153,12 @@ export const desktopApi = {
   getDefaultFileClients: () => call<DefaultFileClients>("get_default_file_clients"),
   setDefaultFileClient: (kind: "beatmap" | "skin", client: OsuClient) =>
     call<void>("set_default_file_client", { kind, client }),
+  getTosuStatus: () => call<TosuStatus>("get_tosu_status"),
+  getTosuLogs: () => call<TosuLogEntry[]>("get_tosu_logs"),
+  setTosuExecutable: (path: string) => call<TosuStatus>("set_tosu_executable", { path }),
+  setTosuLyricsExecutable: (path: string) => call<TosuStatus>("set_tosu_lyrics_executable", { path }),
+  startTosu: () => call<void>("start_tosu"),
+  stopTosu: () => call<void>("stop_tosu"),
   getLocalSources: () =>
     call<LocalSourceStatus[]>("get_local_sources"),
   setLocalSource: (client: OsuClient, path: string) =>
@@ -214,6 +223,21 @@ export const desktopApi = {
     const selected = await openDialog({ directory: true, multiple: false, defaultPath: defaultPath ?? undefined, title });
     return typeof selected === "string" ? selected : null;
   },
+  chooseTosuExecutable: async (defaultPath?: string | null) => {
+    if (!isTauri()) throw { code: "TAURI_REQUIRED", message: "文件选择器仅可在 OPP 桌面应用中使用" } satisfies CommandError;
+    const selected = await openDialog({
+      multiple: false,
+      defaultPath: defaultPath ?? undefined,
+      title: "选择 tosu.exe",
+      filters: [{ name: "tosu", extensions: ["exe"] }],
+    });
+    return typeof selected === "string" ? selected : null;
+  },
+  chooseTosuLyricsExecutable: async (defaultPath?: string | null) => {
+    if (!isTauri()) throw { code: "TAURI_REQUIRED", message: "文件选择器仅可在 OPP 桌面应用中使用" } satisfies CommandError;
+    const selected = await openDialog({ multiple: false, defaultPath: defaultPath ?? undefined, title: "选择 tosu-proxy.exe", filters: [{ name: "tosu-lyrics", extensions: ["exe"] }] });
+    return typeof selected === "string" ? selected : null;
+  },
   exportReplayVideo: (videoUrl: string, fileName: string) =>
     call<string>("export_replay_video", { videoUrl, fileName }),
   chooseBeatmapDownloadDirectory: async (defaultPath?: string | null) => {
@@ -265,5 +289,13 @@ export const desktopApi = {
     return listen<ReplayRenderProgress>("ordr-render-progress", (event) =>
       handler(event.payload),
     );
+  },
+  onTosuLog: async (handler: (entry: TosuLogEntry) => void): Promise<UnlistenFn> => {
+    if (!isTauri()) return () => undefined;
+    return listen<TosuLogEntry>("tosu-log", (event) => handler(event.payload));
+  },
+  onTosuLiveData: async (handler: (snapshot: TosuLiveSnapshot) => void): Promise<UnlistenFn> => {
+    if (!isTauri()) return () => undefined;
+    return listen<TosuLiveSnapshot>("tosu-live-data", (event) => handler(event.payload));
   },
 };
