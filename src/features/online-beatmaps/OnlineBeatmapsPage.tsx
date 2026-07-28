@@ -30,6 +30,13 @@ function OnlineBeatmapsClient({ ruleset }: { ruleset: Ruleset }) {
   useEffect(() => () => { audioRef.current?.pause(); audioRef.current = null; }, []);
 
   const items = useMemo(() => uniqueBeatmapsets(search.data?.pages.flatMap((page) => page.beatmapsets ?? []) ?? []), [search.data]);
+  const searchSuggestions = useMemo(() => items.flatMap((item) => [
+    { value: item.title, detail: "标题" },
+    ...(item.title_unicode ? [{ value: item.title_unicode, detail: "标题" }] : []),
+    { value: item.artist, detail: "艺术家" },
+    { value: item.creator, detail: "Mapper" },
+    ...(item.tags?.split(" ").filter(Boolean).map((tag) => ({ value: tag, detail: "标签" })) ?? []),
+  ]), [items]);
   const availableTotal = search.data?.pages[0]?.total ?? null;
   const queueItems = useMemo(() => [...queue.values()], [queue]);
   const detailFallback = items.find((item) => item.id === detailId) ?? queue.get(detailId ?? -1) ?? null;
@@ -63,7 +70,7 @@ function OnlineBeatmapsClient({ ruleset }: { ruleset: Ruleset }) {
     />
 
     <div className="space-y-5">
-      <OnlineBeatmapFilters loading={search.isFetching && !search.isFetchingNextPage} onChange={setDraft} onReset={reset} onSubmit={() => setActiveQuery({ ...draft, cursor_string: null })} query={draft} />
+      <OnlineBeatmapFilters loading={search.isFetching && !search.isFetchingNextPage} onChange={setDraft} onReset={reset} onSubmit={() => setActiveQuery({ ...draft, cursor_string: null })} query={draft} suggestions={searchSuggestions} />
       <div className="grid grid-cols-[minmax(0,1fr)_300px] items-start gap-5">
         <section className="min-w-0">
           <div className="mb-4 flex min-h-14 items-center justify-between rounded-2xl border border-white/[0.08] bg-white/[0.025] px-5">

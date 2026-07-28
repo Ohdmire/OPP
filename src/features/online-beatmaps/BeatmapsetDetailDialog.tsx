@@ -11,7 +11,7 @@ import {
 import { Badge, Button, DataLine } from "../../shared/components/ui";
 import { fullNumber } from "../../shared/lib/format";
 import { desktopApi } from "../../shared/lib/tauri";
-import type { OnlineBeatmap, OnlineBeatmapset } from "../../shared/types/osu";
+import type { OnlineBeatmapset } from "../../shared/types/osu";
 import { useOnlineBeatmapsetDetail } from "./api";
 import { DifficultyIcon, ModIcon, ModeIcon, modeMods } from "./BeatmapVisuals";
 import {
@@ -19,18 +19,6 @@ import {
   normalizePreviewUrl,
   starRange,
 } from "./filters";
-
-function DifficultyMetrics({ beatmap }: { beatmap: OnlineBeatmap }) {
-  const metrics = [
-    ["BPM", beatmap.bpm?.toFixed(0) ?? "—"],
-    ["长度", durationLabel(beatmap.total_length)],
-    ["AR / OD", `${beatmap.ar?.toFixed(1) ?? "—"} / ${beatmap.accuracy?.toFixed(1) ?? "—"}`],
-    ["CS / HP", `${beatmap.cs?.toFixed(1) ?? "—"} / ${beatmap.drain?.toFixed(1) ?? "—"}`],
-    ["物件", fullNumber((beatmap.count_circles ?? 0) + (beatmap.count_sliders ?? 0) + (beatmap.count_spinners ?? 0))],
-    ["通过 / 游玩", `${fullNumber(beatmap.passcount ?? 0)} / ${fullNumber(beatmap.playcount ?? 0)}`],
-  ];
-  return <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">{metrics.map(([label, value]) => <div className="rounded-xl border border-white/[0.06] bg-black/10 px-2.5 py-2" key={label}><p className="text-[10px] text-slate-600">{label}</p><p className="mt-1 truncate font-mono text-xs text-slate-300">{value}</p></div>)}</div>;
-}
 
 export function BeatmapsetDetailDialog({
   beatmapsetId,
@@ -89,7 +77,7 @@ export function BeatmapsetDetailDialog({
     <Dialog.Root onOpenChange={(open) => !open && onClose()} open={beatmapsetId !== null}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-[80] bg-[#03050a]/75 backdrop-blur-sm" />
-        <Dialog.Content className="fixed bottom-0 right-0 top-0 z-[90] w-[min(820px,78vw)] overflow-y-auto border-l border-white/10 bg-[#0d131f] shadow-[-30px_0_100px_rgba(0,0,0,.5)] outline-none">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-[90] max-h-[calc(100vh-3rem)] w-[min(1120px,calc(100vw-3rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-3xl border border-white/10 bg-[#0d131f] shadow-2xl outline-none">
           {beatmapset ? (
             <>
               <div className="relative h-60 overflow-hidden bg-[#080b14]">
@@ -181,53 +169,35 @@ export function BeatmapsetDetailDialog({
                           left.difficulty_rating - right.difficulty_rating,
                       )
                       .map((beatmap) => (
-                        <div
-                          className="grid grid-cols-1 gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4 text-sm transition hover:border-cyan-300/20 hover:bg-cyan-300/[0.035]"
+                        <button
+                          className="group w-full rounded-2xl border border-white/[0.06] bg-white/[0.025] p-4 text-left transition hover:border-cyan-300/30 hover:bg-cyan-300/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/50"
                           key={beatmap.id}
-                          onClick={() => { setSelectedBeatmapId(beatmap.id); setCalculation(null); }}
-                          role="button"
-                          tabIndex={0}
+                          onClick={() => { setSelectedBeatmapId(beatmap.id); setCalculation(null); setShowCalculator(true); }}
+                          type="button"
                         >
-                          <DifficultyMetrics beatmap={beatmap} />
-                          <div className="col-span-2 flex min-w-0 items-center gap-3">
-                            <ModeIcon mode={beatmap.mode} />
+                          <div className="flex items-center gap-3">
+                            <div className="grid size-10 shrink-0 place-items-center rounded-xl border border-white/[0.08] bg-black/15 text-slate-300"><ModeIcon mode={beatmap.mode} /></div>
                             <DifficultyIcon stars={beatmap.difficulty_rating} />
-                            <div className="min-w-0">
-                            <p className="truncate font-medium text-slate-200">
-                              {beatmap.version}
-                            </p>
-                            <p className="mt-0.5 text-[10px] uppercase text-slate-600">
-                              {beatmap.mode}
-                            </p>
-                            </div>
+                            <div className="min-w-0 flex-1"><p className="truncate font-medium text-slate-100">{beatmap.version}</p><p className="mt-1 text-[10px] uppercase tracking-wider text-slate-600">{beatmap.mode}</p></div>
+                            <div className="hidden text-right sm:block"><p className="font-mono text-lg font-semibold text-amber-100">{beatmap.difficulty_rating.toFixed(2)}★</p><p className="mt-1 text-[10px] text-slate-600">{durationLabel(beatmap.total_length)}</p></div>
+                            <span className="grid size-9 shrink-0 place-items-center rounded-lg border border-cyan-300/20 text-cyan-200 transition group-hover:border-cyan-300/50 group-hover:bg-cyan-300/10" title="打开 PP 计算器"><Calculator className="size-4" /></span>
                           </div>
-                          <span className="font-mono text-amber-100">
-                            {beatmap.difficulty_rating.toFixed(2)}★
-                          </span>
-                          <span className="text-slate-500">
-                            {durationLabel(beatmap.total_length)}
-                          </span>
-                          <span className="font-mono text-slate-500">
-                            AR {beatmap.ar?.toFixed(1) ?? "—"}
-                          </span>
-                          <span className="font-mono text-slate-500">
-                            OD {beatmap.accuracy?.toFixed(1) ?? "—"}
-                          </span>
-                          <button
-                            aria-label={`计算 ${beatmap.version} 的 PP`}
-                            className="grid size-9 place-items-center rounded-lg border border-cyan-300/20 text-cyan-200 transition hover:border-cyan-300/50 hover:bg-cyan-300/10"
-                            onClick={(event) => { event.stopPropagation(); setSelectedBeatmapId(beatmap.id); setCalculation(null); setShowCalculator(true); }}
-                            type="button"
-                          >
-                            <Calculator className="size-4" />
-                          </button>
-                        </div>
+                          <div className="mt-4 grid grid-cols-3 gap-x-4 gap-y-2 border-t border-white/[0.055] pt-3 text-xs sm:grid-cols-6">
+                            <span><b className="font-normal text-slate-600">BPM</b><strong className="ml-1.5 font-mono text-slate-300">{beatmap.bpm?.toFixed(0) ?? "—"}</strong></span>
+                            <span><b className="font-normal text-slate-600">AR</b><strong className="ml-1.5 font-mono text-slate-300">{beatmap.ar?.toFixed(1) ?? "—"}</strong></span>
+                            <span><b className="font-normal text-slate-600">OD</b><strong className="ml-1.5 font-mono text-slate-300">{beatmap.accuracy?.toFixed(1) ?? "—"}</strong></span>
+                            <span><b className="font-normal text-slate-600">CS</b><strong className="ml-1.5 font-mono text-slate-300">{beatmap.cs?.toFixed(1) ?? "—"}</strong></span>
+                            <span><b className="font-normal text-slate-600">HP</b><strong className="ml-1.5 font-mono text-slate-300">{beatmap.drain?.toFixed(1) ?? "—"}</strong></span>
+                            <span><b className="font-normal text-slate-600">物件</b><strong className="ml-1.5 font-mono text-slate-300">{fullNumber((beatmap.count_circles ?? 0) + (beatmap.count_sliders ?? 0) + (beatmap.count_spinners ?? 0))}</strong></span>
+                          </div>
+                          <div className="mt-2 text-[11px] text-slate-500">通过 {fullNumber(beatmap.passcount ?? 0)} · 游玩 {fullNumber(beatmap.playcount ?? 0)}</div>
+                        </button>
                       ))}
                   </div>
                 </div>
 
-                {showCalculator ? <div className="fixed inset-0 z-[110] grid place-items-center bg-[#03050a]/70 p-6 backdrop-blur-sm">
-                <div className="w-full max-w-xl rounded-3xl border border-white/[0.1] bg-[#0b101b] p-6 shadow-2xl">
+                {showCalculator ? <div className="fixed bottom-0 right-0 top-0 z-[110] w-[min(460px,calc(100vw-2rem))] overflow-y-auto border-l border-white/[0.1] bg-[#0b101b] p-6 shadow-[-30px_0_100px_rgba(0,0,0,.5)]">
+                <div className="w-full">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <h3 className="text-sm font-semibold text-white">单谱面难度 / PP</h3>

@@ -244,6 +244,57 @@ pub async fn start_game_session(
     Ok(summary)
 }
 
+/// Starts a comparable session for an osu! process launched outside OPP.
+/// The process monitor calls this after a running client is observed, so the
+/// normal end-of-session poll can still produce a before/after summary.
+#[tauri::command]
+pub async fn start_detected_game_session(
+    ruleset: Ruleset,
+    client: LocalClient,
+    state: State<'_, AppState>,
+) -> CommandResult<GameSessionSummary> {
+    let source = state.local_analysis.source_status(client)?;
+    let root = source.install_root.ok_or_else(|| {
+        CommandError::new("GAME_NOT_FOUND", format!("未找到 osu! {client} 安装目录"))
+    })?;
+    let exe = executable(client, &root)
+        .ok_or_else(|| CommandError::new("GAME_NOT_FOUND", "安装目录中未找到 osu! 可执行文件"))?;
+    if !executable_running(&exe, &running_executables()) {
+        return Err(CommandError::new("GAME_NOT_RUNNING", "未检测到正在运行的 osu! 客户端"));
+    }
+    {
+        let active = state
+            .game_session
+            .active
+            .lock()
+            .map_err(|_| CommandError::new("SESSION_LOCKED", "游戏会话状态不可用"))?;
+        if let Some(summary) = active.as_ref()
+            && summary.running
+            && same_executable(Path::new(&summary.executable), &exe)
+        {
+            return Ok(summary.clone());
+        }
+    }
+    let start = snapshot(&state, ruleset).await?;
+    let summary = GameSessionSummary {
+        started_at: Utc::now(),
+        ended_at: None,
+        ruleset,
+        client: client.to_string(),
+        executable: exe.display().to_string(),
+        start,
+        end: None,
+        running: true,
+    };
+    *state
+        .game_session
+        .active
+        .lock()
+        .map_err(|_| CommandError::new("SESSION_LOCKED", "游戏会话状态不可用"))? =
+        Some(summary.clone());
+    Ok(summary)
+}
+
 #[tauri::command]
 pub async fn get_game_session_status(
     state: State<'_, AppState>,

@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import { ChevronRight, Filter, RotateCcw, Search } from "lucide-react";
-import { Badge, Button, Card } from "../../shared/components/ui";
+import { ChevronRight, Filter, RotateCcw } from "lucide-react";
+import { Badge, Button, Card, InfoTip } from "../../shared/components/ui";
 import type { OnlineBeatmapSearchQuery, Ruleset } from "../../shared/types/osu";
+import { SearchAutocomplete, type SearchSuggestion } from "../../shared/components/SearchAutocomplete";
 import { activeFilterCount, genreOptions, languageOptions, parseOptionalNumber, sortOptions, statusOptions } from "./filters";
 
 const inputClass = "w-full rounded-xl border border-white/[0.09] bg-[#0b101b] px-3 py-2.5 text-sm text-slate-200 outline-none transition placeholder:text-slate-600 focus:border-cyan-300/45 focus:ring-2 focus:ring-cyan-300/10";
@@ -34,7 +35,7 @@ const contentOptions = [
 ] as const;
 const gradeOptions = [["", "全部成绩"], ["XH", "银 SS"], ["X", "SS"], ["SH", "银 S"], ["S", "S"], ["A", "A"], ["B", "B"], ["C", "C"], ["D", "D"]] as const;
 
-export function OnlineBeatmapFilters({ query, loading, onChange, onReset, onSubmit }: { query: OnlineBeatmapSearchQuery; loading: boolean; onChange: (query: OnlineBeatmapSearchQuery) => void; onReset: () => void; onSubmit: () => void }) {
+export function OnlineBeatmapFilters({ query, loading, onChange, onReset, onSubmit, suggestions = [] }: { query: OnlineBeatmapSearchQuery; loading: boolean; onChange: (query: OnlineBeatmapSearchQuery) => void; onReset: () => void; onSubmit: () => void; suggestions?: SearchSuggestion[] }) {
   const patch = (value: Partial<OnlineBeatmapSearchQuery>) => onChange({ ...query, ...value, cursor_string: null });
   const count = activeFilterCount(query);
   return (
@@ -48,7 +49,7 @@ export function OnlineBeatmapFilters({ query, loading, onChange, onReset, onSubm
         </div>
         <div className="space-y-1 px-5">
           {query.ruleset === "mania" ? <div className="border-t border-white/[0.08] py-4"><Field label="Mania 键数"><div className="flex flex-wrap gap-2"><button className={`rounded-lg border px-3 py-2 text-xs ${query.keys_min === null && query.keys_max === null ? "border-violet-300/50 bg-violet-300/10 text-violet-100" : "border-white/[0.09] text-slate-400"}`} onClick={() => patch({ keys_min: null, keys_max: null })} type="button">全部</button>{maniaKeyOptions.map((keys) => <button className={`rounded-lg border px-3 py-2 text-xs font-medium ${query.keys_min === keys && query.keys_max === keys ? "border-violet-300/50 bg-violet-300/10 text-violet-100" : "border-white/[0.09] text-slate-400 hover:border-violet-300/30 hover:text-violet-100"}`} key={keys} onClick={() => patch({ keys_min: keys, keys_max: keys })} type="button">{keys}K</button>)}</div></Field></div> : null}
-          <div className="relative py-5"><Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-slate-500" /><input autoFocus className={`${inputClass} py-3 pl-11`} onChange={(event) => patch({ query: event.target.value })} placeholder="搜索标题、艺术家、mapper、标签或 ID" value={query.query} /></div>
+          <div className="relative py-5"><SearchAutocomplete ariaLabel="搜索在线谱面" className="w-full" inputClassName={`${inputClass} py-3 pl-11 pr-10`} onChange={(value) => patch({ query: value })} placeholder="搜索标题、艺术家、mapper、标签或 ID" suggestions={suggestions} value={query.query} /><span className="absolute right-3 top-1/2 z-20 -translate-y-1/2"><InfoTip text="自动补全只基于当前已加载的搜索结果，不会查询尚未获取的在线谱面。输入后仍可点击“应用筛选”进行完整的在线搜索。" /></span></div>
 
           <Section open title="内容筛选" count={query.content_filter || query.grade || query.played ? 1 : 0}>
             <div className="flex flex-wrap gap-2">{contentOptions.map(([value, label]) => <button className={`rounded-full border px-3 py-2 text-sm transition ${query.content_filter === value ? "border-cyan-300/50 bg-cyan-300/10 text-cyan-100" : "border-white/[0.09] text-slate-400 hover:border-white/20 hover:text-slate-200"}`} key={value || "all"} onClick={() => patch({ content_filter: value })} type="button">{label}</button>)}</div>

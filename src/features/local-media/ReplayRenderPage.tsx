@@ -63,6 +63,7 @@ export function ReplayRenderPage() {
     const query = replaySearch.trim().toLocaleLowerCase();
     return !query || `${labelForReplay(item)} ${item.path}`.toLocaleLowerCase().includes(query);
   });
+  const replaySuggestions = replays.flatMap((item) => [item.path, labelForReplay(item)]);
   const submit = async () => {
     if (!replayPath || !replayInfo?.submitted) return;
     setBusy(true); setError(null); setProgress(null);
@@ -82,7 +83,7 @@ export function ReplayRenderPage() {
       <div className="space-y-5">
         <Card className="p-5"><SectionTitle title="素材" description="回放会从当前客户端的 Replays 目录安全读取；谱面用于提交前的本地兼容性校验。" />
           <label className="mt-5 block text-base font-medium text-slate-200">本地回放
-            <span className="relative mt-2 block"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-500" /><input className="w-full rounded-xl border border-white/10 bg-black/20 py-3 pl-10 pr-3 text-base text-white" value={replaySearch} onChange={(event) => setReplaySearch(event.target.value)} placeholder="搜索文件名或路径" /></span>
+            <span className="relative mt-2 block"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-500" /><input list="replay-search-suggestions" className="w-full rounded-xl border border-white/10 bg-black/20 py-3 pl-10 pr-3 text-base text-white" value={replaySearch} onChange={(event) => setReplaySearch(event.target.value)} placeholder="搜索文件名或路径" /><datalist id="replay-search-suggestions">{replaySuggestions.map((suggestion) => <option key={suggestion} value={suggestion} />)}</datalist></span>
             <select className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-base text-white" value={replayPath} onChange={(event) => void inspect(event.target.value)}><option value="">选择回放</option>{filteredReplays.map((item) => <option key={item.path} value={item.path}>{labelForReplay(item)}</option>)}</select>
           </label>
           {replayInfo ? <div className={`mt-4 rounded-xl border p-4 text-sm ${replayInfo.submitted ? "border-emerald-300/15 bg-emerald-300/[0.05] text-emerald-100" : "border-amber-300/15 bg-amber-300/[0.05] text-amber-100"}`}>{replayInfo.submitted ? `已匹配 Beatmap ID ${replayInfo.beatmap_id} · ${replayInfo.beatmap_title ?? "已提交谱面"}` : "未在本地索引中找到对应谱面，或该谱面尚未提交。请先扫描本地谱面。"}</div> : null}

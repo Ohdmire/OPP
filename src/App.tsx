@@ -10,9 +10,18 @@ function ThemeController() {
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.themePrimary = settings.data?.theme_primary ?? "cyan";
-    root.dataset.themeSecondary = settings.data?.theme_secondary ?? "pink";
+    root.dataset.themeSecondary = settings.data?.theme_primary ?? "cyan";
     root.dataset.themeMode = settings.data?.theme_mode ?? "dark";
-  }, [settings.data?.theme_primary, settings.data?.theme_secondary, settings.data?.theme_mode]);
+  }, [settings.data?.theme_primary, settings.data?.theme_mode]);
+  return null;
+}
+
+function WebContextMenuBlocker() {
+  useEffect(() => {
+    const block = (event: MouseEvent) => event.preventDefault();
+    window.addEventListener("contextmenu", block);
+    return () => window.removeEventListener("contextmenu", block);
+  }, []);
   return null;
 }
 
@@ -20,6 +29,7 @@ export default function App() {
   return (
     <Tooltip.Provider delayDuration={350}>
       <ThemeController />
+      <WebContextMenuBlocker />
       <HashRouter>
         <TitleBar />
         <AppConnectionGate />

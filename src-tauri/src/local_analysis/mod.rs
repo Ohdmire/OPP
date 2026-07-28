@@ -171,3 +171,28 @@ pub async fn get_local_skin_asset(
         )
     })?
 }
+
+#[tauri::command]
+pub async fn replace_local_skin_asset(
+    client: LocalClient,
+    skin_resource_id: String,
+    asset_resource_id: String,
+    replacement_path: String,
+    save_as_new: bool,
+    new_skin_name: Option<String>,
+    state: State<'_, AppState>,
+) -> CommandResult<()> {
+    let service = Arc::clone(&state.local_analysis);
+    tokio::task::spawn_blocking(move || {
+        service.replace_skin_asset(
+            client,
+            &skin_resource_id,
+            &asset_resource_id,
+            Path::new(&replacement_path),
+            save_as_new,
+            new_skin_name.as_deref(),
+        )
+    })
+    .await
+    .map_err(|error| CommandError::new("LOCAL_SKIN_REPLACE_TASK_ERROR", format!("Skin 资源替换任务异常结束：{error}")))?
+}

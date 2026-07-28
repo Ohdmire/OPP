@@ -321,6 +321,14 @@ export function ScoresPage() {
           .some((value) => String(value).toLocaleLowerCase().includes(query)),
       );
   }, [scoresQuery.data, search]);
+  const searchSuggestions = (scoresQuery.data?.data ?? []).flatMap((score) => [
+    score.beatmapset?.title,
+    score.beatmapset?.title_unicode,
+    score.beatmapset?.artist,
+    score.beatmapset?.creator,
+    score.beatmap?.version,
+    ...scoreMods(score),
+  ]).filter((value): value is string => Boolean(value)).map((value) => ({ value }));
 
   const refresh = async () => {
     setRefreshing(true);
@@ -348,7 +356,11 @@ export function ScoresPage() {
             onChange={(event) => setSearch(event.target.value)}
             placeholder="搜索曲名、艺术家、Mapper、难度或 Mod"
             value={search}
+            list="score-search-suggestions"
           />
+          <datalist id="score-search-suggestions">
+            {searchSuggestions.map((suggestion, index) => <option key={`${suggestion.value}-${index}`} value={suggestion.value} />)}
+          </datalist>
         </div>
         <div className="flex items-center gap-4 px-2 text-xs text-slate-500">
           <span className="inline-flex items-center gap-1.5">

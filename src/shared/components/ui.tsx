@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { cva, type VariantProps } from "class-variance-authority";
-import { AlertCircle, LoaderCircle } from "lucide-react";
+import { AlertCircle, CircleHelp, LoaderCircle } from "lucide-react";
 import { cn } from "../lib/cn";
 
 const buttonVariants = cva(
@@ -161,10 +162,21 @@ export function SectionTitle({
 }) {
   return (
     <div>
-      <h2 className="text-lg font-semibold tracking-tight text-white">{title}</h2>
-      {description ? (
-        <p className="mt-1.5 text-sm leading-6 text-slate-300">{description}</p>
-      ) : null}
+      <div className="flex items-center gap-2">
+        <h2 className="text-lg font-semibold tracking-tight text-white">{title}</h2>
+        {description ? <InfoTip text={description} /> : null}
+      </div>
     </div>
+  );
+}
+
+export function InfoTip({ text }: { text: string }) {
+  return (
+    <Tooltip.Root>
+      <Tooltip.Trigger asChild>
+        <button aria-label={text} className="inline-grid size-4 shrink-0 cursor-help place-items-center rounded-full border border-current/35 text-slate-500 hover:text-slate-200" type="button"><CircleHelp className="size-3" /></button>
+      </Tooltip.Trigger>
+      <Tooltip.Portal><Tooltip.Content className="z-[200] max-w-xs rounded-lg border border-white/10 bg-[#111725] px-3 py-2 text-xs leading-5 text-slate-200 shadow-xl" sideOffset={7}>{text}<Tooltip.Arrow className="fill-[#111725]" /></Tooltip.Content></Tooltip.Portal>
+    </Tooltip.Root>
   );
 }

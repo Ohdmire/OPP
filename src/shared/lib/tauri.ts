@@ -161,6 +161,8 @@ export const desktopApi = {
     call<AppSettings>("update_settings", { settings }),
   startGameSession: (ruleset: Ruleset, client: OsuClient, launchTosu?: boolean) =>
     call<GameSessionSummary>("start_game_session", { ruleset, client, launchTosu }),
+  startDetectedGameSession: (ruleset: Ruleset, client: OsuClient) =>
+    call<GameSessionSummary>("start_detected_game_session", { ruleset, client }),
   getGameSessionStatus: () =>
     call<GameSessionSummary | null>("get_game_session_status"),
   getGameStatus: () => call<GameStatusSnapshot>("get_game_status"),
@@ -230,6 +232,13 @@ export const desktopApi = {
       skinResourceId,
       assetResourceId,
     }),
+  replaceLocalSkinAsset: (client: OsuClient, skinResourceId: string, assetResourceId: string, replacementPath: string, saveAsNew: boolean, newSkinName?: string) =>
+    call<void>("replace_local_skin_asset", { client, skinResourceId, assetResourceId, replacementPath, saveAsNew, newSkinName: newSkinName ?? null }),
+  chooseSkinAssetFile: async (extension: string) => {
+    if (!isTauri()) throw { code: "TAURI_REQUIRED", message: "文件选择器仅可在 OPP 桌面应用中使用" } satisfies CommandError;
+    const selected = await openDialog({ multiple: false, title: `选择 .${extension} 替换文件`, filters: [{ name: `${extension.toUpperCase()} 文件`, extensions: [extension] }] });
+    return typeof selected === "string" ? selected : null;
+  },
   chooseLocalDirectory: async (defaultPath?: string | null) => {
     if (!isTauri()) {
       throw {

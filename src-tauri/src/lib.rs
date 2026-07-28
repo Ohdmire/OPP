@@ -20,13 +20,13 @@ use account::{
 use game_session::{
     get_game_session_status, get_game_status, inspect_game_replay, list_game_media,
     open_media_in_explorer, read_game_replay, read_game_screenshot, start_game_monitor,
-    start_game_session,
+    start_detected_game_session, start_game_session,
 };
 use local_analysis::{
     cancel_local_scan, get_local_beatmap_background, get_local_beatmap_detail,
     get_local_skin_asset, get_local_skin_detail, get_local_skin_preview, get_local_sources,
     get_local_summary, query_local_beatmap_sets, query_local_beatmaps, query_local_skins,
-    reset_local_source, scan_local_source, set_local_source,
+    replace_local_skin_asset, reset_local_source, scan_local_source, set_local_source,
 };
 use online_beatmaps::{
     cancel_online_beatmap_download, collect_online_beatmapsets, download_online_beatmapsets,
@@ -78,6 +78,7 @@ pub fn run() {
             calculate_beatmap_pp,
             submit_replay_render,
             start_game_session,
+            start_detected_game_session,
             get_game_status,
             get_game_session_status,
             list_game_media,
@@ -105,6 +106,7 @@ pub fn run() {
             get_local_skin_detail,
             get_local_skin_preview,
             get_local_skin_asset,
+            replace_local_skin_asset,
             open_local_resource_in_explorer,
             get_default_file_clients,
             set_default_file_client,

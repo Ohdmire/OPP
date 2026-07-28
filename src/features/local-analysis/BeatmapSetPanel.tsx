@@ -375,6 +375,13 @@ export function BeatmapSetPanel({
     ],
   );
   const sets = useLocalBeatmapSets(query, true);
+  const searchSuggestions = (sets.data?.items ?? []).flatMap((item) => [
+    { value: item.title, detail: "标题" },
+    { value: item.title_unicode, detail: "标题" },
+    { value: item.artist, detail: "艺术家" },
+    { value: item.artist_unicode, detail: "艺术家" },
+    ...item.creators.map((creator) => ({ value: creator, detail: "Mapper" })),
+  ]);
   const activeRangeCount = Object.values(ranges).filter(Boolean).length;
   const activeFilterCount = activeRangeCount + (submitted === "all" ? 0 : 1);
 
@@ -400,7 +407,11 @@ export function BeatmapSetPanel({
               }}
               placeholder="搜索标题、艺术家、mapper、难度、来源、标签或 ID"
               value={search}
+              list="local-beatmap-search-suggestions"
             />
+            <datalist id="local-beatmap-search-suggestions">
+              {searchSuggestions.map((suggestion) => <option key={`${suggestion.detail}-${suggestion.value}`} value={suggestion.value} />)}
+            </datalist>
           </div>
           <Badge tone="cyan">{rulesetLabels[ruleset]}</Badge>
           <select

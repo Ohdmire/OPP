@@ -1,8 +1,10 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
 import {
   ChevronLeft,
   ChevronRight,
   FileAudio2,
+  FilePenLine,
   FolderSearch,
   Image,
   Layers3,
@@ -12,6 +14,7 @@ import {
   Search,
   SlidersHorizontal,
   Volume2,
+  X,
 } from "lucide-react";
 import { ErrorPanel } from "../../shared/components/ErrorPanel";
 import {
@@ -93,10 +96,12 @@ function ImagePreview({
   asset,
   client,
   skinResourceId,
+  onReplace,
 }: {
   asset: LocalSkinAssetSummary;
   client: OsuClient;
   skinResourceId: string;
+  onReplace: (asset: LocalSkinAssetSummary) => void;
 }) {
   const query = useLocalSkinAsset(client, skinResourceId, asset.resource_id);
   return (
@@ -121,6 +126,7 @@ function ImagePreview({
           <span>{asset.category}</span>
           <span>{formatBytes(asset.size)}</span>
         </div>
+        <Button className="mt-2 w-full" onClick={() => onReplace(asset)} size="sm"><FilePenLine className="size-3.5" />替换</Button>
       </div>
     </article>
   );
@@ -130,10 +136,12 @@ function SoundPreview({
   asset,
   client,
   skinResourceId,
+  onReplace,
 }: {
   asset: LocalSkinAssetSummary;
   client: OsuClient;
   skinResourceId: string;
+  onReplace: (asset: LocalSkinAssetSummary) => void;
 }) {
   const [requested, setRequested] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -179,6 +187,7 @@ function SoundPreview({
       ) : (
         <Volume2 className="size-4 text-slate-700" />
       )}
+      <Button aria-label={`替换 ${asset.name}`} onClick={() => onReplace(asset)} size="icon"><FilePenLine className="size-3.5" /></Button>
     </div>
   );
 }
@@ -186,15 +195,22 @@ function SoundPreview({
 function SkinWorkspace({
   client,
   resourceId,
+  onAssetsReplaced,
 }: {
   client: OsuClient;
   resourceId: string;
+  onAssetsReplaced: () => Promise<void>;
 }) {
   const detail = useLocalSkinDetail(client, resourceId);
   const preview = useLocalSkinPreview(client, resourceId);
   const [view, setView] = useState<"images" | "sounds" | "config">("images");
   const [imagePage, setImagePage] = useState(0);
   const [soundPage, setSoundPage] = useState(0);
+  const [replacement, setReplacement] = useState<LocalSkinAssetSummary | null>(null);
+  const [saveAsNew, setSaveAsNew] = useState(false);
+  const [newSkinName, setNewSkinName] = useState("");
+  const [replacing, setReplacing] = useState(false);
+  const [replaceError, setReplaceError] = useState<unknown>(null);
   const skin = detail.data;
   const images = preview.data?.images ?? [];
   const imageSlice = images.slice(
@@ -217,8 +233,31 @@ function SkinWorkspace({
     ["sounds", "音效", FileAudio2, preview.data?.sounds.length ?? 0],
     ["config", "配置", SlidersHorizontal, skin.sections.length],
   ] as const;
+  const replaceAsset = async () => {
+    if (!replacement || (saveAsNew && !newSkinName.trim())) return;
+    setReplaceError(null);
+    const selected = await desktopApi.chooseSkinAssetFile(replacement.extension);
+    if (!selected) return;
+    setReplacing(true);
+    try {
+      await desktopApi.replaceLocalSkinAsset(client, resourceId, replacement.resource_id, selected, saveAsNew, saveAsNew ? newSkinName.trim() : undefined);
+      await onAssetsReplaced();
+      setReplacement(null);
+    } catch (error) {
+      setReplaceError(error);
+    } finally {
+      setReplacing(false);
+    }
+  };
+  const openReplacement = (asset: LocalSkinAssetSummary) => {
+    setSaveAsNew(false);
+    setNewSkinName("");
+    setReplaceError(null);
+    setReplacement(asset);
+  };
 
   return (
+    <>
     <Card className="min-w-0 overflow-hidden">
       <header className="relative overflow-hidden border-b border-white/[0.06] p-6">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_10%,rgba(255,106,167,.13),transparent_36%),radial-gradient(circle_at_15%_95%,rgba(92,225,230,.1),transparent_35%)]" />
@@ -294,6 +333,7 @@ function SkinWorkspace({
                     asset={asset}
                     client={client}
                     key={asset.resource_id}
+                    onReplace={openReplacement}
                     skinResourceId={resourceId}
                   />
                 ))}
@@ -338,6 +378,7 @@ function SkinWorkspace({
                     asset={asset}
                     client={client}
                     key={asset.resource_id}
+                    onReplace={openReplacement}
                     skinResourceId={resourceId}
                   />
                 ))}
@@ -413,6 +454,21 @@ function SkinWorkspace({
         )}
       </div>
     </Card>
+    <Dialog.Root onOpenChange={(open) => { if (!open && !replacing) { setReplacement(null); setReplaceError(null); } }} open={Boolean(replacement)}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[120] bg-black/65 backdrop-blur-sm" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-[130] w-[min(520px,calc(100vw-3rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/10 bg-[#111725] p-6 shadow-2xl outline-none">
+          <Dialog.Title className="text-xl font-semibold text-white">替换 Skin 资源</Dialog.Title>
+          <Dialog.Description className="mt-2 text-sm leading-6 text-slate-400">将替换 {replacement?.name}（.{replacement?.extension}）。可直接替换当前 Skin，或先复制为新的 Skin 后再替换。</Dialog.Description>
+          <Dialog.Close aria-label="关闭替换面板" className="absolute right-4 top-4 grid size-9 place-items-center rounded-xl text-slate-500 hover:bg-white/[0.06] hover:text-white"><X className="size-4" /></Dialog.Close>
+          <label className="mt-6 flex items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.025] p-4 text-sm text-slate-200"><input checked={saveAsNew} className="accent-[var(--theme-primary)]" onChange={(event) => setSaveAsNew(event.target.checked)} type="checkbox" />另存为新的 Skin</label>
+          {saveAsNew ? <label className="mt-4 block text-sm font-medium text-slate-200">新 Skin 名称<input autoFocus className="mt-2 w-full rounded-xl border border-white/[0.1] bg-black/20 px-3 py-2.5 text-white outline-none focus:border-[var(--theme-primary)]" onChange={(event) => setNewSkinName(event.target.value)} placeholder="例如 My Skin - edit" value={newSkinName} /></label> : null}
+          {replaceError ? <div className="mt-4"><ErrorPanel error={replaceError} onRetry={() => void replaceAsset()} /></div> : null}
+          <div className="mt-6 flex justify-end gap-3"><Dialog.Close asChild><Button disabled={replacing} variant="ghost">取消</Button></Dialog.Close><Button disabled={replacing || (saveAsNew && !newSkinName.trim())} loading={replacing} onClick={() => void replaceAsset()} variant="primary">选择 .{replacement?.extension} 文件</Button></div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+    </>
   );
 }
 
@@ -437,6 +493,11 @@ export function SkinPanel({ client }: { client: OsuClient }) {
   const skins = useLocalSkins(query, true);
 
   const items = skins.data?.items ?? [];
+  const searchSuggestions = items.flatMap((item) => [
+    { value: item.name, detail: "名称" },
+    { value: item.author, detail: "作者" },
+    { value: item.version, detail: "版本" },
+  ]);
   const activeResourceId = items.some(
     (skin) => skin.resource.resource_id === selected,
   )
@@ -457,7 +518,11 @@ export function SkinPanel({ client }: { client: OsuClient }) {
             }}
             placeholder="搜索名称、作者或版本"
             value={search}
+            list="local-skin-search-suggestions"
           />
+          <datalist id="local-skin-search-suggestions">
+            {searchSuggestions.map((suggestion) => <option key={`${suggestion.detail}-${suggestion.value}`} value={suggestion.value} />)}
+          </datalist>
         </div>
         <select
           aria-label="Skin 排序字段"
@@ -509,6 +574,7 @@ export function SkinPanel({ client }: { client: OsuClient }) {
               <SkinWorkspace
                 client={client}
                 key={activeResourceId}
+                onAssetsReplaced={async () => { setSelected(null); await skins.refetch(); }}
                 resourceId={activeResourceId}
               />
             ) : null}

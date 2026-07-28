@@ -24,6 +24,13 @@ function formatDate(value: string | null) {
   return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
+function base64ToBlob(base64: string, mimeType: string) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return new Blob([bytes], { type: mimeType });
+}
+
 type Payload = GameReplayPayload | GameScreenshotPayload;
 
 export function LocalMediaPage({ kind }: { kind: "screenshot" | "replay" }) {
@@ -89,8 +96,7 @@ export function LocalMediaPage({ kind }: { kind: "screenshot" | "replay" }) {
   const copyImage = async () => {
     if (!payload || !("mime_type" in payload)) return;
     try {
-      const response = await fetch(`data:${payload.mime_type};base64,${payload.bytes_base64}`);
-      const blob = await response.blob();
+      const blob = base64ToBlob(payload.bytes_base64, payload.mime_type);
       await navigator.clipboard.write([new ClipboardItem({ [payload.mime_type]: blob })]);
       setNotice("图片已复制到剪贴板");
     } catch (value) {

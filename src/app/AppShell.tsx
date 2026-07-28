@@ -30,7 +30,7 @@ export function AppShell() {
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [completedSession, setCompletedSession] = useState<GameSessionSummary | null>(null);
   const [dismissedSession, setDismissedSession] = useState<string | null>(null);
-  const [analysisEnabled, setAnalysisEnabled] = useState(true);
+  const analysisEnabled = true;
 
   useEffect(() => {
     let disposed = false;
@@ -46,21 +46,23 @@ export function AppShell() {
   }, [analysisEnabled, dismissedSession]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { void desktopApi.getSettings().then((settings) => setAnalysisEnabled(settings.game_session_analysis_on_detect ?? true)).catch(() => undefined); }, 0);
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
     let disposed = false;
     let off: (() => void) | undefined;
-    void desktopApi.onGameStatusChanged((status) => {
+    const handleStatus = (status: { clients: Array<{ client: Ruleset | "stable" | "lazer"; running: boolean }> }) => {
       if (!status.clients.some((client) => client.running) || disposed) return;
+      status.clients.filter((client) => client.running).forEach((client) => {
+        if (client.client === "stable" || client.client === "lazer") {
+          void desktopApi.startDetectedGameSession(ruleset, client.client).catch(() => undefined);
+        }
+      });
       void desktopApi.getSettings().then((settings) => {
         if (settings.launch_tosu_on_game_detect) return desktopApi.startTosu();
       }).catch(() => undefined);
-    }).then((unlisten) => { if (disposed) unlisten(); else off = unlisten; });
+    };
+    void desktopApi.getGameStatus().then(handleStatus).catch(() => undefined);
+    void desktopApi.onGameStatusChanged(handleStatus).then((unlisten) => { if (disposed) unlisten(); else off = unlisten; });
     return () => { disposed = true; off?.(); };
-  }, []);
+  }, [ruleset]);
 
   useEffect(() => {
     const onScroll = () => setShowBackToTop(window.scrollY > 420);

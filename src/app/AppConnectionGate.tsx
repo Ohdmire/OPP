@@ -1,19 +1,11 @@
-import { useEffect } from "react";
 import { ModeProvider } from "./ModeContext";
 import { AppRoutes } from "./AppRoutes";
 import { AppLoading } from "./AppLoading";
 import { AuthSetup } from "../features/auth/AuthSetup";
 import { useAuthStatus } from "../features/auth/api";
-import { useSettings } from "../features/settings/api";
 import { ErrorPanel } from "../shared/components/ErrorPanel";
 
 function ConnectedApplication() {
-  const settings = useSettings();
-
-  useEffect(() => {
-    document.documentElement.classList.toggle("reduce-motion", settings.data?.reduce_motion ?? false);
-  }, [settings.data?.reduce_motion]);
-
   return (
     <ModeProvider>
       <AppRoutes />
