@@ -13,7 +13,7 @@ async function windowAction(action: "minimize" | "maximize" | "close") {
 export function TitleBar() {
   return (
     <div
-      className="fixed inset-x-0 top-0 z-50 flex h-11 items-center border-b border-white/[0.06] bg-[#080b14]/92 pl-4 backdrop-blur-xl"
+      className="fixed inset-x-0 top-0 z-50 flex h-11 items-center border-b border-white/[0.06] bg-[#080b14]/92 pl-4 backdrop-blur-xl theme-titlebar"
       data-tauri-drag-region
     >
       <div
@@ -25,7 +25,7 @@ export function TitleBar() {
         </span>
         OPP
         <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[9px] font-bold text-slate-500">
-          v0.2
+          v0.3.0
         </span>
       </div>
       <div className="ml-auto flex h-full">

@@ -18,8 +18,9 @@ use account::{
     save_oauth_credentials, update_settings,
 };
 use game_session::{
-    get_game_session_status, inspect_game_replay, list_game_media, open_media_in_explorer,
-    read_game_replay, read_game_screenshot, start_game_session,
+    get_game_session_status, get_game_status, inspect_game_replay, list_game_media,
+    open_media_in_explorer, read_game_replay, read_game_screenshot, start_game_monitor,
+    start_game_session,
 };
 use local_analysis::{
     cancel_local_scan, get_local_beatmap_background, get_local_beatmap_detail,
@@ -36,7 +37,10 @@ use pp_calc::calculate_beatmap_pp;
 use replay_render::submit_replay_render;
 use state::AppState;
 use tauri::Manager;
-use tools::{get_default_file_clients, open_local_resource_in_explorer, set_default_file_client};
+use tools::{
+    convert_mania_beatmaps, get_default_file_clients, open_local_resource_in_explorer,
+    set_default_file_client,
+};
 use tosu::{
     get_tosu_logs, get_tosu_status, set_tosu_executable, set_tosu_lyrics_executable, start_tosu,
     stop_tosu,
@@ -50,6 +54,12 @@ pub fn run() {
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir()?;
             app.manage(AppState::new(&app_data_dir)?);
+            let state = app.state::<AppState>();
+            start_game_monitor(
+                state.local_analysis.clone(),
+                state.game_monitor.clone(),
+                app.handle().clone(),
+            );
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -68,6 +78,7 @@ pub fn run() {
             calculate_beatmap_pp,
             submit_replay_render,
             start_game_session,
+            get_game_status,
             get_game_session_status,
             list_game_media,
             read_game_replay,
@@ -97,6 +108,7 @@ pub fn run() {
             open_local_resource_in_explorer,
             get_default_file_clients,
             set_default_file_client,
+            convert_mania_beatmaps,
             get_tosu_status,
             get_tosu_logs,
             set_tosu_executable,

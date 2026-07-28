@@ -4,16 +4,16 @@ import { AlertCircle, LoaderCircle } from "lucide-react";
 import { cn } from "../lib/cn";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 rounded-xl font-medium outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-cyan-300/60 disabled:pointer-events-none disabled:opacity-45",
+  "inline-flex items-center justify-center gap-2 rounded-xl font-semibold outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]/60 disabled:pointer-events-none disabled:opacity-45",
   {
     variants: {
       variant: {
         primary:
-          "bg-gradient-to-r from-[#ff6aa7] to-[#a673ff] px-4 py-2.5 text-white shadow-[0_10px_30px_rgba(255,106,167,.2)] hover:brightness-110",
+          "bg-gradient-to-r from-[var(--theme-primary)] to-[var(--theme-secondary)] px-4 py-2.5 text-white shadow-[0_10px_30px_var(--theme-primary-glow)] hover:brightness-110",
         secondary:
           "border border-white/10 bg-white/[0.055] px-4 py-2.5 text-slate-100 hover:border-white/20 hover:bg-white/[0.09]",
         ghost:
-          "px-3 py-2 text-slate-400 hover:bg-white/[0.06] hover:text-white",
+          "px-3 py-2 text-slate-300 hover:bg-white/[0.06] hover:text-white",
         danger:
           "border border-rose-400/20 bg-rose-400/10 px-4 py-2.5 text-rose-200 hover:bg-rose-400/15",
       },
@@ -61,7 +61,7 @@ export function Card({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-white/[0.07] bg-[#101622]/90 shadow-[0_12px_38px_rgba(0,0,0,.14)]",
+        "rounded-2xl border border-white/[0.09] bg-[#101622]/90 shadow-[0_12px_38px_rgba(0,0,0,.14)]",
         className,
       )}
       {...props}
@@ -79,9 +79,9 @@ export function Badge({
   className?: string;
 }) {
   const tones = {
-    neutral: "border-white/10 bg-white/[0.055] text-slate-300",
+    neutral: "border-white/10 bg-white/[0.055] text-slate-200",
     pink: "border-pink-400/20 bg-pink-400/10 text-pink-200",
-    cyan: "border-cyan-300/20 bg-cyan-300/10 text-cyan-100",
+    cyan: "border-[var(--theme-primary-soft)] bg-[var(--theme-primary-muted)] text-[var(--theme-primary-light)]",
     warning: "border-amber-300/20 bg-amber-300/10 text-amber-100",
     success: "border-emerald-300/20 bg-emerald-300/10 text-emerald-100",
   };
@@ -127,7 +127,7 @@ export function EmptyState({
           {icon ?? <AlertCircle className="size-5" />}
         </div>
         <h3 className="text-lg font-semibold text-white">{title}</h3>
-        <p className="mt-2 text-sm leading-6 text-slate-400">{description}</p>
+        <p className="mt-2 text-sm leading-6 text-slate-300">{description}</p>
         {action ? <div className="mt-5">{action}</div> : null}
       </div>
     </Card>
@@ -143,7 +143,7 @@ export function DataLine({
 }) {
   return (
     <div className="flex min-h-11 items-center justify-between gap-5 border-b border-white/[0.06] py-2.5 last:border-b-0">
-      <span className="text-sm text-slate-500">{label}</span>
+      <span className="text-sm text-slate-300">{label}</span>
       <span className="text-right text-sm font-medium text-slate-200">
         {value ?? "—"}
       </span>
@@ -163,7 +163,7 @@ export function SectionTitle({
     <div>
       <h2 className="text-lg font-semibold tracking-tight text-white">{title}</h2>
       {description ? (
-        <p className="mt-1.5 text-sm leading-6 text-slate-500">{description}</p>
+        <p className="mt-1.5 text-sm leading-6 text-slate-300">{description}</p>
       ) : null}
     </div>
   );

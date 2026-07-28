@@ -453,11 +453,11 @@ export function ProfileDetailsPage() {
       <Tabs.Root defaultValue="identity">
         <Tabs.List
           aria-label="档案分类"
-          className="mb-5 flex rounded-2xl border border-white/[0.07] bg-[#101624]/80 p-1.5"
+          className="mb-5 flex overflow-hidden rounded-2xl border border-white/[0.12] bg-white/[0.045] p-1"
         >
           {tabs.map(([value, label, Icon]) => (
             <Tabs.Trigger
-              className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-500 outline-none transition hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-cyan-300/40 data-[state=active]:bg-white/[0.07] data-[state=active]:text-white data-[state=active]:shadow-lg"
+              className="relative inline-flex flex-1 items-center justify-center gap-2 border-b-2 border-transparent px-3 py-2.5 text-xs font-semibold text-slate-500 outline-none transition hover:bg-white/[0.05] hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-cyan-300/40 data-[state=active]:border-[var(--theme-primary)] data-[state=active]:bg-[var(--theme-primary-muted)] data-[state=active]:text-[var(--theme-primary)]"
               key={value}
               value={value}
             >

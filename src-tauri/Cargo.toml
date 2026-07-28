@@ -42,9 +42,10 @@ rosu-map = "0.2.1"
 rosu-pp = "4.0.1"
 sha2 = "0.10"
 walkdir = "2"
-zip = "2"
+zip = "4"
 rosu-render = "0.5.1"
 md-5 = "0.10"
+mania-converter = { git = "https://github.com/Siflorite/mania-converter-rust", rev = "5dcfc2205529485c060345b7f04df1c3bf9897ae" }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

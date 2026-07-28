@@ -132,9 +132,11 @@ OPP/
 
 ### 计划实现功能
 - ~~支持 o!rdr API，从而实现生成回放视频支持~~ v0.2.8已实现
-- 前端UI重新设计（急需懂前端的朋友帮助QAQ）
-- 成绩图片生成器
 - ~~tosu支持？~~ v0.3.0 已实现
+- 前端UI重新设计（急需懂前端的朋友帮助QAQ）
+- 优化搜索功能
+- 设计直播工作流
+- 成绩图片生成器
 - Skin 编辑替换
 - 更为专业的玩家数据分析
 - Mania 工具链
@@ -160,6 +162,7 @@ OPP/
 - [ppy/osu](https://github.com/ppy/osu)
 - [tosuapp/tosu](https://github.com/tosuapp/tosu)
 - [HollisMeynell/tosu-lyrics](https://github.com/HollisMeynell/tosu-lyrics)
+- [Siflorite/mania-converter-rust](https://github.com/Siflorite/mania-converter-rust) (Apache-2.0)
 - [MaxOhn/rosu-pp](https://github.com/MaxOhn/rosu-pp)
 - [MaxOhn/rosu-map](https://github.com/MaxOhn/rosu-map)
 - [Tauri](https://github.com/tauri-apps/tauri)

@@ -29,8 +29,10 @@ import type {
   GameReplayPayload,
   ReplayMapInfo,
   GameSessionSummary,
+  GameStatusSnapshot,
   GameScreenshotPayload,
   DefaultFileClients,
+  ManiaConversionResult,
   LocalSourceStatus,
   OAuthResult,
   OnlineBeatmapSearchQuery,
@@ -77,6 +79,8 @@ async function call<T>(
   args?: Record<string, unknown>,
 ): Promise<T> {
   if (!isTauri()) {
+    const preview = browserPreviewValue<T>(command, args);
+    if (preview !== undefined) return preview;
     throw {
       code: "TAURI_REQUIRED",
       message: "请通过 OPP 桌面应用运行此功能",
@@ -87,6 +91,28 @@ async function call<T>(
   } catch (error) {
     throw normalizeError(error);
   }
+}
+
+function browserPreviewValue<T>(command: string, args?: Record<string, unknown>): T | undefined {
+  const profile = {
+    id: 10001, username: "Preview User", avatar_url: "https://a.ppy.sh/10001", country_code: "CN",
+    is_active: true, is_online: true, is_supporter: true, playmode: "osu", statistics: {
+      pp: 8421, global_rank: 1234, country_rank: 88, hit_accuracy: 98.42, play_count: 1280,
+      play_time: 43200, total_score: 1200000000, ranked_score: 900000000, total_hits: 800000,
+      maximum_combo: 2200, level: { current: 99, progress: 72 }, grade_counts: { ssh: 2, ss: 12, sh: 30, s: 420, a: 600 },
+    }, statistics_rulesets: null,
+  };
+  if (command === "get_own_profile") return { data: profile, fetched_at: new Date().toISOString(), stale: false } as T;
+  if (command === "get_best_scores") return { data: [], fetched_at: new Date().toISOString(), stale: false } as T;
+  if (command === "get_game_status") return { clients: [{ client: "stable", running: false, executable: null, detected_at: new Date().toISOString() }, { client: "lazer", running: false, executable: null, detected_at: new Date().toISOString() }] } as T;
+  if (command === "get_game_session_status") return null as T;
+  if (command === "get_local_sources") return [] as T;
+  if (command === "list_game_media") return [] as T;
+  if (command === "get_tosu_status") return { installed: false, executable_path: null, api_base_url: "http://127.0.0.1:24050", api_reachable: false, running: false, owned_by_opp: false, dashboard_url: "http://127.0.0.1:24050", last_error: null, lyrics: { installed: false, executable_path: null, running: false, owned_by_opp: false, proxy_url: "http://127.0.0.1:41280/lyrics/" } } as T;
+  if (command === "get_default_file_clients") return { beatmap: "stable", skin: "stable" } as T;
+  if (command === "update_settings") return args?.settings as T;
+  if (["clear_profile_cache", "set_default_file_client", "set_local_source", "reset_local_source", "start_tosu", "stop_tosu", "set_tosu_executable", "set_tosu_lyrics_executable", "cancel_online_beatmap_download"].includes(command)) return null as T;
+  return undefined;
 }
 
 export const desktopApi = {
@@ -137,6 +163,9 @@ export const desktopApi = {
     call<GameSessionSummary>("start_game_session", { ruleset, client, launchTosu }),
   getGameSessionStatus: () =>
     call<GameSessionSummary | null>("get_game_session_status"),
+  getGameStatus: () => call<GameStatusSnapshot>("get_game_status"),
+  convertManiaBeatmaps: (paths: string[]) =>
+    call<ManiaConversionResult>("convert_mania_beatmaps", { paths }),
   listGameMedia: (client: OsuClient) => call<GameMediaItem[]>("list_game_media", { client }),
   readGameReplay: (client: OsuClient, path: string) =>
     call<GameReplayPayload>("read_game_replay", { client, path }),
@@ -218,7 +247,7 @@ export const desktopApi = {
   },
   chooseDirectory: async (title: string, defaultPath?: string | null) => {
     if (!isTauri()) {
-      throw { code: "TAURI_REQUIRED", message: "目录选择器仅可在 OPP 桌面应用中使用" } satisfies CommandError;
+      return defaultPath ?? "C:/OPP-preview";
     }
     const selected = await openDialog({ directory: true, multiple: false, defaultPath: defaultPath ?? undefined, title });
     return typeof selected === "string" ? selected : null;
@@ -237,6 +266,11 @@ export const desktopApi = {
     if (!isTauri()) throw { code: "TAURI_REQUIRED", message: "文件选择器仅可在 OPP 桌面应用中使用" } satisfies CommandError;
     const selected = await openDialog({ multiple: false, defaultPath: defaultPath ?? undefined, title: "选择 tosu-proxy.exe", filters: [{ name: "tosu-lyrics", extensions: ["exe"] }] });
     return typeof selected === "string" ? selected : null;
+  },
+  chooseManiaBeatmaps: async () => {
+    if (!isTauri()) throw { code: "TAURI_REQUIRED", message: "文件选择器仅可在 OPP 桌面应用中使用" } satisfies CommandError;
+    const selected = await openDialog({ multiple: true, title: "选择 Malody 谱面", filters: [{ name: "Malody chart", extensions: ["mcz"] }] });
+    return Array.isArray(selected) ? selected : typeof selected === "string" ? [selected] : [];
   },
   exportReplayVideo: (videoUrl: string, fileName: string) =>
     call<string>("export_replay_video", { videoUrl, fileName }),
@@ -289,6 +323,12 @@ export const desktopApi = {
     return listen<ReplayRenderProgress>("ordr-render-progress", (event) =>
       handler(event.payload),
     );
+  },
+  onGameStatusChanged: async (
+    handler: (status: GameStatusSnapshot) => void,
+  ): Promise<UnlistenFn> => {
+    if (!isTauri()) return () => undefined;
+    return listen<GameStatusSnapshot>("game-status-changed", (event) => handler(event.payload));
   },
   onTosuLog: async (handler: (entry: TosuLogEntry) => void): Promise<UnlistenFn> => {
     if (!isTauri()) return () => undefined;

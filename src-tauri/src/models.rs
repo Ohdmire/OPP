@@ -140,6 +140,16 @@ pub struct AppSettings {
     pub tosu_lyrics_executable_path: Option<String>,
     #[serde(default = "default_launch_tosu_lyrics")]
     pub launch_tosu_lyrics_with_tosu: bool,
+    #[serde(default = "default_theme_primary")]
+    pub theme_primary: String,
+    #[serde(default = "default_theme_secondary")]
+    pub theme_secondary: String,
+    #[serde(default = "default_theme_mode")]
+    pub theme_mode: String,
+    #[serde(default)]
+    pub launch_tosu_on_game_detect: bool,
+    #[serde(default)]
+    pub game_session_analysis_on_detect: bool,
 }
 
 fn default_tosu_api_base_url() -> String {
@@ -148,6 +158,18 @@ fn default_tosu_api_base_url() -> String {
 
 fn default_launch_tosu_lyrics() -> bool {
     true
+}
+
+fn default_theme_primary() -> String {
+    "cyan".into()
+}
+
+fn default_theme_secondary() -> String {
+    "pink".into()
+}
+
+fn default_theme_mode() -> String {
+    "dark".into()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

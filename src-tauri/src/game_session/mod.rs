@@ -4,6 +4,8 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::Command,
+    sync::Arc,
+    time::Duration,
 };
 
 #[cfg(windows)]
@@ -14,7 +16,7 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::Utc;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 
 use crate::{
     account::ensure_access_token,
@@ -25,10 +27,10 @@ use crate::{
     tosu::start_managed_tosu,
 };
 
-pub use models::GameSessionRuntime;
+pub use models::{GameMonitorRuntime, GameSessionRuntime};
 use models::{
-    GameMediaItem, GameReplayPayload, GameScreenshotPayload, GameSessionSummary, ReplayMapInfo,
-    UserSnapshot,
+    GameClientStatus, GameMediaItem, GameReplayPayload, GameScreenshotPayload, GameSessionSummary,
+    GameStatusSnapshot, ReplayMapInfo, UserSnapshot,
 };
 
 fn number(value: &serde_json::Value, key: &str) -> Option<u64> {
@@ -70,31 +72,49 @@ async fn snapshot(state: &AppState, ruleset: Ruleset) -> CommandResult<UserSnaps
     })
 }
 
-fn process_running(_client: LocalClient) -> bool {
+fn running_executables() -> Vec<PathBuf> {
     #[cfg(windows)]
     {
-        Command::new("tasklist")
+        Command::new("powershell.exe")
             .creation_flags(CREATE_NO_WINDOW)
-            .args(["/FI", "IMAGENAME eq osu!.exe", "/NH"])
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "Get-Process -Name 'osu!' -ErrorAction SilentlyContinue | ForEach-Object { $_.Path }",
+            ])
             .output()
-            .map(|o| {
-                String::from_utf8_lossy(&o.stdout)
-                    .to_ascii_lowercase()
-                    .contains("osu!.exe")
-            })
-            .unwrap_or(false)
+            .map(|output| String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .map(str::trim)
+                .filter(|path| !path.is_empty())
+                .map(PathBuf::from)
+                .collect())
+            .unwrap_or_default()
     }
     #[cfg(not(windows))]
     {
         Command::new("pgrep")
-            .args(["-x", "osu!"])
+            .args(["-a", "-x", "osu!"])
             .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
+            .map(|output| String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .filter_map(|line| line.split_whitespace().nth(1))
+                .map(PathBuf::from)
+                .collect())
+            .unwrap_or_default()
     }
 }
 
-fn executable(client: LocalClient, root: &str) -> Option<PathBuf> {
+fn same_executable(left: &Path, right: &Path) -> bool {
+    left.to_string_lossy().eq_ignore_ascii_case(&right.to_string_lossy())
+}
+
+fn executable_running(executable: &Path, running: &[PathBuf]) -> bool {
+    running.iter().any(|path| same_executable(path, executable))
+}
+
+pub(crate) fn executable(client: LocalClient, root: &str) -> Option<PathBuf> {
     let root = Path::new(root);
     let names = if client == LocalClient::Lazer {
         vec![root.join("current").join("osu!.exe"), root.join("osu!.exe")]
@@ -108,6 +128,75 @@ fn executable(client: LocalClient, root: &str) -> Option<PathBuf> {
     names.into_iter().find(|path| path.is_file())
 }
 
+fn scan_game_status(local_analysis: &crate::local_analysis::LocalAnalysisService) -> GameStatusSnapshot {
+    let running = running_executables();
+    let detected_at = Utc::now();
+    let clients = [LocalClient::Stable, LocalClient::Lazer]
+        .into_iter()
+        .map(|client| {
+            let executable = local_analysis
+                .source_status(client)
+                .ok()
+                .and_then(|source| source.install_root)
+                .and_then(|root| executable(client, &root));
+            GameClientStatus {
+                client,
+                running: executable
+                    .as_deref()
+                    .is_some_and(|path| executable_running(path, &running)),
+                executable: executable.map(|path| path.display().to_string()),
+                detected_at,
+            }
+        })
+        .collect();
+    GameStatusSnapshot { clients }
+}
+
+/// Launch the app-lifetime monitor. The event is emitted only when a client
+/// changes state; the command always returns the most recent snapshot.
+pub fn start_game_monitor(
+    local_analysis: Arc<crate::local_analysis::LocalAnalysisService>,
+    monitor: Arc<GameMonitorRuntime>,
+    app: AppHandle,
+) {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            let service = local_analysis.clone();
+            let next = tokio::task::spawn_blocking(move || scan_game_status(&service))
+                .await
+                .unwrap_or_else(|_| GameStatusSnapshot { clients: Vec::new() });
+            let changed = monitor
+                .current
+                .lock()
+                .map(|mut current| {
+                    let changed = current.clients.len() != next.clients.len()
+                        || current.clients.iter().zip(&next.clients).any(|(before, after)| {
+                            before.client != after.client
+                                || before.running != after.running
+                                || before.executable != after.executable
+                        });
+                    *current = next.clone();
+                    changed
+                })
+                .unwrap_or(false);
+            if changed {
+                let _ = app.emit("game-status-changed", next);
+            }
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    });
+}
+
+#[tauri::command]
+pub fn get_game_status(state: State<'_, AppState>) -> CommandResult<GameStatusSnapshot> {
+    state
+        .game_monitor
+        .current
+        .lock()
+        .map(|current| current.clone())
+        .map_err(|_| CommandError::new("GAME_STATUS_LOCKED", "游戏状态不可用"))
+}
+
 #[tauri::command]
 pub async fn start_game_session(
     ruleset: Ruleset,
@@ -116,15 +205,15 @@ pub async fn start_game_session(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> CommandResult<GameSessionSummary> {
-    if process_running(client) {
-        return Err(CommandError::new("GAME_ALREADY_RUNNING", "osu! 已经在运行"));
-    }
     let source = state.local_analysis.source_status(client)?;
     let root = source.install_root.ok_or_else(|| {
         CommandError::new("GAME_NOT_FOUND", format!("未找到 osu! {client} 安装目录"))
     })?;
     let exe = executable(client, &root)
         .ok_or_else(|| CommandError::new("GAME_NOT_FOUND", "安装目录中未找到 osu! 可执行文件"))?;
+    if executable_running(&exe, &running_executables()) {
+        return Err(CommandError::new("GAME_ALREADY_RUNNING", "osu! 已经在运行"));
+    }
     if launch_tosu.unwrap_or(state.store.snapshot()?.settings.launch_tosu_with_game) {
         start_managed_tosu(&state, app)?;
     }
@@ -168,12 +257,7 @@ pub async fn get_game_session_status(
     let Some(mut summary) = current else {
         return Ok(None);
     };
-    let client = if summary.client.eq_ignore_ascii_case("lazer") {
-        LocalClient::Lazer
-    } else {
-        LocalClient::Stable
-    };
-    if summary.running && !process_running(client) {
+    if summary.running && !executable_running(Path::new(&summary.executable), &running_executables()) {
         summary.running = false;
         summary.ended_at = Some(Utc::now());
         summary.end = Some(snapshot(&state, summary.ruleset).await?);
@@ -478,6 +562,21 @@ pub fn read_game_screenshot(
         mime_type,
         bytes_base64: STANDARD.encode(bytes),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::same_executable;
+
+    #[test]
+    fn matches_windows_executables_without_case_sensitivity() {
+        assert!(same_executable(
+            Path::new("C:/Games/osu!/osu!.exe"),
+            Path::new("c:/games/OSU!/OSU!.EXE")
+        ));
+    }
 }
 
 #[tauri::command]

@@ -19,7 +19,7 @@ function NavItem({ to, label, icon: Icon }: { to: string; label: string; icon: t
   return <NavLink className={({ isActive }) => cn("group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-500 outline-none transition hover:bg-white/[0.045] hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-cyan-300/40", isActive && "bg-white/[0.065] text-white shadow-[inset_2px_0_0_#ff83b8]")} to={to}><Icon className="size-[17px] shrink-0" /><span>{label}</span></NavLink>;
 }
 
-function GroupLabel({ children }: { children: React.ReactNode }) { return <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-600">{children}</p>; }
+function GroupLabel({ children }: { children: React.ReactNode }) { return <p className="mb-2 px-3 text-sm font-bold uppercase tracking-[0.12em] text-slate-300">{children}</p>; }
 
 export function Sidebar({ profile, loading }: { profile?: OwnProfile; loading: boolean }) {
   const { ruleset } = useMode();

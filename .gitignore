@@ -71,6 +71,7 @@ Desktop.ini
 /.codex/
 /.gemini/
 /.omo
+**/.omo/
 
 # Temporary and backup files
 *.tmp

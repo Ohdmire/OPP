@@ -30,19 +30,37 @@ export function AppShell() {
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [completedSession, setCompletedSession] = useState<GameSessionSummary | null>(null);
   const [dismissedSession, setDismissedSession] = useState<string | null>(null);
+  const [analysisEnabled, setAnalysisEnabled] = useState(true);
 
   useEffect(() => {
     let disposed = false;
     const poll = async () => {
       try {
         const session = await desktopApi.getGameSessionStatus();
-        if (!disposed && session && !session.running && session.end && session.started_at !== dismissedSession) setCompletedSession(session);
+        if (!disposed && analysisEnabled && session && !session.running && session.end && session.started_at !== dismissedSession) setCompletedSession(session);
       } catch { /* The rest of the shell remains usable when the desktop bridge is unavailable. */ }
     };
     const initial = window.setTimeout(() => void poll(), 0);
     const timer = window.setInterval(() => void poll(), 2000);
     return () => { disposed = true; window.clearTimeout(initial); window.clearInterval(timer); };
-  }, [dismissedSession]);
+  }, [analysisEnabled, dismissedSession]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void desktopApi.getSettings().then((settings) => setAnalysisEnabled(settings.game_session_analysis_on_detect ?? true)).catch(() => undefined); }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    let off: (() => void) | undefined;
+    void desktopApi.onGameStatusChanged((status) => {
+      if (!status.clients.some((client) => client.running) || disposed) return;
+      void desktopApi.getSettings().then((settings) => {
+        if (settings.launch_tosu_on_game_detect) return desktopApi.startTosu();
+      }).catch(() => undefined);
+    }).then((unlisten) => { if (disposed) unlisten(); else off = unlisten; });
+    return () => { disposed = true; off?.(); };
+  }, []);
 
   useEffect(() => {
     const onScroll = () => setShowBackToTop(window.scrollY > 420);

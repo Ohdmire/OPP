@@ -44,7 +44,15 @@ export interface AppSettings {
   launch_tosu_with_game: boolean;
   tosu_lyrics_executable_path: string | null;
   launch_tosu_lyrics_with_tosu: boolean;
+  theme_primary: ThemeColor;
+  theme_secondary: ThemeColor;
+  theme_mode?: ThemeMode;
+  launch_tosu_on_game_detect?: boolean;
+  game_session_analysis_on_detect?: boolean;
 }
+
+export type ThemeColor = "cyan" | "blue" | "violet" | "pink" | "orange" | "green";
+export type ThemeMode = "dark" | "light";
 
 export interface TosuLyricsStatus {
   installed: boolean;
@@ -105,6 +113,24 @@ export interface GameSessionSummary {
   end: UserSnapshot | null;
   running: boolean;
 }
+
+export interface GameClientStatus {
+  client: OsuClient;
+  running: boolean;
+  executable: string | null;
+  detected_at: string;
+}
+
+export interface GameStatusSnapshot { clients: GameClientStatus[]; }
+
+export interface ManiaConversionItem {
+  input: string;
+  status: "completed" | "skipped" | "failed";
+  output: string | null;
+  message: string | null;
+}
+
+export interface ManiaConversionResult { items: ManiaConversionItem[]; }
 
 export interface GameMediaItem {
   client: OsuClient;

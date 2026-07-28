@@ -4,7 +4,7 @@ import { NavLink } from "react-router-dom";
 const itemClass = ({ isActive }: { isActive: boolean }) =>
   `inline-flex items-center rounded-xl px-4 py-2 text-sm transition ${
     isActive
-      ? "bg-cyan-300/10 text-cyan-100"
+      ? "bg-[var(--theme-primary-muted)] text-[var(--theme-primary)] font-semibold shadow-[inset_0_-2px_0_var(--theme-primary)]"
       : "text-slate-500 hover:bg-white/[0.04] hover:text-slate-200"
   }`;
 

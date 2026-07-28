@@ -34,6 +34,20 @@ pub struct GameSessionSummary {
     pub running: bool,
 }
 
+/// The independently monitored state of one installed osu! client.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GameClientStatus {
+    pub client: LocalClient,
+    pub running: bool,
+    pub executable: Option<String>,
+    pub detected_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GameStatusSnapshot {
+    pub clients: Vec<GameClientStatus>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameMediaItem {
     pub client: LocalClient,
@@ -74,6 +88,20 @@ pub struct GameScreenshotPayload {
 /// In-memory state for the currently launched osu! process.
 pub struct GameSessionRuntime {
     pub active: Mutex<Option<GameSessionSummary>>,
+}
+
+/// Shared, continuously refreshed process state. It deliberately has no
+/// session/account data so externally launched games are represented safely.
+pub struct GameMonitorRuntime {
+    pub current: Mutex<GameStatusSnapshot>,
+}
+
+impl Default for GameMonitorRuntime {
+    fn default() -> Self {
+        Self {
+            current: Mutex::new(GameStatusSnapshot { clients: Vec::new() }),
+        }
+    }
 }
 
 impl Default for GameSessionRuntime {

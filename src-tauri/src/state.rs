@@ -8,7 +8,7 @@ use tokio::sync::{Mutex as AsyncMutex, oneshot};
 use crate::{
     account::{AvatarCache, CredentialStore},
     error::CommandResult,
-    game_session::GameSessionRuntime,
+    game_session::{GameMonitorRuntime, GameSessionRuntime},
     local_analysis::LocalAnalysisService,
     online_beatmaps::providers::ProviderRegistry,
     osu_api::OsuApi,
@@ -33,6 +33,7 @@ pub struct AppState {
     pub beatmap_download: Mutex<Option<Arc<AtomicBool>>>,
     pub token_refresh: AsyncMutex<()>,
     pub game_session: GameSessionRuntime,
+    pub game_monitor: Arc<GameMonitorRuntime>,
     pub tosu: Arc<TosuRuntime>,
 }
 
@@ -49,6 +50,7 @@ impl AppState {
             beatmap_download: Mutex::new(None),
             token_refresh: AsyncMutex::new(()),
             game_session: GameSessionRuntime::default(),
+            game_monitor: Arc::new(GameMonitorRuntime::default()),
             tosu: Arc::new(TosuRuntime::default()),
         })
     }

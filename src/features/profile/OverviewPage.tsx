@@ -242,7 +242,7 @@ export function OverviewPage() {
         </div>
       ) : null}
 
-      <Card className="relative mb-5 min-h-52 overflow-hidden rounded-[24px]">
+      <Card className="theme-profile-hero relative mb-5 min-h-52 overflow-hidden rounded-[24px]">
         {coverUrl ? (
           <img
             alt=""
@@ -250,8 +250,8 @@ export function OverviewPage() {
             src={coverUrl}
           />
         ) : null}
-        <div className="absolute inset-0 bg-gradient-to-r from-[#0b101c] via-[#0b101c]/85 to-[#0b101c]/20" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0b101c] to-transparent" />
+        <div className="theme-profile-overlay absolute inset-0 bg-gradient-to-r from-[#0b101c] via-[#0b101c]/85 to-[#0b101c]/20" />
+        <div className="theme-profile-overlay absolute inset-0 bg-gradient-to-t from-[#0b101c] to-transparent" />
         <div className="relative flex min-h-52 items-end gap-5 p-6">
           <Avatar
             className="size-28 rounded-[22px] border-2 border-white/15 object-cover shadow-[0_18px_45px_rgba(0,0,0,.45)]"
