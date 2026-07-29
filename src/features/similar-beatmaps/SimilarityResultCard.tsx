@@ -1,4 +1,4 @@
-import { ArrowRight, Gauge, Timer } from "lucide-react";
+import { ArrowRight, Download, Gauge, Timer } from "lucide-react";
 import { Badge, Button, Card } from "../../shared/components/ui";
 import type { SimilarityResult } from "../../shared/types/osu";
 
@@ -13,12 +13,18 @@ export function SimilarityResultCard({
   selected,
   onSelect,
   onOpen,
+  onDownload,
+  downloading,
+  downloadDisabled,
 }: {
   result: SimilarityResult;
   rank: number;
   selected: boolean;
   onSelect: () => void;
   onOpen: () => void;
+  onDownload: () => void;
+  downloading: boolean;
+  downloadDisabled: boolean;
 }) {
   return (
     <Card
@@ -65,6 +71,20 @@ export function SimilarityResultCard({
             </span>
           </div>
         </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            aria-label={`快捷下载 ${result.artist} - ${result.title}`}
+            disabled={downloadDisabled}
+            loading={downloading}
+            onClick={(event) => {
+              event.stopPropagation();
+              onDownload();
+            }}
+            size="icon"
+            variant="ghost"
+          >
+            <Download className="size-4" />
+          </Button>
         <Button
           aria-label="在在线谱面中查看"
           onClick={(event) => {
@@ -76,6 +96,7 @@ export function SimilarityResultCard({
         >
           <ArrowRight className="size-4" />
         </Button>
+        </div>
       </div>
     </Card>
   );

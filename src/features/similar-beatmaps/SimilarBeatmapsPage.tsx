@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { FolderOpen, RefreshCw, Search, Upload } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -6,7 +6,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { PageHeader } from "../../shared/components/PageHeader";
 import { Button, Card, EmptyState } from "../../shared/components/ui";
 import { errorMessage } from "../../shared/lib/format";
-import { settingsQueryKey } from "../settings/api";
+import { settingsQueryKey, useSettings } from "../settings/api";
 import { desktopApi } from "../../shared/lib/tauri";
 import type {
   SimilarityIndexStatus,
@@ -22,7 +22,10 @@ import { createSimilarityRequest } from "./defaults";
 import { SimilarityAdvancedPanel } from "./SimilarityAdvancedPanel";
 import { SimilarityRadar } from "./SimilarityRadar";
 import { SimilarityResultCard } from "./SimilarityResultCard";
-import { parseSimilarityLaunch } from "./navigation";
+import {
+  onlineBeatmapRouteForSimilarityResult,
+  parseSimilarityLaunch,
+} from "./navigation";
 
 const DIFFICULTY_DIMENSIONS = [
   ["aim", "Aim"],
@@ -37,9 +40,14 @@ interface SimilaritySession {
   response: SimilarityQueryResponse | null;
   selectedResultId: number | null;
   advancedOpen: boolean;
+  scrollY: number | null;
 }
 
 let similaritySession: SimilaritySession | null = null;
+
+function saveSimilaritySession(session: SimilaritySession) {
+  similaritySession = session;
+}
 
 const STATE_COPY: Record<
   Exclude<SimilarityIndexStatus["state"], "ready">,
@@ -117,12 +125,15 @@ export function SimilarBeatmapsPage() {
   const queryClient = useQueryClient();
   const statusQuery = useSimilarityIndexStatus();
   const similarityQuery = useSimilarityQuery();
+  const settings = useSettings();
   const [request, setRequest] = useState<SimilarityQueryRequest>(() =>
     similaritySession?.request ?? createSimilarityRequest({ kind: "beatmap_id", value: "" }),
   );
   const [advancedOpen, setAdvancedOpen] = useState(() => similaritySession?.advancedOpen ?? false);
   const [configuring, setConfiguring] = useState(false);
   const [configurationError, setConfigurationError] = useState<string | null>(null);
+  const [quickDownloadId, setQuickDownloadId] = useState<number | null>(null);
+  const [quickDownloadDirectory, setQuickDownloadDirectory] = useState<string | null>(null);
   const [response, setResponse] = useState<SimilarityQueryResponse | null>(
     () => similaritySession?.response ?? null,
   );
@@ -130,6 +141,7 @@ export function SimilarBeatmapsPage() {
     () => similaritySession?.selectedResultId ?? null,
   );
   const handledLaunch = useRef<string | null>(null);
+  const restoreScrollY = useRef(similaritySession?.scrollY ?? null);
 
   const selected = useMemo(() => {
     if (!response?.results.length) return null;
@@ -155,8 +167,21 @@ export function SimilarBeatmapsPage() {
     } satisfies SimilarityIndexStatus);
 
   useEffect(() => {
-    similaritySession = { request, response, selectedResultId, advancedOpen };
+    saveSimilaritySession({
+      request,
+      response,
+      selectedResultId,
+      advancedOpen,
+      scrollY: restoreScrollY.current,
+    });
   }, [advancedOpen, request, response, selectedResultId]);
+
+  useLayoutEffect(() => {
+    const scrollY = restoreScrollY.current;
+    if (scrollY == null) return;
+    const frame = window.requestAnimationFrame(() => window.scrollTo(0, scrollY));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   useEffect(() => {
     const launch = parseSimilarityLaunch(searchParams);
@@ -225,6 +250,50 @@ export function SimilarBeatmapsPage() {
       ...current,
       source: { kind: "local_file", path },
     }));
+  }
+
+  async function downloadResult(result: SimilarityQueryResponse["results"][number]) {
+    let destination =
+      quickDownloadDirectory ?? settings.data?.beatmap_download_directory ?? "";
+    if (!destination) {
+      destination = await desktopApi.chooseBeatmapDownloadDirectory(null) ?? "";
+      if (!destination) return;
+      setQuickDownloadDirectory(destination);
+    }
+
+    setConfigurationError(null);
+    setQuickDownloadId(result.beatmap_id);
+    try {
+      await desktopApi.downloadOnlineBeatmapsets({
+        destination,
+        provider: "catboy",
+        overwrite: false,
+        items: [
+          {
+            beatmapset_id: result.beatmapset_id,
+            artist: result.artist,
+            title: result.title,
+          },
+        ],
+      });
+    } catch (error) {
+      setConfigurationError(errorMessage(error));
+    } finally {
+      setQuickDownloadId(null);
+    }
+  }
+
+  function openOnlineBeatmap(result: SimilarityQueryResponse["results"][number]) {
+    saveSimilaritySession({
+      request,
+      response,
+      selectedResultId,
+      advancedOpen,
+      scrollY: window.scrollY || null,
+    });
+    navigate(onlineBeatmapRouteForSimilarityResult(result), {
+      state: { returnTo: "/online/similar" },
+    });
   }
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -453,12 +522,10 @@ export function SimilarBeatmapsPage() {
                         result={result}
                         selected={selected?.beatmap_id === result.beatmap_id}
                         onSelect={() => setSelectedResultId(result.beatmap_id)}
-                        onOpen={() =>
-                          navigate(
-                            `/online/beatmaps?beatmapset=${result.beatmapset_id}&beatmap=${result.beatmap_id}`,
-                            { state: { returnTo: "/online/similar" } },
-                          )
-                        }
+                        onDownload={() => void downloadResult(result)}
+                        downloading={quickDownloadId === result.beatmap_id}
+                        downloadDisabled={quickDownloadId !== null}
+                        onOpen={() => openOnlineBeatmap(result)}
                       />
                     ))}
                   </div>
@@ -528,12 +595,7 @@ export function SimilarBeatmapsPage() {
                     className="w-full"
                     variant="primary"
                     type="button"
-                    onClick={() =>
-                      navigate(
-                        `/online/beatmaps?beatmapset=${selected.beatmapset_id}&beatmap=${selected.beatmap_id}`,
-                        { state: { returnTo: "/online/similar" } },
-                      )
-                    }
+                    onClick={() => openOnlineBeatmap(selected)}
                   >
                     在在线谱面中查看
                   </Button>

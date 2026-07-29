@@ -1,4 +1,4 @@
-import type { OsuClient } from "../../shared/types/osu";
+import type { OsuClient, SimilarityResult } from "../../shared/types/osu";
 
 export type SimilarityLaunch =
   | { kind: "beatmap_id"; beatmapId: string }
@@ -18,6 +18,21 @@ export function similarityRouteForLocalResource(
     resource: resourceId,
   });
   return `/online/similar?${params}`;
+}
+
+/**
+ * Opens the online beatmap page's detail panel and selects the exact matching
+ * difficulty. The beatmap ID identifies the difficulty; the set ID loads its
+ * containing beatmapset.
+ */
+export function onlineBeatmapRouteForSimilarityResult(
+  result: Pick<SimilarityResult, "beatmapset_id" | "beatmap_id">,
+) {
+  const params = new URLSearchParams({
+    beatmapset: String(result.beatmapset_id),
+    beatmap: String(result.beatmap_id),
+  });
+  return `/online/beatmaps?${params}`;
 }
 
 export function parseSimilarityLaunch(searchParams: URLSearchParams): SimilarityLaunch | null {

@@ -1,12 +1,22 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  onlineBeatmapRouteForSimilarityResult,
   parseSimilarityLaunch,
   similarityRouteForBeatmap,
   similarityRouteForLocalResource,
 } from "./navigation";
 
 describe("similarity navigation", () => {
+  it("opens a result with its exact difficulty selected", () => {
+    expect(
+      onlineBeatmapRouteForSimilarityResult({
+        beatmapset_id: 2,
+        beatmap_id: 20,
+      }),
+    ).toBe("/online/beatmaps?beatmapset=2&beatmap=20");
+  });
+
   it("creates and parses an online beatmap launch", () => {
     expect(similarityRouteForBeatmap(123)).toBe("/online/similar?source=beatmap_id&value=123");
     expect(parseSimilarityLaunch(new URLSearchParams("source=beatmap_id&value=123")))

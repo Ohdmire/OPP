@@ -153,6 +153,16 @@ describe("SimilarBeatmapsPage", () => {
     const query = vi
       .spyOn(desktopApi, "querySimilarBeatmaps")
       .mockResolvedValue(response);
+    vi.spyOn(desktopApi, "chooseBeatmapDownloadDirectory").mockResolvedValue("D:/downloads");
+    const download = vi.spyOn(desktopApi, "downloadOnlineBeatmapsets").mockResolvedValue({
+      destination: "D:/downloads",
+      total: 1,
+      completed: 1,
+      skipped: 0,
+      failed: 0,
+      cancelled: false,
+      failures: [],
+    });
 
     renderPage();
     const input = await screen.findByLabelText("Beatmap ID 或 osu! 链接");
@@ -172,6 +182,14 @@ describe("SimilarBeatmapsPage", () => {
       }),
     );
     expect(screen.getByTestId("comparison-radar")).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText(/Candidate/));
+    expect(download).toHaveBeenCalledWith({
+      destination: "D:/downloads",
+      provider: "catboy",
+      overwrite: false,
+      items: [{ beatmapset_id: 2, artist: "Signal", title: "Candidate" }],
+    });
 
     await user.click(screen.getByText("在在线谱面中查看"));
     expect(screen.getByTestId("location")).toHaveTextContent(
