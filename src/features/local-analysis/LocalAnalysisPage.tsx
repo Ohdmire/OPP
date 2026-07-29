@@ -188,7 +188,7 @@ function SourceBar({
           </div>
           <div className="h-1 overflow-hidden rounded-full bg-white/[0.06]">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-pink-400 to-cyan-300 transition-[width] duration-150"
+                className="h-full rounded-full bg-[var(--theme-primary)] transition-[width] duration-150"
               style={{ width: `${progress.percent}%` }}
             />
           </div>

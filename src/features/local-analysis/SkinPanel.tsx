@@ -11,7 +11,6 @@ import {
   LoaderCircle,
   Palette,
   Play,
-  Search,
   SlidersHorizontal,
   Volume2,
   X,
@@ -24,6 +23,7 @@ import {
   EmptyState,
   Skeleton,
 } from "../../shared/components/ui";
+import { SearchAutocomplete } from "../../shared/components/SearchAutocomplete";
 import { cn } from "../../shared/lib/cn";
 import { dateTime, fullNumber } from "../../shared/lib/format";
 import { desktopApi } from "../../shared/lib/tauri";
@@ -78,7 +78,7 @@ function SkinSwatches({ skin }: { skin: LocalSkinSummary }) {
 
 function SkinListItem({ active, skin, onSelect }: { active: boolean; skin: LocalSkinSummary; onSelect: () => void }) {
   return (
-    <div className={cn("w-full rounded-2xl border p-4 text-left transition", active ? "border-pink-300/25 bg-gradient-to-br from-pink-300/[0.09] to-violet-300/[0.05] shadow-[0_14px_30px_rgba(0,0,0,.16)]" : "border-white/[0.06] bg-white/[0.025] hover:border-white/[0.12] hover:bg-white/[0.045]")}>
+    <div className={cn("w-full rounded-xl border p-4 text-left transition-colors", active ? "border-[var(--theme-primary-soft)] bg-[var(--theme-primary-muted)]" : "border-white/[0.06] bg-white/[0.025] hover:border-white/[0.12] hover:bg-white/[0.045]")}>
       <button className="w-full text-left" onClick={onSelect} type="button">
         <div className="flex items-start gap-3">
           <div className="grid size-10 shrink-0 place-items-center rounded-xl border border-pink-300/15 bg-pink-300/10 text-pink-200"><Palette className="size-4" /></div>
@@ -507,22 +507,18 @@ export function SkinPanel({ client }: { client: OsuClient }) {
   return (
     <div>
       <Card className="mb-4 flex items-center gap-3 p-3">
-        <div className="relative min-w-64 flex-1">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-600" />
-          <input
+        <div className="min-w-64 flex-1">
+          <SearchAutocomplete
             aria-label="搜索 Skin"
             className="w-full rounded-xl border border-white/[0.07] bg-black/20 py-2.5 pl-10 pr-4 text-sm text-white outline-none placeholder:text-slate-700 focus:border-cyan-300/25"
-            onChange={(event) => {
-              setSearch(event.target.value);
+            onChange={(value) => {
+              setSearch(value);
               setOffset(0);
             }}
             placeholder="搜索名称、作者或版本"
+            suggestions={searchSuggestions}
             value={search}
-            list="local-skin-search-suggestions"
           />
-          <datalist id="local-skin-search-suggestions">
-            {searchSuggestions.map((suggestion) => <option key={`${suggestion.detail}-${suggestion.value}`} value={suggestion.value} />)}
-          </datalist>
         </div>
         <select
           aria-label="Skin 排序字段"

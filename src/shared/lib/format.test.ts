@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compactNumber, duration, scoreMods } from "./format";
+import { compactNumber, duration, errorMessage, scoreMods } from "./format";
 import type { Score } from "../types/osu";
 
 describe("format helpers", () => {
@@ -19,5 +19,10 @@ describe("format helpers", () => {
       mods: ["HD", { acronym: "DT" }, {}],
     } as Score;
     expect(scoreMods(score)).toEqual(["HD", "DT"]);
+  });
+
+  it("reads the message from structured command errors", () => {
+    expect(errorMessage({ code: "SIMILARITY_INDEX_INVALID", message: "Index unavailable" }))
+      .toBe("Index unavailable");
   });
 });

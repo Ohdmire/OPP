@@ -13,7 +13,8 @@ interface SearchAutocompleteProps {
   onChange: (value: string) => void;
   suggestions: SearchSuggestion[];
   placeholder?: string;
-  ariaLabel: string;
+  ariaLabel?: string;
+  "aria-label"?: string;
   className?: string;
   inputClassName?: string;
   iconClassName?: string;
@@ -23,9 +24,9 @@ interface SearchAutocompleteProps {
 function uniqueSuggestions(items: SearchSuggestion[]) {
   const seen = new Set<string>();
   return items.filter((item) => {
-    const value = item.value.trim();
-    if (!value || seen.has(value.toLocaleLowerCase())) return false;
-    seen.add(value.toLocaleLowerCase());
+    const value = item.value.trim().toLocaleLowerCase();
+    if (!value || seen.has(value)) return false;
+    seen.add(value);
     return true;
   });
 }
@@ -36,6 +37,7 @@ export function SearchAutocomplete({
   suggestions,
   placeholder,
   ariaLabel,
+  "aria-label": legacyAriaLabel,
   className,
   inputClassName,
   iconClassName,
@@ -78,7 +80,7 @@ export function SearchAutocomplete({
       <input
         ref={inputRef}
         aria-autocomplete="list"
-        aria-label={ariaLabel}
+        aria-label={ariaLabel ?? legacyAriaLabel ?? "Search"}
         className={cn("w-full", inputClassName)}
         onChange={(event) => { onChange(event.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}

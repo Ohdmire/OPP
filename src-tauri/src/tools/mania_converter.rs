@@ -17,7 +17,10 @@ fn convert_one(input: String) -> ManiaConversionItem {
     if !path.is_file() {
         return invalid("文件不存在或不可读取");
     }
-    if !path.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("mcz")) {
+    if !path
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("mcz"))
+    {
         return invalid("仅支持 .mcz 文件");
     }
     let output = path.with_extension("osz");
@@ -48,7 +51,10 @@ fn convert_one(input: String) -> ManiaConversionItem {
 #[tauri::command]
 pub async fn convert_mania_beatmaps(paths: Vec<String>) -> CommandResult<ManiaConversionResult> {
     if paths.is_empty() {
-        return Err(CommandError::new("NO_CONVERSION_INPUT", "请先选择至少一个 .mcz 文件"));
+        return Err(CommandError::new(
+            "NO_CONVERSION_INPUT",
+            "请先选择至少一个 .mcz 文件",
+        ));
     }
     let items = async_runtime::spawn_blocking(move || paths.into_iter().map(convert_one).collect())
         .await

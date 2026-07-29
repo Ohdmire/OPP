@@ -102,6 +102,15 @@ pub fn get_local_beatmap_detail(
 }
 
 #[tauri::command]
+pub fn get_local_beatmap_path(
+    client: LocalClient,
+    resource_id: String,
+    state: State<'_, AppState>,
+) -> CommandResult<String> {
+    state.local_analysis.beatmap_file_path(client, &resource_id)
+}
+
+#[tauri::command]
 pub async fn get_local_beatmap_background(
     client: LocalClient,
     resource_id: String,
@@ -194,5 +203,10 @@ pub async fn replace_local_skin_asset(
         )
     })
     .await
-    .map_err(|error| CommandError::new("LOCAL_SKIN_REPLACE_TASK_ERROR", format!("Skin 资源替换任务异常结束：{error}")))?
+    .map_err(|error| {
+        CommandError::new(
+            "LOCAL_SKIN_REPLACE_TASK_ERROR",
+            format!("Skin 资源替换任务异常结束：{error}"),
+        )
+    })?
 }

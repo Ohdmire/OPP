@@ -17,17 +17,17 @@ export function ModeSwitch({
   return (
     <div
       aria-label="游戏模式"
-      className="inline-flex rounded-xl border border-white/[0.08] bg-black/20 p-1"
+      className="inline-flex rounded-lg border border-white/[0.09] bg-black/15 p-0.5"
       role="tablist"
     >
       {modes.map((mode) => (
         <button
           aria-selected={value === mode}
           className={cn(
-            "relative inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 outline-none transition focus-visible:ring-2 focus-visible:ring-cyan-300/50",
-            compact && "px-2.5 py-1.5 text-[11px]",
+            "relative inline-flex min-h-9 items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold text-slate-500 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]",
+            compact && "min-h-8 px-2.5 py-1 text-[10px]",
             value === mode &&
-              "bg-white/[0.09] text-white shadow-[0_6px_22px_rgba(0,0,0,.25)]",
+              "selected-mask text-[var(--theme-primary)]",
           )}
           key={mode}
           onClick={() => onChange(mode)}

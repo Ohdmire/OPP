@@ -16,18 +16,16 @@ export function ClientSwitch({
   return (
     <div
       aria-label="osu! 客户端"
-      className="inline-flex rounded-xl border border-white/[0.08] bg-black/20 p-1"
+      className="inline-flex rounded-lg border border-white/[0.09] bg-black/15 p-0.5"
       role="tablist"
     >
       {clients.map((client) => (
         <button
           aria-selected={value === client.value}
           className={cn(
-            "relative min-w-[72px] rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-500 outline-none transition duration-200 hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-cyan-300/50",
+            "relative min-h-8 min-w-[64px] rounded-md px-2.5 py-1 text-[11px] font-semibold text-slate-500 outline-none transition-colors duration-200 hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]",
             value === client.value &&
-              (client.value === "stable"
-                ? "bg-pink-400/[0.13] text-pink-100 shadow-[0_6px_22px_rgba(0,0,0,.25)]"
-                : "bg-cyan-300/[0.12] text-cyan-100 shadow-[0_6px_22px_rgba(0,0,0,.25)]"),
+              "selected-mask text-[var(--theme-primary)]",
           )}
           key={client.value}
           onClick={() => onChange(client.value)}

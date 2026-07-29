@@ -25,6 +25,7 @@ import {
   EmptyState,
   Skeleton,
 } from "../../shared/components/ui";
+import { SearchAutocomplete } from "../../shared/components/SearchAutocomplete";
 import { desktopApi } from "../../shared/lib/tauri";
 import {
   dateTime,
@@ -348,19 +349,15 @@ export function ScoresPage() {
       />
 
       <Card className="mb-4 flex items-center gap-3 p-3">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-600" />
-          <input
+        <div className="flex-1">
+          <SearchAutocomplete
             aria-label="搜索成绩"
             className="w-full rounded-xl border border-white/[0.07] bg-black/20 py-2.5 pl-10 pr-4 text-sm text-white outline-none placeholder:text-slate-700 focus:border-cyan-300/25"
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={setSearch}
             placeholder="搜索曲名、艺术家、Mapper、难度或 Mod"
+            suggestions={searchSuggestions}
             value={search}
-            list="score-search-suggestions"
           />
-          <datalist id="score-search-suggestions">
-            {searchSuggestions.map((suggestion, index) => <option key={`${suggestion.value}-${index}`} value={suggestion.value} />)}
-          </datalist>
         </div>
         <div className="flex items-center gap-4 px-2 text-xs text-slate-500">
           <span className="inline-flex items-center gap-1.5">

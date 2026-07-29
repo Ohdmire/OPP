@@ -1,6 +1,21 @@
-import { useEffect, useState } from "react";
-import { BarChart3, ExternalLink, FileChartColumn, Gamepad2, Gauge, Image, Map, Music2, Palette, Radio, Settings, Wrench } from "lucide-react";
-import { NavLink } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import {
+  BarChart3,
+  ExternalLink,
+  Film,
+  FileChartColumn,
+  Image,
+  LayoutDashboard,
+  Map,
+  Music2,
+  Palette,
+  Play,
+  Radio,
+  ScanSearch,
+  Settings,
+  Wrench,
+} from "lucide-react";
+import { NavLink, useLocation } from "react-router-dom";
 import type { OwnProfile, OsuClient } from "../shared/types/osu";
 import { cn } from "../shared/lib/cn";
 import { Avatar } from "../shared/components/Avatar";
@@ -8,18 +23,60 @@ import { Skeleton } from "../shared/components/ui";
 import { desktopApi } from "../shared/lib/tauri";
 import { useMode } from "./ModeContext";
 
-const onlineLinks = [
-  { to: "/online/overview", label: "概览", icon: Gauge },
-  { to: "/online/profile", label: "详细档案", icon: FileChartColumn },
-  { to: "/online/scores", label: "最佳成绩", icon: BarChart3 },
-  { to: "/online/beatmaps", label: "在线谱面", icon: Music2 },
-];
-
-function NavItem({ to, label, icon: Icon }: { to: string; label: string; icon: typeof Gauge }) {
-  return <NavLink className={({ isActive }) => cn("group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-500 outline-none transition hover:bg-white/[0.045] hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-cyan-300/40", isActive && "bg-white/[0.065] text-white shadow-[inset_2px_0_0_#ff83b8]")} to={to}><Icon className="size-[17px] shrink-0" /><span>{label}</span></NavLink>;
+interface NavItemProps {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
 }
 
-function GroupLabel({ children }: { children: React.ReactNode }) { return <p className="mb-2 px-3 text-sm font-bold uppercase tracking-[0.12em] text-slate-300">{children}</p>; }
+function NavItem({ to, label, icon: Icon }: NavItemProps) {
+  const location = useLocation();
+  const active = location.pathname === to;
+  const linkRef = useRef<HTMLAnchorElement>(null);
+
+  useEffect(() => {
+    if (!active) return;
+    const frame = window.requestAnimationFrame(() => {
+      linkRef.current?.scrollIntoView({ block: "nearest" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [active]);
+
+  return (
+    <NavLink
+      className={
+        cn(
+          "group relative flex min-h-10 items-center gap-3 rounded-lg border border-transparent px-2.5 text-[13px] font-medium text-slate-400 outline-none transition-colors duration-200 hover:bg-white/[0.045] hover:text-slate-100 focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]",
+          active &&
+            "selected-mask border-[var(--theme-primary)] text-white before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-[var(--theme-primary)]",
+        )
+      }
+      end
+      ref={linkRef}
+      to={to}
+    >
+      <Icon className="size-4 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+    </NavLink>
+  );
+}
+
+function NavGroup({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="mt-5 first:mt-0">
+      <p className="mb-1.5 px-2.5 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-600">
+        {label}
+      </p>
+      <div className="space-y-0.5">{children}</div>
+    </section>
+  );
+}
 
 export function Sidebar({ profile, loading }: { profile?: OwnProfile; loading: boolean }) {
   const { ruleset } = useMode();
@@ -29,9 +86,90 @@ export function Sidebar({ profile, loading }: { profile?: OwnProfile; loading: b
   useEffect(() => { void desktopApi.getSettings().then((settings) => setLaunchTosu(settings.launch_tosu_with_game)).catch(() => undefined); }, []);
   const updateLaunchTosu = async (value: boolean) => { setLaunchTosu(value); try { const settings = await desktopApi.getSettings(); await desktopApi.updateSettings({ ...settings, launch_tosu_with_game: value }); } catch { setLaunchTosu(!value); } };
   const startGame = async (targetClient: OsuClient) => { setStarting(true); setStartMenuOpen(false); try { await desktopApi.startGameSession(ruleset, targetClient, launchTosu); } finally { setStarting(false); } };
-  return <aside className="fixed bottom-0 left-0 top-11 z-40 flex w-[224px] flex-col overflow-hidden border-r border-white/[0.06] bg-[#0a0e18]/94 px-3 py-5 backdrop-blur-xl">
-    <nav aria-label="主导航" className="min-h-0 flex-1 overflow-y-auto pr-1"><GroupLabel>在线资料</GroupLabel><div className="space-y-1">{onlineLinks.map((link) => <NavItem key={link.to} {...link} />)}</div><div className="mt-7"><GroupLabel>本地资源</GroupLabel><div className="space-y-1"><NavItem icon={Map} label="本地谱面" to="/local/maps" /><NavItem icon={Palette} label="本地皮肤" to="/local/skins" /><NavItem icon={Image} label="截图回放" to="/local/media" /></div></div><div className="mt-7"><GroupLabel>直播</GroupLabel><NavItem icon={Radio} label="tosu" to="/tosu" /></div><div className="mt-7"><GroupLabel>工具</GroupLabel><NavItem icon={Wrench} label="工具集合" to="/tools" /></div></nav>
-    <div className="relative shrink-0 pt-3"><button aria-label="选择客户端并启动游戏" className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#ff6aa7] to-[#a673ff] px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(255,106,167,.25)] transition hover:brightness-110 disabled:opacity-50" disabled={starting} onClick={() => setStartMenuOpen((open) => !open)} type="button"><Gamepad2 className={`size-[18px] ${starting ? "animate-pulse" : ""}`} />启动 osu!</button>{startMenuOpen ? <div className="absolute bottom-14 left-0 z-50 w-full rounded-xl border border-white/10 bg-[#111725] p-2 shadow-2xl"><p className="px-2 pb-2 text-[10px] uppercase tracking-wider text-slate-600">启动客户端</p><label className="mb-2 flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-xs text-slate-300 hover:bg-white/[0.05]"><input checked={launchTosu} className="accent-cyan-300" onChange={(event) => void updateLaunchTosu(event.target.checked)} type="checkbox" />同时启动 tosu</label><button className="w-full rounded-lg px-2 py-2 text-left text-xs text-slate-300 hover:bg-pink-300/10 hover:text-pink-100" onClick={() => void startGame("stable")} type="button">osu! Stable</button><button className="mt-1 w-full rounded-lg px-2 py-2 text-left text-xs text-slate-300 hover:bg-cyan-300/10 hover:text-cyan-100" onClick={() => void startGame("lazer")} type="button">osu! Lazer</button></div> : null}</div>
-    <div className="mt-3 shrink-0 border-t border-white/[0.06] pt-3"><NavItem icon={Settings} label="设置" to="/settings" />{loading ? <div className="mt-3 flex items-center gap-3 px-2 py-1"><Skeleton className="size-9 rounded-full" /><Skeleton className="h-3 w-20" /></div> : profile ? <div className="mt-3 flex items-center gap-3 rounded-xl px-2 py-1.5"><Avatar className="size-9 rounded-full border border-white/10" profile={profile} /><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-white">{profile.username}</p><p className="mt-0.5 text-[11px] text-slate-600">ID {profile.id} · {profile.country_code}</p></div><button aria-label="在浏览器中打开个人主页" className="grid size-8 shrink-0 place-items-center rounded-lg text-slate-500 transition hover:bg-cyan-300/10 hover:text-cyan-100" onClick={() => void desktopApi.openExternal(`https://osu.ppy.sh/users/${profile.id}`)} title="在浏览器中打开个人主页" type="button"><ExternalLink className="size-3.5" /></button></div> : null}</div>
-  </aside>;
+  return (
+    <aside className="fixed bottom-0 left-0 top-11 z-40 flex w-[248px] flex-col overflow-hidden border-r border-white/[0.08] bg-[var(--surface-sidebar)] px-3 pb-3 pt-4">
+      <div className="mb-4 border-b border-white/[0.07] px-2 pb-4">
+        <div className="flex items-center gap-3">
+          <img alt="OPP" className="size-10 rounded-lg border border-white/10" src="/opp-icon.png" />
+          <p className="text-sm font-semibold text-white">OSU! Plus Plus</p>
+        </div>
+      </div>
+
+      <nav aria-label="主导航" className="min-h-0 flex-1 overflow-y-auto pr-1">
+        <NavGroup label="开始与复盘">
+          <NavItem icon={LayoutDashboard} label="个人概览" to="/online/overview" />
+          <NavItem icon={BarChart3} label="最佳成绩" to="/online/scores" />
+          <NavItem icon={FileChartColumn} label="详细档案" to="/online/profile" />
+        </NavGroup>
+
+        <NavGroup label="谱面与资源">
+          <NavItem icon={Music2} label="在线谱面" to="/online/beatmaps" />
+          <NavItem icon={ScanSearch} label="相似谱面" to="/online/similar" />
+          <NavItem icon={Map} label="本地谱面" to="/local/maps" />
+          <NavItem icon={Palette} label="本地皮肤" to="/local/skins" />
+          <NavItem icon={Image} label="截图与回放" to="/local/media" />
+        </NavGroup>
+
+        <NavGroup label="创作与直播">
+          <NavItem icon={Film} label="回放渲染" to="/local/media/render" />
+          <NavItem icon={Radio} label="tosu 直播集成" to="/tosu" />
+          <NavItem icon={Wrench} label="工具集合" to="/tools" />
+        </NavGroup>
+      </nav>
+
+      <div className="relative shrink-0 border-t border-white/[0.07] pt-3">
+        <button
+          aria-expanded={startMenuOpen}
+          aria-label="选择客户端并启动游戏"
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[var(--theme-primary)] px-4 py-2.5 text-sm font-semibold text-[var(--on-primary)] shadow-[0_8px_22px_var(--theme-primary-glow)] transition-colors hover:bg-[var(--theme-primary-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-sidebar)] disabled:opacity-50"
+          disabled={starting}
+          onClick={() => setStartMenuOpen((open) => !open)}
+          type="button"
+        >
+          <Play className={`size-4 ${starting ? "animate-pulse" : ""}`} />
+          启动 osu!
+        </button>
+        {startMenuOpen ? (
+          <div className="absolute bottom-14 left-0 z-50 w-full rounded-lg border border-white/10 bg-[var(--surface-panel-strong)] p-2 shadow-2xl">
+            <label className="mb-1 flex min-h-10 cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-xs text-slate-300 hover:bg-white/[0.05]">
+              <input checked={launchTosu} className="accent-[var(--theme-primary)]" onChange={(event) => void updateLaunchTosu(event.target.checked)} type="checkbox" />
+              同时启动 tosu
+            </label>
+            <button className="min-h-10 w-full rounded-md px-2 py-2 text-left text-xs text-slate-300 transition-colors hover:bg-white/[0.06] hover:text-white" onClick={() => void startGame("stable")} type="button">
+              osu! Stable
+            </button>
+            <button className="mt-0.5 min-h-10 w-full rounded-md px-2 py-2 text-left text-xs text-slate-300 transition-colors hover:bg-white/[0.06] hover:text-white" onClick={() => void startGame("lazer")} type="button">
+              osu! Lazer
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="mt-2 shrink-0">
+        <NavItem icon={Settings} label="设置" to="/settings" />
+        {loading ? (
+          <div className="mt-2 flex items-center gap-3 px-2 py-1">
+            <Skeleton className="size-8 rounded-lg" />
+            <Skeleton className="h-3 w-20" />
+          </div>
+        ) : profile ? (
+          <div className="mt-2 flex items-center gap-3 border-t border-white/[0.06] px-2 pt-3">
+            <Avatar className="size-8 rounded-lg border border-white/10" profile={profile} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold text-white">{profile.username}</p>
+            </div>
+            <button
+              aria-label="在浏览器中打开个人主页"
+              className="grid size-8 shrink-0 place-items-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]"
+              onClick={() => void desktopApi.openExternal(`https://osu.ppy.sh/users/${profile.id}`)}
+              title="在浏览器中打开个人主页"
+              type="button"
+            >
+              <ExternalLink className="size-3.5" />
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </aside>
+  );
 }

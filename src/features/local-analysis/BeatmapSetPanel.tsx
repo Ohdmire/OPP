@@ -14,7 +14,6 @@ import {
   Hash,
   ListFilter,
   RotateCcw,
-  Search,
   SlidersHorizontal,
   Sparkles,
   Timer,
@@ -29,10 +28,12 @@ import {
   EmptyState,
   Skeleton,
 } from "../../shared/components/ui";
+import { SearchAutocomplete } from "../../shared/components/SearchAutocomplete";
 import { BeatmapDifficultyStrip, BeatmapInfoBar } from "../../shared/components/BeatmapSetVisuals";
 import { fullNumber, rulesetLabels } from "../../shared/lib/format";
 import { desktopApi } from "../../shared/lib/tauri";
 import { DifficultyIcon, ModeIcon } from "../online-beatmaps/BeatmapVisuals";
+import { similarityRouteForLocalResource } from "../similar-beatmaps/navigation";
 import type {
   BeatmapQuery,
   BeatmapSort,
@@ -141,11 +142,11 @@ function SetBackground({
   return query.data ? (
     <img
       alt=""
-      className="absolute inset-0 size-full object-cover opacity-55"
+      className="theme-beatmap-background absolute inset-0 size-full object-cover opacity-55"
       src={query.data}
     />
   ) : (
-    <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(92,225,230,.16),transparent_32%),radial-gradient(circle_at_15%_80%,rgba(255,106,167,.18),transparent_36%)]" />
+    <div className="theme-beatmap-background absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(92,225,230,.16),transparent_32%),radial-gradient(circle_at_15%_80%,rgba(255,106,167,.18),transparent_36%)]" />
   );
 }
 
@@ -153,10 +154,12 @@ function BeatmapSetCard({
   client,
   set,
   onOpen,
+  onFindSimilar,
 }: {
   client: OsuClient;
   set: LocalBeatmapSetSummary;
   onOpen: (resourceId: string) => void;
+  onFindSimilar: (resourceId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const starRange =
@@ -171,8 +174,8 @@ function BeatmapSetCard({
     <article className="overflow-hidden rounded-[22px] border border-white/[0.075] bg-[#0f1522] shadow-[0_16px_45px_rgba(0,0,0,.16)] transition hover:border-white/[0.14]">
       <div className="relative min-h-40 overflow-hidden">
         <SetBackground client={client} resourceId={set.background_resource_id} />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#0b101b]/95 via-[#0b101b]/76 to-[#0b101b]/35" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0f1522] via-transparent to-black/20" />
+        <div className="theme-beatmap-overlay-primary absolute inset-0 bg-gradient-to-r from-[#0b101b]/95 via-[#0b101b]/76 to-[#0b101b]/35" />
+        <div className="theme-beatmap-overlay-secondary absolute inset-0 bg-gradient-to-t from-[#0f1522] via-transparent to-black/20" />
         <div className="relative flex min-h-40 items-end gap-6 p-5">
           <div className="min-w-0 flex-1">
             <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -238,11 +241,18 @@ function BeatmapSetCard({
       {expanded ? (
         <div className="grid gap-2 border-t border-white/[0.055] p-3">
           {set.difficulties.map((difficulty) => (
-            <button
+            <div
               className="grid grid-cols-[minmax(0,1fr)_84px_70px_70px_78px_70px_78px] items-center gap-3 rounded-xl border border-white/[0.055] bg-white/[0.025] px-4 py-3 text-left transition hover:border-cyan-300/20 hover:bg-cyan-300/[0.045]"
               key={difficulty.resource.resource_id}
               onClick={() => onOpen(difficulty.resource.resource_id)}
-              type="button"
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onOpen(difficulty.resource.resource_id);
+                }
+              }}
+              role="button"
+              tabIndex={0}
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
@@ -273,7 +283,17 @@ function BeatmapSetCard({
               />
               <Metric icon={Timer} label="NPS" value={difficulty.average_nps.toFixed(1)} />
               <Metric icon={Hash} label="Objects" value={fullNumber(difficulty.object_count)} />
-            </button>
+              <Button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onFindSimilar(difficulty.resource.resource_id);
+                }}
+                size="sm"
+                variant="ghost"
+              >
+                查找相似
+              </Button>
+            </div>
           ))}
         </div>
       ) : null}
@@ -396,22 +416,18 @@ export function BeatmapSetPanel({
     <div>
       <Card className="mb-4 overflow-hidden">
         <div className="flex items-center gap-3 p-3">
-          <div className="relative min-w-64 flex-1">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-600" />
-            <input
+          <div className="min-w-64 flex-1">
+            <SearchAutocomplete
               aria-label="搜索谱面集"
               className="w-full rounded-xl border border-white/[0.07] bg-black/20 py-2.5 pl-10 pr-4 text-sm text-white outline-none placeholder:text-slate-700 focus:border-cyan-300/25"
-              onChange={(event) => {
-                setSearch(event.target.value);
+              onChange={(value) => {
+                setSearch(value);
                 setOffset(0);
               }}
               placeholder="搜索标题、艺术家、mapper、难度、来源、标签或 ID"
+              suggestions={searchSuggestions}
               value={search}
-              list="local-beatmap-search-suggestions"
             />
-            <datalist id="local-beatmap-search-suggestions">
-              {searchSuggestions.map((suggestion) => <option key={`${suggestion.detail}-${suggestion.value}`} value={suggestion.value} />)}
-            </datalist>
           </div>
           <Badge tone="cyan">{rulesetLabels[ruleset]}</Badge>
           <select
@@ -548,6 +564,9 @@ export function BeatmapSetPanel({
               <BeatmapSetCard
                 client={client}
                 key={set.set_key}
+                onFindSimilar={(resourceId) => {
+                  window.location.hash = similarityRouteForLocalResource(client, resourceId);
+                }}
                 onOpen={onOpen}
                 set={set}
               />

@@ -91,15 +91,21 @@ export function AppShell() {
   }, [profileQuery.error, queryClient]);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-[var(--surface)]">
+      <a
+        className="fixed left-[264px] top-2 z-[200] -translate-y-20 rounded-lg bg-[var(--theme-primary)] px-4 py-2 text-sm font-semibold text-[var(--on-primary)] transition-transform focus:translate-y-0"
+        href="#main-content"
+      >
+        跳到主要内容
+      </a>
       <Sidebar
         loading={profileQuery.isLoading}
         profile={profileQuery.data?.data}
       />
       <GlobalContextBar />
-      <main className="ml-[224px] min-h-screen pt-[104px]">
-        <div className="relative min-h-[calc(100vh-104px)] overflow-hidden">
-          <div className="relative mx-auto max-w-[1480px] p-8 xl:p-10">
+      <main className="ml-[248px] min-h-screen pt-[108px]" id="main-content" tabIndex={-1}>
+        <div className="relative min-h-[calc(100vh-108px)] overflow-hidden">
+          <div className="theme-content-frame relative mx-auto max-w-[1440px] p-7 xl:p-9">
             <Outlet />
           </div>
         </div>
@@ -107,7 +113,7 @@ export function AppShell() {
       {showBackToTop ? (
         <button
           aria-label="回到顶部"
-          className="fixed bottom-7 right-7 z-[70] grid size-12 place-items-center rounded-2xl border border-cyan-300/30 bg-[#0b101b]/90 text-cyan-100 shadow-[0_12px_35px_rgba(0,0,0,.35)] backdrop-blur transition hover:-translate-y-1 hover:border-cyan-200/60 hover:bg-cyan-300/15"
+          className="fixed bottom-7 right-7 z-[70] grid size-11 place-items-center rounded-lg border border-white/10 bg-[var(--surface-panel)] text-[var(--theme-primary)] shadow-xl transition-colors hover:border-[var(--theme-primary-soft)] hover:bg-[var(--theme-primary-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]"
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
           type="button"
         >

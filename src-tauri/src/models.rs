@@ -127,6 +127,8 @@ pub struct AppSettings {
     #[serde(default)]
     pub reduce_motion: bool,
     #[serde(default)]
+    pub similarity_index_directory: Option<String>,
+    #[serde(default)]
     pub beatmap_download_directory: Option<String>,
     #[serde(default)]
     pub replay_export_directory: Option<String>,

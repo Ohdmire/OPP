@@ -7,6 +7,7 @@ mod online_beatmaps;
 mod osu_api;
 mod pp_calc;
 mod replay_render;
+mod similarity;
 mod state;
 mod storage;
 mod tools;
@@ -19,14 +20,15 @@ use account::{
 };
 use game_session::{
     get_game_session_status, get_game_status, inspect_game_replay, list_game_media,
-    open_media_in_explorer, read_game_replay, read_game_screenshot, start_game_monitor,
-    start_detected_game_session, start_game_session,
+    open_media_in_explorer, read_game_replay, read_game_screenshot, start_detected_game_session,
+    start_game_monitor, start_game_session,
 };
 use local_analysis::{
     cancel_local_scan, get_local_beatmap_background, get_local_beatmap_detail,
-    get_local_skin_asset, get_local_skin_detail, get_local_skin_preview, get_local_sources,
-    get_local_summary, query_local_beatmap_sets, query_local_beatmaps, query_local_skins,
-    replace_local_skin_asset, reset_local_source, scan_local_source, set_local_source,
+    get_local_beatmap_path, get_local_skin_asset, get_local_skin_detail, get_local_skin_preview,
+    get_local_sources, get_local_summary, query_local_beatmap_sets, query_local_beatmaps,
+    query_local_skins, replace_local_skin_asset, reset_local_source, scan_local_source,
+    set_local_source,
 };
 use online_beatmaps::{
     cancel_online_beatmap_download, collect_online_beatmapsets, download_online_beatmapsets,
@@ -35,6 +37,7 @@ use online_beatmaps::{
 };
 use pp_calc::calculate_beatmap_pp;
 use replay_render::submit_replay_render;
+use similarity::{configure_similarity_index, get_similarity_index_status, query_similar_beatmaps};
 use state::AppState;
 use tauri::Manager;
 use tools::{
@@ -77,6 +80,9 @@ pub fn run() {
             get_online_beatmap_provider_status,
             calculate_beatmap_pp,
             submit_replay_render,
+            get_similarity_index_status,
+            configure_similarity_index,
+            query_similar_beatmaps,
             start_game_session,
             start_detected_game_session,
             get_game_status,
@@ -101,6 +107,7 @@ pub fn run() {
             query_local_beatmaps,
             query_local_beatmap_sets,
             get_local_beatmap_detail,
+            get_local_beatmap_path,
             get_local_beatmap_background,
             query_local_skins,
             get_local_skin_detail,

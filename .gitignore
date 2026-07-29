@@ -41,6 +41,14 @@ credentials.json
 secrets.json
 state.json
 /.local-analysis/
+/.private-similarity-index/
+/src-tauri/resources/similarity-index/
+**/difficulty-main.hnsw
+**/difficulty-main.hnsw.sha256
+**/difficulty-delta.hnsw
+**/difficulty-delta.hnsw.sha256
+**/features-v*.bin
+**/normalizers/v*.bin
 
 # Logs and crash output
 logs/

@@ -48,6 +48,7 @@ const clients: Array<[OsuClient, string]> = [
 
 const base: AppSettings = {
   reduce_motion: false,
+  similarity_index_directory: null,
   beatmap_download_directory: null,
   replay_export_directory: null,
   tosu_executable_path: null,

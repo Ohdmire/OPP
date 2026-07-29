@@ -1,5 +1,12 @@
 # Third-party notices
 
+## osu-difficulty-lab runtime
+
+The read-only beatmap similarity runtime is derived from
+`osuplusplus/osu-difficulty-lab` commit
+`429352875ae4e0d7f44c45a64c4d604127b8c3b4` and is used under the MIT License.
+No dataset produced by that project is included with OPP.
+
 ## mania-converter-rust
 
 OPP links the Rust crate `mania-converter` from

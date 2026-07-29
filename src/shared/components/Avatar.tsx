@@ -19,7 +19,7 @@ function AvatarSource({
       <span
         aria-label={`${username} 的头像占位`}
         className={cn(
-          "grid shrink-0 place-items-center overflow-hidden bg-gradient-to-br from-pink-400/20 to-cyan-300/10 font-semibold text-pink-100",
+          "grid shrink-0 place-items-center overflow-hidden border border-white/10 bg-[var(--theme-primary-muted)] font-semibold text-[var(--theme-primary)]",
           className,
         )}
         role="img"

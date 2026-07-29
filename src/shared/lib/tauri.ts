@@ -48,6 +48,9 @@ import type {
   ReplayRenderRequest,
   Score,
   SkinQuery,
+  SimilarityIndexStatus,
+  SimilarityQueryRequest,
+  SimilarityQueryResponse,
   TosuLiveSnapshot,
   TosuLogEntry,
   TosuStatus,
@@ -110,6 +113,38 @@ function browserPreviewValue<T>(command: string, args?: Record<string, unknown>)
   if (command === "list_game_media") return [] as T;
   if (command === "get_tosu_status") return { installed: false, executable_path: null, api_base_url: "http://127.0.0.1:24050", api_reachable: false, running: false, owned_by_opp: false, dashboard_url: "http://127.0.0.1:24050", last_error: null, lyrics: { installed: false, executable_path: null, running: false, owned_by_opp: false, proxy_url: "http://127.0.0.1:41280/lyrics/" } } as T;
   if (command === "get_default_file_clients") return { beatmap: "stable", skin: "stable" } as T;
+  if (command === "get_similarity_index_status") return {
+    state: "unconfigured",
+    directory: null,
+    message: "尚未配置本地相似谱面索引。",
+    record_count: null,
+    analyzer_version: null,
+    normalization_version: null,
+    algorithm_id: null,
+    data_cutoff_at: null,
+  } as T;
+  if (command === "configure_similarity_index") return {
+    state: args?.directory ? "ready" : "unconfigured",
+    directory: args?.directory ?? null,
+    message: args?.directory ? "本地索引已就绪。" : "尚未配置本地相似谱面索引。",
+    record_count: null,
+    analyzer_version: null,
+    normalization_version: null,
+    algorithm_id: null,
+    data_cutoff_at: null,
+  } as T;
+  if (command === "query_similar_beatmaps") {
+    const feature = { aim: 0.72, speed: 0.64, reading: 0.81, flashlight: 0.28, overlap: 0.57 };
+    const base = { bpm: 186, ar: 9.2, od: 8.6, cs: 4, hp: 6, length_seconds: 124, object_count: 612, object_density: 4.94, circle_ratio: 0.58, slider_ratio: 0.4, spinner_ratio: 0.02, max_combo: 902 };
+    return {
+      target: { beatmap_id: 1001, beatmapset_id: 501, artist: "Synthetic Artist", title: "Reference Pattern", version: "Insane", creator: "Preview Mapper", online_url: "https://osu.ppy.sh/b/1001", difficulty: feature, base, source: "index", analyzer_version: 2, normalization_version: 1 },
+      results: [
+        { beatmap_id: 2001, beatmapset_id: 601, artist: "Signal Garden", title: "Parallel Motion", version: "Another", creator: "Mapper A", online_url: "https://osu.ppy.sh/b/2001", difficulty: { ...feature, aim: 0.7, reading: 0.78 }, base: { ...base, bpm: 184 }, final_distance: 0.0462, difficulty_distance: 0.041, base_distance: 0.067 },
+        { beatmap_id: 2002, beatmapset_id: 602, artist: "Night Circuit", title: "Crossing Lines", version: "Extra", creator: "Mapper B", online_url: "https://osu.ppy.sh/b/2002", difficulty: { ...feature, speed: 0.69, overlap: 0.61 }, base: { ...base, bpm: 192, ar: 9.4 }, final_distance: 0.0824, difficulty_distance: 0.074, base_distance: 0.116 },
+        { beatmap_id: 2003, beatmapset_id: 603, artist: "Blue Window", title: "Readable Noise", version: "Expert", creator: "Mapper C", online_url: "https://osu.ppy.sh/b/2003", difficulty: { ...feature, flashlight: 0.34, reading: 0.75 }, base: { ...base, bpm: 178, length_seconds: 138 }, final_distance: 0.1197, difficulty_distance: 0.108, base_distance: 0.166 },
+      ],
+    } as T;
+  }
   if (command === "update_settings") return args?.settings as T;
   if (["clear_profile_cache", "set_default_file_client", "set_local_source", "reset_local_source", "start_tosu", "stop_tosu", "set_tosu_executable", "set_tosu_lyrics_executable", "cancel_online_beatmap_download"].includes(command)) return null as T;
   return undefined;
@@ -192,6 +227,12 @@ export const desktopApi = {
   stopTosu: () => call<void>("stop_tosu"),
   getLocalSources: () =>
     call<LocalSourceStatus[]>("get_local_sources"),
+  getSimilarityIndexStatus: () =>
+    call<SimilarityIndexStatus>("get_similarity_index_status"),
+  configureSimilarityIndex: (directory: string | null) =>
+    call<SimilarityIndexStatus>("configure_similarity_index", { directory }),
+  querySimilarBeatmaps: (request: SimilarityQueryRequest) =>
+    call<SimilarityQueryResponse>("query_similar_beatmaps", { request }),
   setLocalSource: (client: OsuClient, path: string) =>
     call<LocalSourceStatus>("set_local_source", { client, path }),
   resetLocalSource: (client: OsuClient) =>
@@ -211,6 +252,8 @@ export const desktopApi = {
       client,
       resourceId,
     }),
+  getLocalBeatmapPath: (client: OsuClient, resourceId: string) =>
+    call<string>("get_local_beatmap_path", { client, resourceId }),
   getLocalBeatmapBackground: (client: OsuClient, resourceId: string) =>
     call<string | null>("get_local_beatmap_background", {
       client,
@@ -259,6 +302,15 @@ export const desktopApi = {
       return defaultPath ?? "C:/OPP-preview";
     }
     const selected = await openDialog({ directory: true, multiple: false, defaultPath: defaultPath ?? undefined, title });
+    return typeof selected === "string" ? selected : null;
+  },
+  chooseSimilarityBeatmapFile: async () => {
+    if (!isTauri()) return "C:/OPP-preview/reference.osu";
+    const selected = await openDialog({
+      multiple: false,
+      title: "选择参考谱面",
+      filters: [{ name: "osu! beatmap", extensions: ["osu"] }],
+    });
     return typeof selected === "string" ? selected : null;
   },
   chooseTosuExecutable: async (defaultPath?: string | null) => {

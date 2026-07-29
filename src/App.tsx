@@ -10,9 +10,13 @@ function ThemeController() {
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.themePrimary = settings.data?.theme_primary ?? "cyan";
-    root.dataset.themeSecondary = settings.data?.theme_primary ?? "cyan";
+    root.dataset.themeSecondary = settings.data?.theme_secondary ?? "cyan";
     root.dataset.themeMode = settings.data?.theme_mode ?? "dark";
-  }, [settings.data?.theme_primary, settings.data?.theme_mode]);
+  }, [
+    settings.data?.theme_mode,
+    settings.data?.theme_primary,
+    settings.data?.theme_secondary,
+  ]);
   return null;
 }
 

@@ -99,7 +99,9 @@ pub struct GameMonitorRuntime {
 impl Default for GameMonitorRuntime {
     fn default() -> Self {
         Self {
-            current: Mutex::new(GameStatusSnapshot { clients: Vec::new() }),
+            current: Mutex::new(GameStatusSnapshot {
+                clients: Vec::new(),
+            }),
         }
     }
 }

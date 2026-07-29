@@ -27,11 +27,11 @@ use crate::{
     tosu::start_managed_tosu,
 };
 
-pub use models::{GameMonitorRuntime, GameSessionRuntime};
 use models::{
     GameClientStatus, GameMediaItem, GameReplayPayload, GameScreenshotPayload, GameSessionSummary,
     GameStatusSnapshot, ReplayMapInfo, UserSnapshot,
 };
+pub use models::{GameMonitorRuntime, GameSessionRuntime};
 
 fn number(value: &serde_json::Value, key: &str) -> Option<u64> {
     value
@@ -97,17 +97,20 @@ fn running_executables() -> Vec<PathBuf> {
         Command::new("pgrep")
             .args(["-a", "-x", "osu!"])
             .output()
-            .map(|output| String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .filter_map(|line| line.split_whitespace().nth(1))
-                .map(PathBuf::from)
-                .collect())
+            .map(|output| {
+                String::from_utf8_lossy(&output.stdout)
+                    .lines()
+                    .filter_map(|line| line.split_whitespace().nth(1))
+                    .map(PathBuf::from)
+                    .collect()
+            })
             .unwrap_or_default()
     }
 }
 
 fn same_executable(left: &Path, right: &Path) -> bool {
-    left.to_string_lossy().eq_ignore_ascii_case(&right.to_string_lossy())
+    left.to_string_lossy()
+        .eq_ignore_ascii_case(&right.to_string_lossy())
 }
 
 fn executable_running(executable: &Path, running: &[PathBuf]) -> bool {
@@ -128,7 +131,9 @@ pub(crate) fn executable(client: LocalClient, root: &str) -> Option<PathBuf> {
     names.into_iter().find(|path| path.is_file())
 }
 
-fn scan_game_status(local_analysis: &crate::local_analysis::LocalAnalysisService) -> GameStatusSnapshot {
+fn scan_game_status(
+    local_analysis: &crate::local_analysis::LocalAnalysisService,
+) -> GameStatusSnapshot {
     let running = running_executables();
     let detected_at = Utc::now();
     let clients = [LocalClient::Stable, LocalClient::Lazer]
@@ -164,17 +169,23 @@ pub fn start_game_monitor(
             let service = local_analysis.clone();
             let next = tokio::task::spawn_blocking(move || scan_game_status(&service))
                 .await
-                .unwrap_or_else(|_| GameStatusSnapshot { clients: Vec::new() });
+                .unwrap_or_else(|_| GameStatusSnapshot {
+                    clients: Vec::new(),
+                });
             let changed = monitor
                 .current
                 .lock()
                 .map(|mut current| {
                     let changed = current.clients.len() != next.clients.len()
-                        || current.clients.iter().zip(&next.clients).any(|(before, after)| {
-                            before.client != after.client
-                                || before.running != after.running
-                                || before.executable != after.executable
-                        });
+                        || current
+                            .clients
+                            .iter()
+                            .zip(&next.clients)
+                            .any(|(before, after)| {
+                                before.client != after.client
+                                    || before.running != after.running
+                                    || before.executable != after.executable
+                            });
                     *current = next.clone();
                     changed
                 })
@@ -260,7 +271,10 @@ pub async fn start_detected_game_session(
     let exe = executable(client, &root)
         .ok_or_else(|| CommandError::new("GAME_NOT_FOUND", "安装目录中未找到 osu! 可执行文件"))?;
     if !executable_running(&exe, &running_executables()) {
-        return Err(CommandError::new("GAME_NOT_RUNNING", "未检测到正在运行的 osu! 客户端"));
+        return Err(CommandError::new(
+            "GAME_NOT_RUNNING",
+            "未检测到正在运行的 osu! 客户端",
+        ));
     }
     {
         let active = state
@@ -308,7 +322,9 @@ pub async fn get_game_session_status(
     let Some(mut summary) = current else {
         return Ok(None);
     };
-    if summary.running && !executable_running(Path::new(&summary.executable), &running_executables()) {
+    if summary.running
+        && !executable_running(Path::new(&summary.executable), &running_executables())
+    {
         summary.running = false;
         summary.ended_at = Some(Utc::now());
         summary.end = Some(snapshot(&state, summary.ruleset).await?);

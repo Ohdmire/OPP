@@ -94,18 +94,16 @@ export function AuthSetup({ status }: { status: AuthStatus }) {
   };
 
   return (
-    <main className="relative grid min-h-screen place-items-center overflow-hidden px-8 py-16">
-      <div className="pointer-events-none absolute left-[8%] top-[12%] size-96 rounded-full bg-pink-500/[0.08] blur-[110px]" />
-      <div className="pointer-events-none absolute bottom-[8%] right-[8%] size-96 rounded-full bg-cyan-400/[0.07] blur-[120px]" />
+    <main className="relative grid min-h-screen place-items-center overflow-hidden bg-[var(--surface)] px-8 py-16">
+      <div className="pointer-events-none absolute left-[8%] top-11 h-px w-56 bg-[var(--theme-primary-soft)]" />
+      <div className="pointer-events-none absolute bottom-[8%] right-[8%] h-32 w-px bg-white/[0.08]" />
 
-      <div className="relative z-10 grid w-full max-w-5xl grid-cols-[.9fr_1.1fr] overflow-hidden rounded-[28px] border border-white/[0.09] bg-[#0e1320]/90 shadow-[0_30px_120px_rgba(0,0,0,.48)] backdrop-blur-2xl">
-        <section className="relative overflow-hidden border-r border-white/[0.07] p-10">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_10%,rgba(255,106,167,.16),transparent_42%)]" />
+      <div className="relative z-10 grid w-full max-w-5xl grid-cols-[.9fr_1.1fr] overflow-hidden rounded-2xl border border-white/[0.1] bg-[var(--surface-panel)] shadow-[0_24px_80px_rgba(0,0,0,.32)]">
+        <section className="relative overflow-hidden border-r border-white/[0.08] bg-[var(--surface-sidebar)] p-10">
+          <div className="absolute inset-y-0 left-0 w-1 bg-[var(--theme-primary)]" />
           <div className="relative">
             <div className="mb-14 flex items-center gap-3">
-              <span className="grid size-11 place-items-center rounded-full border-[3px] border-pink-300 text-xs font-black text-pink-100 shadow-[0_0_36px_rgba(255,106,167,.28)]">
-                O
-              </span>
+              <img alt="" className="size-11 rounded-lg border border-white/10" src="/opp-icon.png" />
               <div>
                 <p className="text-lg font-semibold text-white">OPP</p>
                 <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
@@ -113,7 +111,7 @@ export function AuthSetup({ status }: { status: AuthStatus }) {
                 </p>
               </div>
             </div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300/75">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--theme-primary)]">
               私人数据空间
             </p>
             <h1 className="mt-3 text-4xl font-semibold leading-tight tracking-[-0.045em] text-white">
@@ -128,7 +126,7 @@ export function AuthSetup({ status }: { status: AuthStatus }) {
             <div className="mt-10 space-y-4">
               {securityFeatures.map(({ label, icon: Icon }) => (
                 <div className="flex items-center gap-3 text-sm text-slate-300" key={label}>
-                  <span className="grid size-8 place-items-center rounded-lg border border-white/[0.08] bg-white/[0.04] text-cyan-200">
+                  <span className="grid size-8 place-items-center rounded-md border border-white/[0.08] bg-white/[0.04] text-[var(--theme-primary)]">
                     <Icon className="size-4" />
                   </span>
                   {label}
@@ -139,7 +137,7 @@ export function AuthSetup({ status }: { status: AuthStatus }) {
         </section>
 
         <section className="p-10">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pink-300/75">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--theme-primary)]">
             {editing ? "初始设置" : "连接账号"}
           </p>
           <h2 className="mt-2 text-2xl font-semibold text-white">

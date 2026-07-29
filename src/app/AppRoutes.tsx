@@ -9,11 +9,11 @@ const OverviewPage = lazy(() => import("../features/profile/OverviewPage").then(
 const ProfileDetailsPage = lazy(() => import("../features/profile/ProfileDetailsPage").then((module) => ({ default: module.ProfileDetailsPage })));
 const ScoresPage = lazy(() => import("../features/scores/ScoresPage").then((module) => ({ default: module.ScoresPage })));
 const OnlineBeatmapsPage = lazy(() => import("../features/online-beatmaps/OnlineBeatmapsPage").then((module) => ({ default: module.OnlineBeatmapsPage })));
+const SimilarBeatmapsPage = lazy(() => import("../features/similar-beatmaps/SimilarBeatmapsPage").then((module) => ({ default: module.SimilarBeatmapsPage })));
 const LocalAnalysisPage = lazy(() => import("../features/local-analysis/LocalAnalysisPage").then((module) => ({ default: module.LocalAnalysisPage })));
 const LocalMediaPage = lazy(() => import("../features/local-media/LocalMediaPage").then((module) => ({ default: module.LocalMediaPage })));
 const ReplayRenderPage = lazy(() => import("../features/local-media/ReplayRenderPage").then((module) => ({ default: module.ReplayRenderPage })));
 const SettingsPage = lazy(() => import("../features/settings/SettingsPage").then((module) => ({ default: module.SettingsPage })));
-const GameSessionPage = lazy(() => import("../features/game/GameSessionPage").then((module) => ({ default: module.GameSessionPage })));
 const ToolsPage = lazy(() => import("../features/tools/ToolsPage").then((module) => ({ default: module.ToolsPage })));
 const TosuPage = lazy(() => import("../features/tools/TosuPage").then((module) => ({ default: module.TosuPage })));
 
@@ -27,16 +27,18 @@ export function AppRoutes() {
           <Route path="/online/profile" element={<ProfileDetailsPage />} />
           <Route path="/online/scores" element={<ScoresPage />} />
           <Route path="/online/beatmaps" element={<OnlineBeatmapsPage />} />
+          <Route path="/online/similar" element={<SimilarBeatmapsPage />} />
           <Route path="/local" element={<Navigate replace to="/local/maps" />} />
           <Route path="/local/maps" element={<LocalAnalysisPage section="maps" />} />
           <Route path="/local/skins" element={<LocalAnalysisPage section="skins" />} />
-          <Route path="/local/media" element={<Navigate replace to="/local/media/screenshots" />} />
-          <Route path="/local/media/screenshots" element={<LocalMediaPage kind="screenshot" />} />
-          <Route path="/local/media/replays" element={<LocalMediaPage kind="replay" />} />
+          <Route path="/local/media" element={<LocalMediaPage />} />
+          <Route path="/local/media/screenshots" element={<Navigate replace to="/local/media?type=screenshot" />} />
+          <Route path="/local/media/replays" element={<Navigate replace to="/local/media?type=replay" />} />
           <Route path="/local/media/render" element={<ReplayRenderPage />} />
           <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/game" element={<GameSessionPage />} />
+          <Route path="/game" element={<Navigate replace to="/online/overview" />} />
           <Route path="/tools" element={<ToolsPage />} />
+          <Route path="/tools/replay-render" element={<Navigate replace to="/local/media/render" />} />
           <Route path="/tosu" element={<TosuPage />} />
           <Route path="*" element={<Navigate replace to="/online/overview" />} />
         </Route>

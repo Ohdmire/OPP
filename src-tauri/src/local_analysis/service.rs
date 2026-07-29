@@ -502,6 +502,44 @@ impl LocalAnalysisService {
         Ok(detail)
     }
 
+    pub fn beatmap_file_path(
+        &self,
+        client: LocalClient,
+        resource_id: &str,
+    ) -> CommandResult<String> {
+        let index = self.require_current_index(client)?;
+        let entry = index
+            .entries
+            .iter()
+            .find(|entry| {
+                matches!(
+                    &entry.data,
+                    IndexedData::Beatmap { summary, .. }
+                        if summary.resource.resource_id == resource_id
+                )
+            })
+            .ok_or_else(|| {
+                CommandError::new("LOCAL_RESOURCE_NOT_FOUND", "Local beatmap was not found")
+            })?;
+        let path = entry.physical_path.canonicalize().map_err(|error| {
+            CommandError::new(
+                "LOCAL_RESOURCE_NOT_FOUND",
+                format!("The local beatmap file is unavailable: {error}"),
+            )
+        })?;
+        if !path.is_file()
+            || !path
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("osu"))
+        {
+            return Err(CommandError::new(
+                "LOCAL_RESOURCE_NOT_FOUND",
+                "The local beatmap file is unavailable",
+            ));
+        }
+        Ok(path.to_string_lossy().into_owned())
+    }
+
     pub fn find_beatmap_by_md5(
         &self,
         client: LocalClient,
@@ -866,28 +904,48 @@ impl LocalAnalysisService {
             .get(asset_resource_id)
             .filter(|item| item.skin_resource_id == skin_resource_id && item.root == root)
             .map(|item| item.summary.clone())
-            .ok_or_else(|| CommandError::new("LOCAL_RESOURCE_NOT_FOUND", "未找到要替换的 Skin 资源"))?;
+            .ok_or_else(|| {
+                CommandError::new("LOCAL_RESOURCE_NOT_FOUND", "未找到要替换的 Skin 资源")
+            })?;
         let source = replacement_path.canonicalize().map_err(|error| {
-            CommandError::new("SKIN_REPLACEMENT_READ_ERROR", format!("无法读取替换文件：{error}"))
+            CommandError::new(
+                "SKIN_REPLACEMENT_READ_ERROR",
+                format!("无法读取替换文件：{error}"),
+            )
         })?;
         if !source.is_file() {
-            return Err(CommandError::new("SKIN_REPLACEMENT_INVALID", "替换目标必须是文件"));
+            return Err(CommandError::new(
+                "SKIN_REPLACEMENT_INVALID",
+                "替换目标必须是文件",
+            ));
         }
-        let extension = source.extension().and_then(|value| value.to_str()).unwrap_or("");
+        let extension = source
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or("");
         if !extension.eq_ignore_ascii_case(&asset.extension) {
             return Err(CommandError::new(
                 "SKIN_REPLACEMENT_FORMAT_MISMATCH",
-                format!("请选择 .{} 格式的文件以替换 {}", asset.extension, asset.name),
+                format!(
+                    "请选择 .{} 格式的文件以替换 {}",
+                    asset.extension, asset.name
+                ),
             ));
         }
         let target_root = if save_as_new {
             let name = new_skin_name.unwrap_or("").trim();
             if name.is_empty() || name == "." || name == ".." || name.contains(['/', '\\']) {
-                return Err(CommandError::new("SKIN_NAME_INVALID", "请输入有效的新 Skin 名称"));
+                return Err(CommandError::new(
+                    "SKIN_NAME_INVALID",
+                    "请输入有效的新 Skin 名称",
+                ));
             }
             let target = root.parent().unwrap_or(&root).join(name);
             if target.exists() {
-                return Err(CommandError::new("SKIN_NAME_EXISTS", "同名 Skin 已存在，请使用其他名称"));
+                return Err(CommandError::new(
+                    "SKIN_NAME_EXISTS",
+                    "同名 Skin 已存在，请使用其他名称",
+                ));
             }
             copy_skin_directory(&root, &target)?;
             set_skin_name(&target.join("skin.ini"), name)?;
@@ -948,13 +1006,21 @@ impl LocalAnalysisService {
 /// 遍历已解析的数据源，筛选出可能的谱面和皮肤配置文件。
 fn copy_skin_directory(source: &Path, target: &Path) -> CommandResult<()> {
     for entry in WalkDir::new(source).follow_links(false) {
-        let entry = entry.map_err(|error| CommandError::new("SKIN_COPY_ERROR", error.to_string()))?;
-        let relative = entry.path().strip_prefix(source).map_err(|error| CommandError::new("SKIN_COPY_ERROR", format!("无法确定 Skin 文件路径：{error}")))?;
+        let entry =
+            entry.map_err(|error| CommandError::new("SKIN_COPY_ERROR", error.to_string()))?;
+        let relative = entry.path().strip_prefix(source).map_err(|error| {
+            CommandError::new(
+                "SKIN_COPY_ERROR",
+                format!("无法确定 Skin 文件路径：{error}"),
+            )
+        })?;
         let destination = target.join(relative);
         if entry.file_type().is_dir() {
             fs::create_dir_all(&destination)?;
         } else if entry.file_type().is_file() {
-            if let Some(parent) = destination.parent() { fs::create_dir_all(parent)?; }
+            if let Some(parent) = destination.parent() {
+                fs::create_dir_all(parent)?;
+            }
             fs::copy(entry.path(), &destination)?;
         }
     }
@@ -962,39 +1028,97 @@ fn copy_skin_directory(source: &Path, target: &Path) -> CommandResult<()> {
 }
 
 fn set_skin_name(config: &Path, name: &str) -> CommandResult<()> {
-    let text = fs::read_to_string(config).map_err(|error| CommandError::new("SKIN_CONFIG_WRITE_ERROR", format!("无法读取新 Skin 配置：{error}")))?;
+    let text = fs::read_to_string(config).map_err(|error| {
+        CommandError::new(
+            "SKIN_CONFIG_WRITE_ERROR",
+            format!("无法读取新 Skin 配置：{error}"),
+        )
+    })?;
     let mut in_general = false;
     let mut changed = false;
     let mut lines = Vec::new();
     for line in text.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with('[') && trimmed.ends_with(']') {
-            if in_general && !changed { lines.push(format!("Name: {name}")); changed = true; }
+            if in_general && !changed {
+                lines.push(format!("Name: {name}"));
+                changed = true;
+            }
             in_general = trimmed.eq_ignore_ascii_case("[General]");
         }
-        if in_general && trimmed.split_once(':').is_some_and(|(key, _)| key.trim().eq_ignore_ascii_case("Name")) {
+        if in_general
+            && trimmed
+                .split_once(':')
+                .is_some_and(|(key, _)| key.trim().eq_ignore_ascii_case("Name"))
+        {
             lines.push(format!("Name: {name}"));
             changed = true;
-        } else { lines.push(line.to_string()); }
+        } else {
+            lines.push(line.to_string());
+        }
     }
-    if in_general && !changed { lines.push(format!("Name: {name}")); changed = true; }
-    if !changed { lines.insert(0, "[General]".into()); lines.insert(1, format!("Name: {name}")); }
-    fs::write(config, format!("{}\n", lines.join("\n"))).map_err(|error| CommandError::new("SKIN_CONFIG_WRITE_ERROR", format!("无法更新新 Skin 名称：{error}")))?;
+    if in_general && !changed {
+        lines.push(format!("Name: {name}"));
+        changed = true;
+    }
+    if !changed {
+        lines.insert(0, "[General]".into());
+        lines.insert(1, format!("Name: {name}"));
+    }
+    fs::write(config, format!("{}\n", lines.join("\n"))).map_err(|error| {
+        CommandError::new(
+            "SKIN_CONFIG_WRITE_ERROR",
+            format!("无法更新新 Skin 名称：{error}"),
+        )
+    })?;
     Ok(())
 }
 
 fn replace_file_with_backup(source: &Path, target: &Path) -> CommandResult<()> {
-    let parent = target.parent().ok_or_else(|| CommandError::new("SKIN_REPLACEMENT_WRITE_ERROR", "Skin 资源路径无效"))?;
+    let parent = target
+        .parent()
+        .ok_or_else(|| CommandError::new("SKIN_REPLACEMENT_WRITE_ERROR", "Skin 资源路径无效"))?;
     fs::create_dir_all(parent)?;
-    let temporary = target.with_extension(format!("{}.opp-replace", target.extension().and_then(|value| value.to_str()).unwrap_or("tmp")));
-    let backup = target.with_extension(format!("{}.opp-backup", target.extension().and_then(|value| value.to_str()).unwrap_or("bak")));
-    fs::copy(source, &temporary).map_err(|error| CommandError::new("SKIN_REPLACEMENT_WRITE_ERROR", format!("无法写入替换文件：{error}")))?;
-    if target.exists() { fs::rename(target, &backup).map_err(|error| CommandError::new("SKIN_REPLACEMENT_WRITE_ERROR", format!("无法备份原资源：{error}")))?; }
-    if let Err(error) = fs::rename(&temporary, target) {
-        if backup.exists() { let _ = fs::rename(&backup, target); }
-        return Err(CommandError::new("SKIN_REPLACEMENT_WRITE_ERROR", format!("无法完成资源替换：{error}")));
+    let temporary = target.with_extension(format!(
+        "{}.opp-replace",
+        target
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or("tmp")
+    ));
+    let backup = target.with_extension(format!(
+        "{}.opp-backup",
+        target
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or("bak")
+    ));
+    fs::copy(source, &temporary).map_err(|error| {
+        CommandError::new(
+            "SKIN_REPLACEMENT_WRITE_ERROR",
+            format!("无法写入替换文件：{error}"),
+        )
+    })?;
+    if target.exists() {
+        fs::rename(target, &backup).map_err(|error| {
+            CommandError::new(
+                "SKIN_REPLACEMENT_WRITE_ERROR",
+                format!("无法备份原资源：{error}"),
+            )
+        })?;
     }
-    if backup.exists() { let _ = fs::remove_file(backup); }
+    if let Err(error) = fs::rename(&temporary, target) {
+        if backup.exists() {
+            let _ = fs::rename(&backup, target);
+        }
+        return Err(CommandError::new(
+            "SKIN_REPLACEMENT_WRITE_ERROR",
+            format!("无法完成资源替换：{error}"),
+        ));
+    }
+    if backup.exists() {
+        let _ = fs::remove_file(backup);
+    }
     Ok(())
 }
 

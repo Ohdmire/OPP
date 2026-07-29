@@ -366,17 +366,17 @@ pub fn stop(runtime: &TosuRuntime, app: &AppHandle) -> CommandResult<()> {
     };
     let _ = child.kill();
     let _ = child.wait();
-    if let Ok(mut lyrics) = runtime.lyrics_process.lock() {
-        if let Some(mut child) = lyrics.take() {
-            let _ = child.kill();
-            let _ = child.wait();
-            record(
-                runtime,
-                app,
-                "lyrics:system",
-                "已停止由 OPP 启动的 tosu-lyrics 代理。",
-            );
-        }
+    if let Ok(mut lyrics) = runtime.lyrics_process.lock()
+        && let Some(mut child) = lyrics.take()
+    {
+        let _ = child.kill();
+        let _ = child.wait();
+        record(
+            runtime,
+            app,
+            "lyrics:system",
+            "已停止由 OPP 启动的 tosu-lyrics 代理。",
+        );
     }
     record(runtime, app, "system", "已停止由 OPP 启动的 tosu。");
     Ok(())

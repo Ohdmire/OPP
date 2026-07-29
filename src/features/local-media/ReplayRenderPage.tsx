@@ -3,10 +3,10 @@ import { useSearchParams } from "react-router-dom";
 import { ChevronDown, Copy, ExternalLink, Film, LoaderCircle, Search, SlidersHorizontal, Sparkles } from "lucide-react";
 import { useMode } from "../../app/ModeContext";
 import { ErrorPanel } from "../../shared/components/ErrorPanel";
+import { PageHeader } from "../../shared/components/PageHeader";
 import { Badge, Button, Card, EmptyState, SectionTitle } from "../../shared/components/ui";
 import { desktopApi } from "../../shared/lib/tauri";
 import type { GameMediaItem, ReplayMapInfo, ReplayRenderOptions, ReplayRenderProgress } from "../../shared/types/osu";
-import { MediaSubnav } from "./MediaSubnav";
 
 const defaults: ReplayRenderOptions = {
   resolution: "1280x720", global_volume: 50, music_volume: 50, hitsound_volume: 50,
@@ -75,8 +75,7 @@ export function ReplayRenderPage() {
   const copy = () => progress?.video_url && void navigator.clipboard.writeText(progress.video_url);
 
   return <div className="pb-8">
-    <div className="mb-5 flex items-start justify-between gap-4"><div><p className="text-[11px] uppercase tracking-[0.18em] text-pink-300">o!rdr · rosu-render</p><h1 className="mt-1 text-2xl font-semibold text-white">回放渲染</h1></div><Badge tone="pink">远端渲染</Badge></div>
-    <MediaSubnav />
+    <PageHeader eyebrow="o!rdr · rosu-render" title="回放渲染" description="读取本地回放、校验谱面兼容性，并提交远端视频生成任务。" actions={<Badge tone="pink">远端渲染</Badge>} />
     {error ? <div className="mb-5"><ErrorPanel error={error} onRetry={() => void submit()} /></div> : null}
     <Card className="mb-5 border-amber-300/15 bg-amber-300/[0.045] p-4 text-sm text-amber-100">o!rdr 只接收回放文件并从 osu! 下载谱面。本页仅显示本地库中<strong>已提交的 osu!standard 谱面</strong>；本地未提交谱面、其他模式或没有输入数据的回放无法渲染。</Card>
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">

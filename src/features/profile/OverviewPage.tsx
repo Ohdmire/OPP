@@ -63,16 +63,13 @@ function StatCard({
   tone?: "pink" | "cyan" | "purple" | "green";
 }) {
   const tones = {
-    pink: "from-pink-400/20 text-pink-200",
-    cyan: "from-cyan-300/20 text-cyan-100",
-    purple: "from-violet-400/20 text-violet-200",
-    green: "from-emerald-400/20 text-emerald-200",
+    pink: "border-t-pink-400/70 text-pink-200",
+    cyan: "border-t-cyan-300/70 text-cyan-100",
+    purple: "border-t-violet-400/70 text-violet-200",
+    green: "border-t-emerald-400/70 text-emerald-200",
   };
   return (
-    <Card className="relative overflow-hidden p-5">
-      <div
-        className={`absolute inset-x-0 top-0 h-px bg-gradient-to-r ${tones[tone]} to-transparent`}
-      />
+    <Card className={`relative overflow-hidden border-t-2 p-5 ${tones[tone]}`}>
       <div className="flex items-start justify-between">
         <div>
           <p className="text-xs text-slate-500">{label}</p>
@@ -83,7 +80,7 @@ function StatCard({
             <p className="mt-2 text-[11px] text-slate-600">{helper}</p>
           ) : null}
         </div>
-        <span className={`grid size-9 place-items-center rounded-xl bg-gradient-to-br ${tones[tone]} to-transparent`}>
+        <span className="grid size-9 place-items-center rounded-lg border border-white/[0.08] bg-white/[0.04]">
           <Icon className="size-4" />
         </span>
       </div>
@@ -405,7 +402,7 @@ export function OverviewPage() {
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.05]">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-pink-400 to-violet-400"
+                          className="h-full rounded-full bg-[var(--theme-primary)]"
                     style={{ width: `${Math.max((Number(count) / maxGrade) * 100, 1.5)}%` }}
                   />
                 </div>

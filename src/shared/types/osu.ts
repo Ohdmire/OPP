@@ -37,6 +37,7 @@ export interface OAuthResult {
 
 export interface AppSettings {
   reduce_motion: boolean;
+  similarity_index_directory: string | null;
   beatmap_download_directory: string | null;
   replay_export_directory: string | null;
   tosu_executable_path: string | null;
@@ -49,6 +50,104 @@ export interface AppSettings {
   theme_mode?: ThemeMode;
   launch_tosu_on_game_detect?: boolean;
   game_session_analysis_on_detect?: boolean;
+}
+
+export type SimilarityIndexState =
+  | "unconfigured"
+  | "missing"
+  | "invalid"
+  | "incompatible"
+  | "ready";
+
+export interface SimilarityIndexStatus {
+  state: SimilarityIndexState;
+  directory: string | null;
+  message: string;
+  record_count: number | null;
+  analyzer_version: number | null;
+  normalization_version: number | null;
+  algorithm_id: string | null;
+  data_cutoff_at: number | null;
+}
+
+export interface DifficultyFeatureVector {
+  aim: number;
+  speed: number;
+  reading: number;
+  flashlight: number;
+  overlap: number;
+}
+
+export interface SimilarityBaseFeatures {
+  bpm: number;
+  ar: number;
+  od: number;
+  cs: number;
+  hp: number;
+  length_seconds: number;
+  object_count: number;
+  object_density: number;
+  circle_ratio: number;
+  slider_ratio: number;
+  spinner_ratio: number;
+  max_combo: number;
+}
+
+export interface SimilarityBaseWeights {
+  bpm: number;
+  ar: number;
+  length_seconds: number;
+  object_density: number;
+  circle_ratio: number;
+  slider_ratio: number;
+}
+
+export interface SimilarityFilters {
+  min_ar: number | null;
+  max_ar: number | null;
+  min_bpm: number | null;
+  max_bpm: number | null;
+}
+
+export type SimilaritySource =
+  | { kind: "beatmap_id"; value: string }
+  | { kind: "local_file"; path: string };
+
+export interface SimilarityQueryRequest {
+  source: SimilaritySource;
+  difficulty_weights: DifficultyFeatureVector;
+  base_weights: SimilarityBaseWeights;
+  filters: SimilarityFilters;
+  result_limit: number;
+}
+
+export interface SimilarityBeatmap {
+  beatmap_id: number;
+  beatmapset_id: number;
+  artist: string;
+  title: string;
+  version: string;
+  creator: string;
+  online_url: string;
+  difficulty: DifficultyFeatureVector;
+  base: SimilarityBaseFeatures;
+}
+
+export interface SimilarityTarget extends SimilarityBeatmap {
+  source: "index" | "online" | "local_file";
+  analyzer_version: number;
+  normalization_version: number;
+}
+
+export interface SimilarityResult extends SimilarityBeatmap {
+  final_distance: number;
+  difficulty_distance: number;
+  base_distance: number;
+}
+
+export interface SimilarityQueryResponse {
+  target: SimilarityTarget;
+  results: SimilarityResult[];
 }
 
 export type ThemeColor = "cyan" | "blue" | "violet" | "pink" | "orange" | "green";

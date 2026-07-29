@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckSquare2, ChevronDown, DownloadCloud, Music2, SearchX } from "lucide-react";
+import { CheckSquare2, ChevronDown, DownloadCloud, Music2, SearchX, Volume2 } from "lucide-react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useMode } from "../../app/ModeContext";
 import { ErrorPanel } from "../../shared/components/ErrorPanel";
 import { PageHeader } from "../../shared/components/PageHeader";
@@ -9,8 +10,10 @@ import { useOnlineBeatmapProviderStatus, useOnlineBeatmapsets } from "./api";
 import { BeatmapDownloadPanel } from "./BeatmapDownloadPanel";
 import { BeatmapsetCard } from "./BeatmapsetCard";
 import { BeatmapsetDetailDialog } from "./BeatmapsetDetailDialog";
+import { parseOnlineBeatmapDeepLink } from "./deepLink";
 import { createDefaultSearchQuery, normalizePreviewUrl } from "./filters";
 import { OnlineBeatmapFilters } from "./OnlineBeatmapFilters";
+import { similarityRouteForBeatmap } from "../similar-beatmaps/navigation";
 
 function uniqueBeatmapsets(items: OnlineBeatmapset[]) {
   const seen = new Set<number>();
@@ -18,16 +21,23 @@ function uniqueBeatmapsets(items: OnlineBeatmapset[]) {
 }
 
 function OnlineBeatmapsClient({ ruleset }: { ruleset: Ruleset }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const deepLink = parseOnlineBeatmapDeepLink(searchParams);
   const [draft, setDraft] = useState<OnlineBeatmapSearchQuery>(() => createDefaultSearchQuery(ruleset));
   const [activeQuery, setActiveQuery] = useState<OnlineBeatmapSearchQuery>(() => createDefaultSearchQuery(ruleset));
   const [queue, setQueue] = useState<Map<number, OnlineBeatmapset>>(() => new Map());
-  const [detailId, setDetailId] = useState<number | null>(null);
+  const [manualDetailId, setManualDetailId] = useState<number | null>(null);
+  const detailId = deepLink.beatmapsetId ?? manualDetailId;
   const [playingId, setPlayingId] = useState<number | null>(null);
+  const [previewVolume, setPreviewVolume] = useState(65);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const search = useOnlineBeatmapsets(activeQuery, true);
   const providers = useOnlineBeatmapProviderStatus();
 
   useEffect(() => () => { audioRef.current?.pause(); audioRef.current = null; }, []);
+  useEffect(() => { if (audioRef.current) audioRef.current.volume = previewVolume / 100; }, [previewVolume]);
 
   const items = useMemo(() => uniqueBeatmapsets(search.data?.pages.flatMap((page) => page.beatmapsets ?? []) ?? []), [search.data]);
   const searchSuggestions = useMemo(() => items.flatMap((item) => [
@@ -49,7 +59,7 @@ function OnlineBeatmapsClient({ ruleset }: { ruleset: Ruleset }) {
     }
     audioRef.current?.pause();
     const audio = new Audio(source);
-    audio.volume = 0.65; audio.onended = () => setPlayingId(null); audio.onerror = () => setPlayingId(null);
+    audio.volume = previewVolume / 100; audio.onended = () => setPlayingId(null); audio.onerror = () => setPlayingId(null);
     audioRef.current = audio; setPlayingId(beatmapset.id); audio.play().catch(() => { audioRef.current = null; setPlayingId(null); });
   };
 
@@ -60,6 +70,20 @@ function OnlineBeatmapsClient({ ruleset }: { ruleset: Ruleset }) {
   });
 
   const reset = () => { const next = createDefaultSearchQuery(ruleset); setDraft(next); setActiveQuery(next); };
+  const closeDetail = () => {
+    setManualDetailId(null);
+    const returnTo = location.state?.returnTo;
+    if (typeof returnTo === "string" && returnTo.startsWith("/online/similar")) {
+      navigate(returnTo);
+      return;
+    }
+    if (searchParams.has("beatmapset") || searchParams.has("beatmap")) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("beatmapset");
+      next.delete("beatmap");
+      setSearchParams(next, { replace: true });
+    }
+  };
 
   return <>
     <PageHeader
@@ -69,6 +93,10 @@ function OnlineBeatmapsClient({ ruleset }: { ruleset: Ruleset }) {
       title="在线谱面"
     />
 
+    <div className="mb-5 flex items-center justify-end gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] px-4 py-3 text-sm text-slate-300">
+      <Volume2 className="size-4 text-cyan-200" />
+      <label className="flex items-center gap-3">试听音量 <span className="w-8 text-right font-mono text-slate-200">{previewVolume}%</span><input aria-label="试听音量" className="w-36 accent-cyan-400" max="100" min="0" onChange={(event) => setPreviewVolume(Number(event.target.value))} type="range" value={previewVolume} /></label>
+    </div>
     <div className="space-y-5">
       <OnlineBeatmapFilters loading={search.isFetching && !search.isFetchingNextPage} onChange={setDraft} onReset={reset} onSubmit={() => setActiveQuery({ ...draft, cursor_string: null })} query={draft} suggestions={searchSuggestions} />
       <div className="grid grid-cols-[minmax(0,1fr)_300px] items-start gap-5">
@@ -78,7 +106,7 @@ function OnlineBeatmapsClient({ ruleset }: { ruleset: Ruleset }) {
             <Button disabled={!items.length} onClick={() => setQueue((current) => { const next = new Map(current); items.forEach((item) => { if (!item.availability?.download_disabled) next.set(item.id, item); }); return next; })} size="sm" variant="ghost"><CheckSquare2 className="size-4" />将当前结果全部加入队列</Button>
           </div>
           {search.isLoading ? <div className="space-y-4">{Array.from({ length: 5 }, (_, index) => <Skeleton className="h-44" key={index} />)}</div> : search.error ? <ErrorPanel error={search.error} onRetry={() => search.refetch()} /> : !items.length ? <EmptyState action={<Button onClick={reset}><Music2 className="size-4" />查看近期 Ranked</Button>} description="请放宽筛选条件，或更换内容筛选标签。" icon={<SearchX className="size-5" />} title="没有找到匹配的谱面" /> : <>
-            <div className="space-y-4">{items.map((beatmapset) => <BeatmapsetCard beatmapset={beatmapset} key={beatmapset.id} onOpen={() => setDetailId(beatmapset.id)} onPreview={() => togglePreview(beatmapset)} onSelect={() => toggleQueue(beatmapset)} playing={playingId === beatmapset.id} selected={queue.has(beatmapset.id)} />)}</div>
+            <div className="space-y-4">{items.map((beatmapset) => <BeatmapsetCard beatmapset={beatmapset} key={beatmapset.id} onOpen={() => setManualDetailId(beatmapset.id)} onPreview={() => togglePreview(beatmapset)} onSelect={() => toggleQueue(beatmapset)} playing={playingId === beatmapset.id} selected={queue.has(beatmapset.id)} />)}</div>
             {search.hasNextPage ? <Button className="mt-5 w-full" loading={search.isFetchingNextPage} onClick={() => search.fetchNextPage()}><ChevronDown className="size-4" />加载下一页</Button> : <p className="py-8 text-center text-sm text-slate-600">已到达搜索结果末尾</p>}
           </>}
         </section>
@@ -86,7 +114,7 @@ function OnlineBeatmapsClient({ ruleset }: { ruleset: Ruleset }) {
       </div>
     </div>
 
-    <BeatmapsetDetailDialog beatmapsetId={detailId} fallback={detailFallback} onClose={() => setDetailId(null)} onPreview={togglePreview} playing={detailId !== null && playingId === detailId} />
+    <BeatmapsetDetailDialog beatmapsetId={detailId} fallback={detailFallback} initialBeatmapId={deepLink.beatmapId} key={detailId ?? "closed"} onClose={closeDetail} onFindSimilar={(beatmapId) => navigate(similarityRouteForBeatmap(beatmapId))} onPreview={togglePreview} playing={detailId !== null && playingId === detailId} />
   </>;
 }
 

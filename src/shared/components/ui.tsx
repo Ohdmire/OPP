@@ -5,18 +5,18 @@ import { AlertCircle, CircleHelp, LoaderCircle } from "lucide-react";
 import { cn } from "../lib/cn";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 rounded-xl font-semibold outline-none transition duration-200 focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]/60 disabled:pointer-events-none disabled:opacity-45",
+  "inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg font-semibold outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:pointer-events-none disabled:opacity-45",
   {
     variants: {
       variant: {
         primary:
-          "bg-gradient-to-r from-[var(--theme-primary)] to-[var(--theme-secondary)] px-4 py-2.5 text-white shadow-[0_10px_30px_var(--theme-primary-glow)] hover:brightness-110",
+          "border border-transparent bg-[var(--theme-primary)] px-4 py-2.5 text-[var(--on-primary)] shadow-[0_8px_20px_var(--theme-primary-glow)] hover:bg-[var(--theme-primary-strong)]",
         secondary:
-          "border border-white/10 bg-white/[0.055] px-4 py-2.5 text-slate-100 hover:border-white/20 hover:bg-white/[0.09]",
+          "border border-white/10 bg-white/[0.04] px-4 py-2.5 text-slate-100 hover:border-white/20 hover:bg-white/[0.075]",
         ghost:
           "px-3 py-2 text-slate-300 hover:bg-white/[0.06] hover:text-white",
         danger:
-          "border border-rose-400/20 bg-rose-400/10 px-4 py-2.5 text-rose-200 hover:bg-rose-400/15",
+          "border border-rose-400/25 bg-rose-400/10 px-4 py-2.5 text-rose-200 hover:bg-rose-400/18",
       },
       size: {
         md: "min-h-10 text-sm",
@@ -62,7 +62,7 @@ export function Card({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-white/[0.09] bg-[#101622]/90 shadow-[0_12px_38px_rgba(0,0,0,.14)]",
+        "rounded-xl border border-white/[0.09] bg-[var(--surface-panel)] shadow-[0_10px_28px_rgba(0,0,0,.12)]",
         className,
       )}
       {...props}
@@ -89,7 +89,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-wide",
+        "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em]",
         tones[tone],
         className,
       )}
@@ -124,10 +124,10 @@ export function EmptyState({
   return (
     <Card className="grid min-h-64 place-items-center p-8 text-center">
       <div className="max-w-md">
-        <div className="mx-auto mb-4 grid size-12 place-items-center rounded-2xl border border-white/10 bg-white/[0.055] text-cyan-200">
+        <div className="mx-auto mb-4 grid size-11 place-items-center rounded-lg border border-white/10 bg-white/[0.04] text-[var(--theme-primary)]">
           {icon ?? <AlertCircle className="size-5" />}
         </div>
-        <h3 className="text-lg font-semibold text-white">{title}</h3>
+        <h3 className="text-base font-semibold text-white">{title}</h3>
         <p className="mt-2 text-sm leading-6 text-slate-300">{description}</p>
         {action ? <div className="mt-5">{action}</div> : null}
       </div>
@@ -163,7 +163,7 @@ export function SectionTitle({
   return (
     <div>
       <div className="flex items-center gap-2">
-        <h2 className="text-lg font-semibold tracking-tight text-white">{title}</h2>
+        <h2 className="text-base font-semibold tracking-tight text-white">{title}</h2>
         {description ? <InfoTip text={description} /> : null}
       </div>
     </div>

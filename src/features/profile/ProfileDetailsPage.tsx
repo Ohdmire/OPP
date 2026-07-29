@@ -335,7 +335,7 @@ function HonoursTab({ profile }: { profile: OwnProfile }) {
           <div className="mt-5 grid grid-cols-3 gap-3">
             {profile.user_achievements.map((achievement, index) => (
               <div
-                className="rounded-xl border border-white/[0.06] bg-gradient-to-br from-yellow-300/[0.07] to-transparent p-4"
+                className="rounded-xl border border-yellow-300/[0.12] bg-yellow-300/[0.045] p-4"
                 key={String(achievement.achievement_id ?? index)}
               >
                 <Medal className="size-5 text-yellow-200" />

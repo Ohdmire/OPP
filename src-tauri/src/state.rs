@@ -12,6 +12,7 @@ use crate::{
     local_analysis::LocalAnalysisService,
     online_beatmaps::providers::ProviderRegistry,
     osu_api::OsuApi,
+    similarity::SimilarityRuntime,
     storage::StateStore,
     tosu::TosuRuntime,
 };
@@ -28,6 +29,7 @@ pub struct AppState {
     pub avatar_cache: AvatarCache,
     pub credentials: CredentialStore,
     pub local_analysis: Arc<LocalAnalysisService>,
+    pub similarity: Arc<SimilarityRuntime>,
     pub store: StateStore,
     pub oauth: Mutex<OAuthRuntime>,
     pub beatmap_download: Mutex<Option<Arc<AtomicBool>>>,
@@ -45,6 +47,7 @@ impl AppState {
             avatar_cache: AvatarCache::new(app_data_dir)?,
             credentials: CredentialStore,
             local_analysis: Arc::new(LocalAnalysisService::new(app_data_dir)?),
+            similarity: Arc::new(SimilarityRuntime::default()),
             store: StateStore::load(app_data_dir)?,
             oauth: Mutex::new(OAuthRuntime::default()),
             beatmap_download: Mutex::new(None),
