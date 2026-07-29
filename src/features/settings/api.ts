@@ -21,6 +21,7 @@ export function useSettings() {
       theme_mode: "dark" as const,
       launch_tosu_on_game_detect: false,
       game_session_analysis_on_detect: true,
+      preview_volume: 65,
     }),
     staleTime: Infinity,
     retry: false,

@@ -7,6 +7,7 @@ import {
   Gamepad2,
   RotateCcw,
   Trash2,
+  Volume2,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMode } from "../../app/ModeContext";
@@ -61,6 +62,7 @@ const base: AppSettings = {
   theme_mode: "dark",
   launch_tosu_on_game_detect: false,
   game_session_analysis_on_detect: true,
+  preview_volume: 65,
 };
 
 function Toggle({
@@ -227,6 +229,24 @@ export function SettingsPage() {
               })}
             </div>
           </Card>
+
+          <Card className="p-6">
+            <SectionTitle title="试听" description="适用于在线谱面和相似谱面结果的音频试听。" />
+            <label className="mt-5 flex items-center gap-3 rounded-xl border border-white/[0.1] bg-white/[0.035] p-4">
+              <Volume2 className="size-5 text-[var(--theme-primary)]" />
+              <span className="flex-1 font-semibold text-slate-100">试听音量</span>
+              <span className="w-10 text-right font-mono text-sm text-slate-300">{settings.preview_volume}%</span>
+              <input
+                aria-label="试听音量"
+                className="w-36 accent-[var(--theme-primary)]"
+                max="100"
+                min="0"
+                onChange={(event) => void save({ ...settings, preview_volume: Number(event.target.value) })}
+                type="range"
+                value={settings.preview_volume}
+              />
+            </label>
+          </Card>
         </div>
 
         <div className="space-y-5">
@@ -281,9 +301,30 @@ export function SettingsPage() {
               <Button disabled={busy} onClick={() => void desktopApi.clearProfileCache()}>
                 <Trash2 className="size-4" />清除缓存
               </Button>
-              <Button onClick={() => void chooseDownloadDirectory()} variant="secondary">
-                <FolderOpen className="size-4" />谱面下载目录
-              </Button>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <SectionTitle
+              title="默认谱面下载位置"
+              description="相似谱面和在线谱面的下载会直接保存到这里；你仍可随时修改位置。"
+            />
+            <div className="mt-5 rounded-xl border border-white/[0.1] bg-white/[0.035] p-4">
+              <p className="text-xs text-slate-500">当前默认位置</p>
+              <p className="mt-1 break-all text-sm text-slate-200">
+                {settings.beatmap_download_directory ?? "尚未设置；首次下载时会询问保存位置。"}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button onClick={() => void chooseDownloadDirectory()} size="sm" variant="secondary">
+                  <FolderOpen className="size-4" />
+                  {settings.beatmap_download_directory ? "修改位置" : "选择位置"}
+                </Button>
+                {settings.beatmap_download_directory ? (
+                  <Button onClick={() => void save({ ...settings, beatmap_download_directory: null })} size="sm" variant="ghost">
+                    清除默认位置
+                  </Button>
+                ) : null}
+              </div>
             </div>
           </Card>
 

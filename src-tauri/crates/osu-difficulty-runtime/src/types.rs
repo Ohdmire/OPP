@@ -182,11 +182,20 @@ impl Default for BaseFeatureWeights {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct QueryFilters {
     pub min_ar: Option<f32>,
     pub max_ar: Option<f32>,
     pub min_bpm: Option<f32>,
     pub max_bpm: Option<f32>,
+    pub min_length_seconds: Option<f32>,
+    pub max_length_seconds: Option<f32>,
+    pub min_object_density: Option<f32>,
+    pub max_object_density: Option<f32>,
+    pub min_circle_ratio: Option<f32>,
+    pub max_circle_ratio: Option<f32>,
+    pub min_slider_ratio: Option<f32>,
+    pub max_slider_ratio: Option<f32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

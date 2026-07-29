@@ -50,6 +50,7 @@ export interface AppSettings {
   theme_mode?: ThemeMode;
   launch_tosu_on_game_detect?: boolean;
   game_session_analysis_on_detect?: boolean;
+  preview_volume?: number;
 }
 
 export type SimilarityIndexState =
@@ -107,6 +108,14 @@ export interface SimilarityFilters {
   max_ar: number | null;
   min_bpm: number | null;
   max_bpm: number | null;
+  min_length_seconds: number | null;
+  max_length_seconds: number | null;
+  min_object_density: number | null;
+  max_object_density: number | null;
+  min_circle_ratio: number | null;
+  max_circle_ratio: number | null;
+  min_slider_ratio: number | null;
+  max_slider_ratio: number | null;
 }
 
 export type SimilaritySource =

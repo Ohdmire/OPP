@@ -4,10 +4,10 @@ import { isTauri } from "../lib/tauri";
 
 async function windowAction(action: "minimize" | "maximize" | "close") {
   if (!isTauri()) return;
-  const window = getCurrentWindow();
-  if (action === "minimize") await window.minimize();
-  if (action === "maximize") await window.toggleMaximize();
-  if (action === "close") await window.close();
+  const appWindow = getCurrentWindow();
+  if (action === "minimize") await appWindow.hide();
+  if (action === "maximize") await appWindow.toggleMaximize();
+  if (action === "close") window.dispatchEvent(new Event("opp:request-close"));
 }
 
 export function TitleBar() {

@@ -14,8 +14,8 @@ use space::{Metric, Neighbor};
 use thiserror::Error;
 
 use crate::{
-    ANALYZER_ALGORITHM_ID, ANALYZER_VERSION, Analyzer, AnalyzerConfig, BaseFeatureWeights,
-    BaseFeatures, BeatmapFeatureRecord, BeatmapMetadata, DatasetInfo, DifficultyVector,
+    ANALYZER_ALGORITHM_ID, ANALYZER_VERSION, Analyzer, AnalyzerConfig, BaseFeatures,
+    BeatmapFeatureRecord, BeatmapMetadata, DatasetInfo, DifficultyVector,
     DifficultyWeights, OVERLAP_ALGORITHM_VERSION, QueryFilters, QueryOptions, QueryResult,
     QueryTarget, READING_ALGORITHM_VERSION, ROSU_PP_VERSION,
 };
@@ -301,14 +301,12 @@ impl Dataset {
                 candidate.difficulty,
                 options.difficulty_weights,
             );
-            let base_distance =
-                base_distance(target.record.base, candidate.base, options.base_weights);
             scored.push((
                 beatmap_id,
                 candidate,
-                0.8 * difficulty_distance + 0.2 * base_distance,
                 difficulty_distance,
-                base_distance,
+                difficulty_distance,
+                0.0,
             ));
         }
         scored.sort_by(|left, right| {
@@ -539,19 +537,12 @@ fn validate_options(options: &QueryOptions) -> Result<(), RuntimeError> {
         ));
     }
     let difficulty = options.difficulty_weights;
-    let base = options.base_weights;
     let weights = [
         difficulty.aim,
         difficulty.speed,
         difficulty.reading,
         difficulty.flashlight,
         difficulty.overlap,
-        base.bpm,
-        base.ar,
-        base.length_seconds,
-        base.object_density,
-        base.circle_ratio,
-        base.slider_ratio,
     ];
     if weights
         .iter()
@@ -570,6 +561,30 @@ fn matches_filters(base: BaseFeatures, filters: &QueryFilters) -> bool {
         && filters.max_ar.is_none_or(|value| base.ar <= value)
         && filters.min_bpm.is_none_or(|value| base.bpm >= value)
         && filters.max_bpm.is_none_or(|value| base.bpm <= value)
+        && filters
+            .min_length_seconds
+            .is_none_or(|value| base.length_seconds >= value)
+        && filters
+            .max_length_seconds
+            .is_none_or(|value| base.length_seconds <= value)
+        && filters
+            .min_object_density
+            .is_none_or(|value| base.object_density >= value)
+        && filters
+            .max_object_density
+            .is_none_or(|value| base.object_density <= value)
+        && filters
+            .min_circle_ratio
+            .is_none_or(|value| base.circle_ratio >= value)
+        && filters
+            .max_circle_ratio
+            .is_none_or(|value| base.circle_ratio <= value)
+        && filters
+            .min_slider_ratio
+            .is_none_or(|value| base.slider_ratio >= value)
+        && filters
+            .max_slider_ratio
+            .is_none_or(|value| base.slider_ratio <= value)
 }
 
 fn difficulty_distance(
@@ -591,19 +606,6 @@ fn difficulty_distance(
         .map(|((left, right), weight)| weight * (left - right).powi(2))
         .sum::<f32>()
         .sqrt()
-}
-
-fn robust(left: f32, right: f32, scale: f32) -> f32 {
-    ((left - right).abs() / scale).min(1.0)
-}
-
-fn base_distance(left: BaseFeatures, right: BaseFeatures, weights: BaseFeatureWeights) -> f32 {
-    weights.bpm * robust(left.bpm, right.bpm, 300.0)
-        + weights.ar * robust(left.ar, right.ar, 10.0)
-        + weights.length_seconds * robust(left.length_seconds, right.length_seconds, 300.0)
-        + weights.object_density * robust(left.object_density, right.object_density, 10.0)
-        + weights.circle_ratio * (left.circle_ratio - right.circle_ratio).abs()
-        + weights.slider_ratio * (left.slider_ratio - right.slider_ratio).abs()
 }
 
 #[cfg(test)]
@@ -783,6 +785,9 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![20, 30]
         );
+        assert!(results.iter().all(|result| {
+            result.final_distance == result.difficulty_distance && result.base_distance == 0.0
+        }));
         assert!(!directory.path().join("metadata.sqlite-wal").exists());
         assert!(!directory.path().join("metadata.sqlite-shm").exists());
     }

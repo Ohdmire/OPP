@@ -9,6 +9,8 @@ import { errorMessage } from "../../shared/lib/format";
 import { settingsQueryKey, useSettings } from "../settings/api";
 import { desktopApi } from "../../shared/lib/tauri";
 import type {
+  SimilarityBaseFeatures,
+  SimilarityFilters,
   SimilarityIndexStatus,
   SimilarityQueryRequest,
   SimilarityQueryResponse,
@@ -18,14 +20,16 @@ import {
   useSimilarityIndexStatus,
   useSimilarityQuery,
 } from "./api";
-import { createSimilarityRequest } from "./defaults";
+import { createSimilarityRequest, defaultSimilarityFilters } from "./defaults";
 import { SimilarityAdvancedPanel } from "./SimilarityAdvancedPanel";
+import { SimilarityFilterSliders } from "./SimilarityFilterSliders";
 import { SimilarityRadar } from "./SimilarityRadar";
 import { SimilarityResultCard } from "./SimilarityResultCard";
 import {
   onlineBeatmapRouteForSimilarityResult,
   parseSimilarityLaunch,
 } from "./navigation";
+import { normalizePreviewUrl } from "../online-beatmaps/filters";
 
 const DIFFICULTY_DIMENSIONS = [
   ["aim", "Aim"],
@@ -34,6 +38,23 @@ const DIFFICULTY_DIMENSIONS = [
   ["flashlight", "Flashlight"],
   ["overlap", "Overlap"],
 ] as const;
+
+function matchesCandidateFilters(base: SimilarityBaseFeatures, filters: SimilarityFilters) {
+  return (
+    (filters.min_ar == null || base.ar >= filters.min_ar) &&
+    (filters.max_ar == null || base.ar <= filters.max_ar) &&
+    (filters.min_bpm == null || base.bpm >= filters.min_bpm) &&
+    (filters.max_bpm == null || base.bpm <= filters.max_bpm) &&
+    (filters.min_length_seconds == null || base.length_seconds >= filters.min_length_seconds) &&
+    (filters.max_length_seconds == null || base.length_seconds <= filters.max_length_seconds) &&
+    (filters.min_object_density == null || base.object_density >= filters.min_object_density) &&
+    (filters.max_object_density == null || base.object_density <= filters.max_object_density) &&
+    (filters.min_circle_ratio == null || base.circle_ratio >= filters.min_circle_ratio) &&
+    (filters.max_circle_ratio == null || base.circle_ratio <= filters.max_circle_ratio) &&
+    (filters.min_slider_ratio == null || base.slider_ratio >= filters.min_slider_ratio) &&
+    (filters.max_slider_ratio == null || base.slider_ratio <= filters.max_slider_ratio)
+  );
+}
 
 interface SimilaritySession {
   request: SimilarityQueryRequest;
@@ -134,6 +155,9 @@ export function SimilarBeatmapsPage() {
   const [configurationError, setConfigurationError] = useState<string | null>(null);
   const [quickDownloadId, setQuickDownloadId] = useState<number | null>(null);
   const [quickDownloadDirectory, setQuickDownloadDirectory] = useState<string | null>(null);
+  const [downloadNotice, setDownloadNotice] = useState<string | null>(null);
+  const [playingId, setPlayingId] = useState<number | null>(null);
+  const [previewLoadingId, setPreviewLoadingId] = useState<number | null>(null);
   const [response, setResponse] = useState<SimilarityQueryResponse | null>(
     () => similaritySession?.response ?? null,
   );
@@ -142,16 +166,23 @@ export function SimilarBeatmapsPage() {
   );
   const handledLaunch = useRef<string | null>(null);
   const restoreScrollY = useRef(similaritySession?.scrollY ?? null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const previewVolume = settings.data?.preview_volume ?? 65;
+
+  const filteredResults = useMemo(
+    () => response?.results.filter((result) => matchesCandidateFilters(result.base, request.filters)) ?? [],
+    [request.filters, response],
+  );
 
   const selected = useMemo(() => {
-    if (!response?.results.length) return null;
-    if (!selectedResultId) return response.results[0];
+    if (!filteredResults.length) return null;
+    if (!selectedResultId) return filteredResults[0];
     return (
-      response.results.find(
+      filteredResults.find(
         (result) => result.beatmap_id === selectedResultId,
-      ) ?? response.results[0]
+      ) ?? filteredResults[0]
     );
-  }, [response, selectedResultId]);
+  }, [filteredResults, selectedResultId]);
 
   const status =
     statusQuery.data ??
@@ -182,6 +213,15 @@ export function SimilarBeatmapsPage() {
     const frame = window.requestAnimationFrame(() => window.scrollTo(0, scrollY));
     return () => window.cancelAnimationFrame(frame);
   }, []);
+
+  useEffect(() => () => {
+    audioRef.current?.pause();
+    audioRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = previewVolume / 100;
+  }, [previewVolume]);
 
   useEffect(() => {
     const launch = parseSimilarityLaunch(searchParams);
@@ -259,12 +299,20 @@ export function SimilarBeatmapsPage() {
       destination = await desktopApi.chooseBeatmapDownloadDirectory(null) ?? "";
       if (!destination) return;
       setQuickDownloadDirectory(destination);
+      if (settings.data) {
+        const saved = await desktopApi.updateSettings({
+          ...settings.data,
+          beatmap_download_directory: destination,
+        });
+        queryClient.setQueryData(settingsQueryKey, saved);
+      }
     }
 
     setConfigurationError(null);
+    setDownloadNotice(null);
     setQuickDownloadId(result.beatmap_id);
     try {
-      await desktopApi.downloadOnlineBeatmapsets({
+      const downloaded = await desktopApi.downloadOnlineBeatmapsets({
         destination,
         provider: "catboy",
         overwrite: false,
@@ -276,6 +324,11 @@ export function SimilarBeatmapsPage() {
           },
         ],
       });
+      setDownloadNotice(
+        downloaded.completed > 0
+          ? `已下载 ${downloaded.completed} 个谱面集到：${downloaded.destination}`
+          : `下载已处理；保存位置：${downloaded.destination}`,
+      );
     } catch (error) {
       setConfigurationError(errorMessage(error));
     } finally {
@@ -296,6 +349,36 @@ export function SimilarBeatmapsPage() {
     });
   }
 
+  async function togglePreview(result: SimilarityQueryResponse["results"][number]) {
+    if (playingId === result.beatmap_id && audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+      setPlayingId(null);
+      return;
+    }
+
+    setPreviewLoadingId(result.beatmap_id);
+    try {
+      const beatmapset = await desktopApi.getOnlineBeatmapset(result.beatmapset_id);
+      const source = normalizePreviewUrl(beatmapset.preview_url);
+      if (!source) return;
+      audioRef.current?.pause();
+      const audio = new Audio(source);
+      audio.volume = previewVolume / 100;
+      audio.onended = () => setPlayingId(null);
+      audio.onerror = () => setPlayingId(null);
+      audioRef.current = audio;
+      setPlayingId(result.beatmap_id);
+      await audio.play();
+    } catch (error) {
+      setConfigurationError(errorMessage(error));
+      audioRef.current = null;
+      setPlayingId(null);
+    } finally {
+      setPreviewLoadingId(null);
+    }
+  }
+
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value =
@@ -307,6 +390,7 @@ export function SimilarBeatmapsPage() {
     setResponse(null);
     similarityQuery.mutate({
       ...request,
+      filters: { ...defaultSimilarityFilters },
       source:
         request.source.kind === "beatmap_id"
           ? { kind: "beatmap_id", value }
@@ -337,6 +421,12 @@ export function SimilarBeatmapsPage() {
       {configurationError ? (
         <div className="mb-5 rounded-xl border border-rose-300/20 bg-rose-300/10 px-4 py-3 text-sm text-rose-100">
           {configurationError}
+        </div>
+      ) : null}
+
+      {downloadNotice ? (
+        <div className="mb-5 rounded-xl border border-emerald-300/20 bg-emerald-300/10 px-4 py-3 text-sm text-emerald-100">
+          {downloadNotice}
         </div>
       ) : null}
 
@@ -480,6 +570,8 @@ export function SimilarBeatmapsPage() {
           </form>
           </Card>
 
+          <SimilarityFilterSliders request={request} onChange={setRequest} />
+
           {similarityQuery.error ? (
             <div className="mb-5 rounded-xl border border-rose-300/20 bg-rose-300/10 px-4 py-3 text-sm text-rose-100">
               {errorMessage(similarityQuery.error)}
@@ -508,14 +600,14 @@ export function SimilarBeatmapsPage() {
                 <div className="mb-3 flex items-end justify-between">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">推荐结果</span>
-                    <h2 className="mt-1 text-base font-semibold text-white">{response.results.length} 个相似谱面集</h2>
+                    <h2 className="mt-1 text-base font-semibold text-white">{filteredResults.length} 个相似谱面集</h2>
                   </div>
                   <span className="text-xs text-slate-500">距离越低越相似</span>
                 </div>
 
-                {response.results.length ? (
+                {filteredResults.length ? (
                   <div className="space-y-3">
-                    {response.results.map((result, index) => (
+                    {filteredResults.map((result, index) => (
                       <SimilarityResultCard
                         key={result.beatmap_id}
                         rank={index + 1}
@@ -526,6 +618,9 @@ export function SimilarBeatmapsPage() {
                         downloading={quickDownloadId === result.beatmap_id}
                         downloadDisabled={quickDownloadId !== null}
                         onOpen={() => openOnlineBeatmap(result)}
+                        onPreview={() => void togglePreview(result)}
+                        playing={playingId === result.beatmap_id}
+                        previewLoading={previewLoadingId === result.beatmap_id}
                       />
                     ))}
                   </div>
@@ -538,7 +633,8 @@ export function SimilarBeatmapsPage() {
               </div>
 
               {selected ? (
-                <Card className="sticky top-16 p-5">
+                <aside className="sticky top-[120px] self-start">
+                <Card className="max-h-[calc(100vh-140px)] overflow-y-auto p-5">
                   <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--theme-primary)]">特征对比</span>
                   <h2 className="mt-2 text-base font-semibold text-white">{selected.version}</h2>
                   <p className="mt-1 truncate text-xs text-slate-400">
@@ -577,7 +673,7 @@ export function SimilarBeatmapsPage() {
                       );
                     })}
                   </div>
-                  <div className="mb-5 grid grid-cols-3 gap-2">
+                  <div className="mb-5 grid grid-cols-2 gap-2">
                     <div className="rounded-lg border border-white/[0.07] bg-black/10 p-3">
                       <span className="block text-[10px] text-slate-500">最终距离</span>
                       <strong className="mt-1 block font-mono text-sm text-white">{selected.final_distance.toFixed(4)}</strong>
@@ -585,10 +681,6 @@ export function SimilarBeatmapsPage() {
                     <div className="rounded-lg border border-white/[0.07] bg-black/10 p-3">
                       <span className="block text-[10px] text-slate-500">难度距离</span>
                       <strong className="mt-1 block font-mono text-sm text-white">{selected.difficulty_distance.toFixed(4)}</strong>
-                    </div>
-                    <div className="rounded-lg border border-white/[0.07] bg-black/10 p-3">
-                      <span className="block text-[10px] text-slate-500">基础距离</span>
-                      <strong className="mt-1 block font-mono text-sm text-white">{selected.base_distance.toFixed(4)}</strong>
                     </div>
                   </div>
                   <Button
@@ -600,6 +692,7 @@ export function SimilarBeatmapsPage() {
                     在在线谱面中查看
                   </Button>
                 </Card>
+                </aside>
               ) : null}
             </section>
           ) : null}

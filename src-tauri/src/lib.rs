@@ -39,7 +39,10 @@ use pp_calc::calculate_beatmap_pp;
 use replay_render::submit_replay_render;
 use similarity::{configure_similarity_index, get_similarity_index_status, query_similar_beatmaps};
 use state::AppState;
-use tauri::Manager;
+use tauri::{
+    Manager,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+};
 use tools::{
     convert_mania_beatmaps, get_default_file_clients, open_local_resource_in_explorer,
     set_default_file_client,
@@ -48,6 +51,11 @@ use tosu::{
     get_tosu_logs, get_tosu_status, set_tosu_executable, set_tosu_lyrics_executable, start_tosu,
     stop_tosu,
 };
+
+#[tauri::command]
+fn exit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -63,6 +71,28 @@ pub fn run() {
                 state.game_monitor.clone(),
                 app.handle().clone(),
             );
+            let icon = app
+                .default_window_icon()
+                .expect("application bundle must include an icon")
+                .clone();
+            TrayIconBuilder::with_id("opp-tray")
+                .icon(icon)
+                .tooltip("OPP")
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        if let Some(window) = tray.app_handle().get_webview_window("main") {
+                            let _ = window.unminimize();
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -124,6 +154,7 @@ pub fn run() {
             set_tosu_lyrics_executable,
             start_tosu,
             stop_tosu,
+            exit_app,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run OPP");

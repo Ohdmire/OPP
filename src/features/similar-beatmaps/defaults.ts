@@ -15,12 +15,12 @@ export const defaultDifficultyWeights: DifficultyFeatureVector = {
 };
 
 export const defaultBaseWeights: SimilarityBaseWeights = {
-  bpm: 0.15,
-  ar: 0.15,
-  length_seconds: 0.1,
-  object_density: 0.25,
-  circle_ratio: 0.15,
-  slider_ratio: 0.2,
+  bpm: 0,
+  ar: 0,
+  length_seconds: 0,
+  object_density: 0,
+  circle_ratio: 0,
+  slider_ratio: 0,
 };
 
 export const defaultSimilarityFilters: SimilarityFilters = {
@@ -28,6 +28,14 @@ export const defaultSimilarityFilters: SimilarityFilters = {
   max_ar: null,
   min_bpm: null,
   max_bpm: null,
+  min_length_seconds: null,
+  max_length_seconds: null,
+  min_object_density: null,
+  max_object_density: null,
+  min_circle_ratio: null,
+  max_circle_ratio: null,
+  min_slider_ratio: null,
+  max_slider_ratio: null,
 };
 
 export function createSimilarityRequest(

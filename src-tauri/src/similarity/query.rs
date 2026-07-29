@@ -32,20 +32,41 @@ pub fn options_from_request(request: &SimilarityQueryRequest) -> CommandResult<Q
         1000.0,
         "BPM",
     )?;
+    validate_range(
+        request.filters.min_length_seconds,
+        request.filters.max_length_seconds,
+        0.0,
+        7200.0,
+        "length",
+    )?;
+    validate_range(
+        request.filters.min_object_density,
+        request.filters.max_object_density,
+        0.0,
+        100.0,
+        "object density",
+    )?;
+    validate_range(
+        request.filters.min_circle_ratio,
+        request.filters.max_circle_ratio,
+        0.0,
+        1.0,
+        "circle ratio",
+    )?;
+    validate_range(
+        request.filters.min_slider_ratio,
+        request.filters.max_slider_ratio,
+        0.0,
+        1.0,
+        "slider ratio",
+    )?;
     let difficulty = request.difficulty_weights;
-    let base = request.base_weights;
     let weights = [
         difficulty.aim,
         difficulty.speed,
         difficulty.reading,
         difficulty.flashlight,
         difficulty.overlap,
-        base.bpm,
-        base.ar,
-        base.length_seconds,
-        base.object_density,
-        base.circle_ratio,
-        base.slider_ratio,
     ];
     if weights
         .iter()
@@ -169,7 +190,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_zero_weights() {
+    fn rejects_zero_difficulty_weights() {
         let mut request = request();
         request.difficulty_weights = DifficultyWeights {
             aim: 0.0,
@@ -177,14 +198,6 @@ mod tests {
             reading: 0.0,
             flashlight: 0.0,
             overlap: 0.0,
-        };
-        request.base_weights = BaseFeatureWeights {
-            bpm: 0.0,
-            ar: 0.0,
-            length_seconds: 0.0,
-            object_density: 0.0,
-            circle_ratio: 0.0,
-            slider_ratio: 0.0,
         };
         assert!(options_from_request(&request).is_err());
     }

@@ -272,6 +272,34 @@ select option {
   color: #b9c0d2;
 }
 
+/* osu!-inspired difficulty spectrum. The light-mode values are deliberately
+   darker so the same levels remain readable against white surfaces. */
+.metric-value {
+  font-family: "Bahnschrift", "Aptos Display", "Segoe UI Variable Display", "Segoe UI Variable Text", sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-weight: 620;
+  letter-spacing: 0.015em;
+  line-height: 1.15;
+}
+.metric-tone-muted { color: var(--text-muted); }
+.metric-tone-0 { color: #4290fb; }
+.metric-tone-1 { color: #4fc0ff; }
+.metric-tone-2 { color: #4fffd5; }
+.metric-tone-3 { color: #7cff4f; }
+.metric-tone-4 { color: #f6f05c; }
+.metric-tone-5 { color: #ff8068; }
+.metric-tone-6 { color: #ff4e6f; }
+.metric-tone-7 { color: #c645b8; }
+
+:root[data-theme-mode="light"] .metric-tone-0 { color: #1d4ed8; }
+:root[data-theme-mode="light"] .metric-tone-1 { color: #0369a1; }
+:root[data-theme-mode="light"] .metric-tone-2 { color: #0f766e; }
+:root[data-theme-mode="light"] .metric-tone-3 { color: #3f6212; }
+:root[data-theme-mode="light"] .metric-tone-4 { color: #a16207; }
+:root[data-theme-mode="light"] .metric-tone-5 { color: #c2410c; }
+:root[data-theme-mode="light"] .metric-tone-6 { color: #be123c; }
+:root[data-theme-mode="light"] .metric-tone-7 { color: #86198f; }
+
 .profile-html {
   color: #cbd5e1;
   font-size: 14px;

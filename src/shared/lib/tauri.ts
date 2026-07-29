@@ -146,7 +146,7 @@ function browserPreviewValue<T>(command: string, args?: Record<string, unknown>)
     } as T;
   }
   if (command === "update_settings") return args?.settings as T;
-  if (["clear_profile_cache", "set_default_file_client", "set_local_source", "reset_local_source", "start_tosu", "stop_tosu", "set_tosu_executable", "set_tosu_lyrics_executable", "cancel_online_beatmap_download"].includes(command)) return null as T;
+  if (["clear_profile_cache", "set_default_file_client", "set_local_source", "reset_local_source", "start_tosu", "stop_tosu", "set_tosu_executable", "set_tosu_lyrics_executable", "cancel_online_beatmap_download", "exit_app"].includes(command)) return null as T;
   return undefined;
 }
 
@@ -190,6 +190,7 @@ export const desktopApi = {
     call<BeatmapDownloadResult>("download_online_beatmapsets", { request }),
   cancelOnlineBeatmapDownload: () =>
     call<void>("cancel_online_beatmap_download"),
+  exitApp: () => call<void>("exit_app"),
   clearProfileCache: () => call<void>("clear_profile_cache"),
   getSettings: () => call<AppSettings>("get_settings"),
   updateSettings: (settings: AppSettings) =>

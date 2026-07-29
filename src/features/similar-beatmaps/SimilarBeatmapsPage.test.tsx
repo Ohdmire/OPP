@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -212,5 +212,22 @@ describe("SimilarBeatmapsPage", () => {
       "D:/maps/reference.osu",
     );
     expect(screen.getByRole("button", { name: "查找相似谱面" })).toBeEnabled();
+  });
+
+  it("applies range sliders to the recalled candidate batch without changing the query", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(desktopApi, "getSimilarityIndexStatus").mockResolvedValue(ready);
+    const query = vi.spyOn(desktopApi, "querySimilarBeatmaps").mockResolvedValue(response);
+
+    renderPage();
+    await user.click(await screen.findByRole("tab", { name: "ID / 链接" }));
+    await user.type(await screen.findByLabelText("Beatmap ID 或 osu! 链接"), "10");
+    await user.click(screen.getByRole("button", { name: "查找相似谱面" }));
+    expect(await screen.findByText("Signal - Candidate")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("BPM 最低"), { target: { value: "400" } });
+
+    expect(screen.queryByText("Signal - Candidate")).not.toBeInTheDocument();
+    expect(query).toHaveBeenCalledTimes(1);
   });
 });

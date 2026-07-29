@@ -122,7 +122,7 @@ pub struct Cached<T> {
     pub stale: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
     #[serde(default)]
     pub reduce_motion: bool,
@@ -152,6 +152,8 @@ pub struct AppSettings {
     pub launch_tosu_on_game_detect: bool,
     #[serde(default)]
     pub game_session_analysis_on_detect: bool,
+    #[serde(default = "default_preview_volume")]
+    pub preview_volume: u8,
 }
 
 fn default_tosu_api_base_url() -> String {
@@ -172,6 +174,32 @@ fn default_theme_secondary() -> String {
 
 fn default_theme_mode() -> String {
     "dark".into()
+}
+
+fn default_preview_volume() -> u8 {
+    65
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            reduce_motion: false,
+            similarity_index_directory: None,
+            beatmap_download_directory: None,
+            replay_export_directory: None,
+            tosu_executable_path: None,
+            tosu_api_base_url: default_tosu_api_base_url(),
+            launch_tosu_with_game: false,
+            tosu_lyrics_executable_path: None,
+            launch_tosu_lyrics_with_tosu: default_launch_tosu_lyrics(),
+            theme_primary: default_theme_primary(),
+            theme_secondary: default_theme_secondary(),
+            theme_mode: default_theme_mode(),
+            launch_tosu_on_game_detect: false,
+            game_session_analysis_on_detect: false,
+            preview_volume: default_preview_volume(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

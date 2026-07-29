@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckSquare2, ChevronDown, DownloadCloud, Music2, SearchX, Volume2 } from "lucide-react";
+import { CheckSquare2, ChevronDown, DownloadCloud, Music2, SearchX } from "lucide-react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useMode } from "../../app/ModeContext";
 import { ErrorPanel } from "../../shared/components/ErrorPanel";
@@ -14,6 +14,7 @@ import { parseOnlineBeatmapDeepLink } from "./deepLink";
 import { createDefaultSearchQuery, normalizePreviewUrl } from "./filters";
 import { OnlineBeatmapFilters } from "./OnlineBeatmapFilters";
 import { similarityRouteForBeatmap } from "../similar-beatmaps/navigation";
+import { useSettings } from "../settings/api";
 
 function uniqueBeatmapsets(items: OnlineBeatmapset[]) {
   const seen = new Set<number>();
@@ -31,10 +32,11 @@ function OnlineBeatmapsClient({ ruleset }: { ruleset: Ruleset }) {
   const [manualDetailId, setManualDetailId] = useState<number | null>(null);
   const detailId = deepLink.beatmapsetId ?? manualDetailId;
   const [playingId, setPlayingId] = useState<number | null>(null);
-  const [previewVolume, setPreviewVolume] = useState(65);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const search = useOnlineBeatmapsets(activeQuery, true);
   const providers = useOnlineBeatmapProviderStatus();
+  const settings = useSettings();
+  const previewVolume = settings.data?.preview_volume ?? 65;
 
   useEffect(() => () => { audioRef.current?.pause(); audioRef.current = null; }, []);
   useEffect(() => { if (audioRef.current) audioRef.current.volume = previewVolume / 100; }, [previewVolume]);
@@ -93,10 +95,6 @@ function OnlineBeatmapsClient({ ruleset }: { ruleset: Ruleset }) {
       title="在线谱面"
     />
 
-    <div className="mb-5 flex items-center justify-end gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] px-4 py-3 text-sm text-slate-300">
-      <Volume2 className="size-4 text-cyan-200" />
-      <label className="flex items-center gap-3">试听音量 <span className="w-8 text-right font-mono text-slate-200">{previewVolume}%</span><input aria-label="试听音量" className="w-36 accent-cyan-400" max="100" min="0" onChange={(event) => setPreviewVolume(Number(event.target.value))} type="range" value={previewVolume} /></label>
-    </div>
     <div className="space-y-5">
       <OnlineBeatmapFilters loading={search.isFetching && !search.isFetchingNextPage} onChange={setDraft} onReset={reset} onSubmit={() => setActiveQuery({ ...draft, cursor_string: null })} query={draft} suggestions={searchSuggestions} />
       <div className="grid grid-cols-[minmax(0,1fr)_300px] items-start gap-5">
