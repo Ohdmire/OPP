@@ -12,6 +12,7 @@ const LEGACY_TOKENS_ENTRY: &str = "osu-oauth-tokens";
 const ACCESS_TOKEN_ENTRY: &str = "osu-oauth-access-token";
 const REFRESH_TOKEN_ENTRY: &str = "osu-oauth-refresh-token";
 const TOKEN_EXPIRY_ENTRY: &str = "osu-oauth-token-expiry";
+const OBS_WEBSOCKET_PASSWORD_ENTRY: &str = "obs-websocket-password";
 
 #[derive(Default)]
 pub struct CredentialStore;
@@ -72,6 +73,14 @@ impl CredentialStore {
         Self::delete(REFRESH_TOKEN_ENTRY)?;
         Self::delete(TOKEN_EXPIRY_ENTRY)?;
         Self::delete(LEGACY_TOKENS_ENTRY)
+    }
+
+    pub fn set_obs_websocket_password(&self, password: &str) -> CommandResult<()> {
+        if password.is_empty() { Self::delete(OBS_WEBSOCKET_PASSWORD_ENTRY) } else { Self::write_password(OBS_WEBSOCKET_PASSWORD_ENTRY, password) }
+    }
+
+    pub fn get_obs_websocket_password(&self) -> CommandResult<Option<String>> {
+        Self::read_password(OBS_WEBSOCKET_PASSWORD_ENTRY)
     }
 
     fn read_password(account: &str) -> CommandResult<Option<String>> {

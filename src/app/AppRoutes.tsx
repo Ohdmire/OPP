@@ -5,9 +5,7 @@ import { AppLoading } from "./AppLoading";
 
 // Keep feature bundles at the route boundary: the shell becomes interactive
 // without eagerly loading charts, local scans, and tooling screens.
-const OverviewPage = lazy(() => import("../features/profile/OverviewPage").then((module) => ({ default: module.OverviewPage })));
-const ProfileDetailsPage = lazy(() => import("../features/profile/ProfileDetailsPage").then((module) => ({ default: module.ProfileDetailsPage })));
-const ScoresPage = lazy(() => import("../features/scores/ScoresPage").then((module) => ({ default: module.ScoresPage })));
+const DataCenterPage = lazy(() => import("../features/profile/DataCenterPage").then((module) => ({ default: module.DataCenterPage })));
 const OnlineBeatmapsPage = lazy(() => import("../features/online-beatmaps/OnlineBeatmapsPage").then((module) => ({ default: module.OnlineBeatmapsPage })));
 const SimilarBeatmapsPage = lazy(() => import("../features/similar-beatmaps/SimilarBeatmapsPage").then((module) => ({ default: module.SimilarBeatmapsPage })));
 const LocalAnalysisPage = lazy(() => import("../features/local-analysis/LocalAnalysisPage").then((module) => ({ default: module.LocalAnalysisPage })));
@@ -22,10 +20,11 @@ export function AppRoutes() {
     <Suspense fallback={<AppLoading />}>
       <Routes>
         <Route element={<AppShell />}>
-          <Route index element={<Navigate replace to="/online/overview" />} />
-          <Route path="/online/overview" element={<OverviewPage />} />
-          <Route path="/online/profile" element={<ProfileDetailsPage />} />
-          <Route path="/online/scores" element={<ScoresPage />} />
+          <Route index element={<Navigate replace to="/online/beatmaps" />} />
+          <Route path="/data" element={<DataCenterPage />} />
+          <Route path="/online/overview" element={<Navigate replace to="/data#overview" />} />
+          <Route path="/online/profile" element={<Navigate replace to="/data#profile" />} />
+          <Route path="/online/scores" element={<Navigate replace to="/data#scores" />} />
           <Route path="/online/beatmaps" element={<OnlineBeatmapsPage />} />
           <Route path="/online/similar" element={<SimilarBeatmapsPage />} />
           <Route path="/local" element={<Navigate replace to="/local/maps" />} />
@@ -36,11 +35,11 @@ export function AppRoutes() {
           <Route path="/local/media/replays" element={<Navigate replace to="/local/media?type=replay" />} />
           <Route path="/local/media/render" element={<ReplayRenderPage />} />
           <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/game" element={<Navigate replace to="/online/overview" />} />
+          <Route path="/game" element={<Navigate replace to="/online/beatmaps" />} />
           <Route path="/tools" element={<ToolsPage />} />
           <Route path="/tools/replay-render" element={<Navigate replace to="/local/media/render" />} />
           <Route path="/tosu" element={<TosuPage />} />
-          <Route path="*" element={<Navigate replace to="/online/overview" />} />
+          <Route path="*" element={<Navigate replace to="/online/beatmaps" />} />
         </Route>
       </Routes>
     </Suspense>

@@ -3,7 +3,7 @@ mod service;
 
 use std::path::PathBuf;
 
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::{error::CommandResult, models::AppSettings, state::AppState};
 
@@ -109,7 +109,23 @@ pub fn start_tosu(state: State<'_, AppState>, app: AppHandle) -> CommandResult<(
 
 pub fn start_managed_tosu(state: &AppState, app: AppHandle) -> CommandResult<()> {
     let settings = settings(state)?;
-    service::start(state.tosu.clone(), &settings, app)
+    service::start(state.tosu.clone(), &settings, app.clone())?;
+    let runtime = state.tosu.clone();
+    let base = settings.tosu_api_base_url;
+    tauri::async_runtime::spawn(async move {
+        for _ in 0..30 {
+            if api_reachable(&base).await {
+                match crate::obs::refresh_selected(&app.state::<AppState>()).await {
+                    Ok(result) => service::log_system(&runtime, &app, result.message),
+                    Err(error) => service::log_system(&runtime, &app, format!("OBS 浏览器源刷新失败：{}", error.message)),
+                }
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+        service::log_system(&runtime, &app, "tosu 未在 15 秒内就绪，已跳过 OBS 浏览器源刷新");
+    });
+    Ok(())
 }
 
 #[tauri::command]

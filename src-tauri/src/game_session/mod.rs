@@ -225,7 +225,7 @@ pub async fn start_game_session(
     if executable_running(&exe, &running_executables()) {
         return Err(CommandError::new("GAME_ALREADY_RUNNING", "osu! 已经在运行"));
     }
-    if launch_tosu.unwrap_or(state.store.snapshot()?.settings.launch_tosu_with_game) {
+    if launch_tosu.unwrap_or(false) {
         start_managed_tosu(&state, app)?;
     }
     let start = snapshot(&state, ruleset).await?;

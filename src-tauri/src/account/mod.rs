@@ -12,7 +12,7 @@ mod token;
 pub use avatar_cache::AvatarCache;
 pub use commands::{
     begin_oauth_login, cancel_oauth_login, clear_profile_cache, disconnect_osu,
-    export_replay_video, get_auth_status, get_best_scores, get_own_profile, get_settings,
+    export_replay_video, get_auth_status, get_own_profile, get_scores, get_settings,
     save_oauth_credentials, update_settings,
 };
 pub use credentials::CredentialStore;

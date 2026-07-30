@@ -15,6 +15,7 @@ use crate::{
     similarity::SimilarityRuntime,
     storage::StateStore,
     tosu::TosuRuntime,
+    obs::ObsRuntime,
 };
 
 #[derive(Default)]
@@ -37,6 +38,7 @@ pub struct AppState {
     pub game_session: GameSessionRuntime,
     pub game_monitor: Arc<GameMonitorRuntime>,
     pub tosu: Arc<TosuRuntime>,
+    pub obs: Arc<ObsRuntime>,
 }
 
 impl AppState {
@@ -55,6 +57,7 @@ impl AppState {
             game_session: GameSessionRuntime::default(),
             game_monitor: Arc::new(GameMonitorRuntime::default()),
             tosu: Arc::new(TosuRuntime::default()),
+            obs: Arc::new(ObsRuntime::default()),
         })
     }
 }

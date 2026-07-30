@@ -97,17 +97,37 @@ impl OsuApi {
         self.authorized_get(&url, access_token).await
     }
 
+    pub async fn get_user_scores(
+        &self,
+        access_token: &str,
+        user_id: u64,
+        ruleset: Ruleset,
+        category: crate::models::ScoreCategory,
+        offset: u32,
+        limit: u8,
+    ) -> CommandResult<Vec<Score>> {
+        let url = format!(
+            "{}/users/{user_id}/scores/{category}?mode={ruleset}&limit={limit}&offset={offset}&legacy_only=0",
+            self.api_base_url
+        );
+        self.authorized_get(&url, access_token).await
+    }
+
     pub async fn get_best_scores(
         &self,
         access_token: &str,
         user_id: u64,
         ruleset: Ruleset,
     ) -> CommandResult<Vec<Score>> {
-        let url = format!(
-            "{}/users/{user_id}/scores/best?mode={ruleset}&limit=100&offset=0&legacy_only=0",
-            self.api_base_url
-        );
-        self.authorized_get(&url, access_token).await
+        self.get_user_scores(
+            access_token,
+            user_id,
+            ruleset,
+            crate::models::ScoreCategory::Best,
+            0,
+            100,
+        )
+        .await
     }
 
     pub async fn search_beatmapsets(

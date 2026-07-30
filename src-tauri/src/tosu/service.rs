@@ -143,6 +143,10 @@ fn record(runtime: &TosuRuntime, app: &AppHandle, stream: &str, message: impl In
     let _ = app.emit("tosu-log", entry);
 }
 
+pub fn log_system(runtime: &TosuRuntime, app: &AppHandle, message: impl Into<String>) {
+    record(runtime, app, "system", message);
+}
+
 fn decode_log_line(bytes: &[u8]) -> String {
     let bytes = bytes
         .strip_suffix(b"\n")

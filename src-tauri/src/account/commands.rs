@@ -5,7 +5,7 @@ use crate::{
     error::{CommandError, CommandResult},
     models::{
         AppSettings, AuthStatus, CacheRecord, Cached, DisconnectResult, OwnProfile, PendingOAuth,
-        Ruleset, SavedCredentials, Score,
+        Ruleset, SavedCredentials, Score, ScoreCategory,
     },
     state::AppState,
 };
@@ -161,12 +161,21 @@ pub async fn get_own_profile(
 }
 
 #[tauri::command]
-pub async fn get_best_scores(
+pub async fn get_scores(
     ruleset: Ruleset,
+    category: ScoreCategory,
+    offset: u32,
+    limit: u8,
     force_refresh: bool,
     state: State<'_, AppState>,
 ) -> CommandResult<Cached<Vec<Score>>> {
-    let key = format!("scores:{ruleset}");
+    if limit == 0 || limit > 100 {
+        return Err(CommandError::new(
+            "INVALID_SCORE_LIMIT",
+            "成绩请求数量必须在 1 到 100 之间。",
+        ));
+    }
+    let key = format!("scores:{ruleset}:{category}:{offset}:{limit}");
     let snapshot = state.store.snapshot()?;
     let cached = snapshot.cache.get(&key).cloned();
     if !force_refresh {
@@ -185,7 +194,7 @@ pub async fn get_best_scores(
     let access_token = ensure_access_token(&state).await?;
     match state
         .api
-        .get_best_scores(&access_token, user_id, ruleset)
+        .get_user_scores(&access_token, user_id, ruleset, category, offset, limit)
         .await
     {
         Ok(scores) => {

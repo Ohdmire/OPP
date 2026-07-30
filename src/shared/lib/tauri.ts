@@ -43,6 +43,7 @@ import type {
   Page,
   PendingOAuth,
   Ruleset,
+  ScoreCategory,
   ReplayRenderJob,
   ReplayRenderProgress,
   ReplayRenderRequest,
@@ -54,6 +55,8 @@ import type {
   TosuLiveSnapshot,
   TosuLogEntry,
   TosuStatus,
+  ObsRefreshResult,
+  ObsStatus,
 } from "../types/osu";
 
 export const isTauri = () => "__TAURI_INTERNALS__" in window;
@@ -106,12 +109,15 @@ function browserPreviewValue<T>(command: string, args?: Record<string, unknown>)
     }, statistics_rulesets: null,
   };
   if (command === "get_own_profile") return { data: profile, fetched_at: new Date().toISOString(), stale: false } as T;
-  if (command === "get_best_scores") return { data: [], fetched_at: new Date().toISOString(), stale: false } as T;
+  if (command === "get_scores") return { data: [], fetched_at: new Date().toISOString(), stale: false } as T;
   if (command === "get_game_status") return { clients: [{ client: "stable", running: false, executable: null, detected_at: new Date().toISOString() }, { client: "lazer", running: false, executable: null, detected_at: new Date().toISOString() }] } as T;
   if (command === "get_game_session_status") return null as T;
   if (command === "get_local_sources") return [] as T;
   if (command === "list_game_media") return [] as T;
   if (command === "get_tosu_status") return { installed: false, executable_path: null, api_base_url: "http://127.0.0.1:24050", api_reachable: false, running: false, owned_by_opp: false, dashboard_url: "http://127.0.0.1:24050", last_error: null, lyrics: { installed: false, executable_path: null, running: false, owned_by_opp: false, proxy_url: "http://127.0.0.1:41280/lyrics/" } } as T;
+  if (command === "get_obs_status") return { running: false, websocket_url: "ws://127.0.0.1:4455", connected: false, password_configured: false, selected_scene: null, last_error: null } as T;
+  if (command === "get_obs_scenes") return ["直播场景", "练习场景"] as T;
+  if (command === "refresh_selected_obs_scene") return { refreshed_sources: [], skipped: true, message: "预览模式未连接 OBS" } as T;
   if (command === "get_default_file_clients") return { beatmap: "stable", skin: "stable" } as T;
   if (command === "get_similarity_index_status") return {
     state: "unconfigured",
@@ -166,9 +172,12 @@ export const desktopApi = {
       ruleset,
       forceRefresh,
     }),
-  getBestScores: (ruleset: Ruleset, forceRefresh = false) =>
-    call<Cached<Score[]>>("get_best_scores", {
+  getScores: (ruleset: Ruleset, category: ScoreCategory, offset = 0, limit = 100, forceRefresh = false) =>
+    call<Cached<Score[]>>("get_scores", {
       ruleset,
+      category,
+      offset,
+      limit,
       forceRefresh,
     }),
   searchOnlineBeatmapsets: (query: OnlineBeatmapSearchQuery) =>
@@ -226,6 +235,10 @@ export const desktopApi = {
   setTosuLyricsExecutable: (path: string) => call<TosuStatus>("set_tosu_lyrics_executable", { path }),
   startTosu: () => call<void>("start_tosu"),
   stopTosu: () => call<void>("stop_tosu"),
+  getObsStatus: () => call<ObsStatus>("get_obs_status"),
+  getObsScenes: () => call<string[]>("get_obs_scenes"),
+  saveObsConnection: (websocketUrl: string, password: string | null, selectedScene: string | null) => call<ObsStatus>("save_obs_connection", { websocketUrl, password, selectedScene }),
+  refreshSelectedObsScene: () => call<ObsRefreshResult>("refresh_selected_obs_scene"),
   getLocalSources: () =>
     call<LocalSourceStatus[]>("get_local_sources"),
   getSimilarityIndexStatus: () =>
@@ -399,5 +412,9 @@ export const desktopApi = {
   onTosuLiveData: async (handler: (snapshot: TosuLiveSnapshot) => void): Promise<UnlistenFn> => {
     if (!isTauri()) return () => undefined;
     return listen<TosuLiveSnapshot>("tosu-live-data", (event) => handler(event.payload));
+  },
+  onObsStatusChanged: async (handler: (status: ObsStatus) => void): Promise<UnlistenFn> => {
+    if (!isTauri()) return () => undefined;
+    return listen<ObsStatus>("obs-status-changed", (event) => handler(event.payload));
   },
 };

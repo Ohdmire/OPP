@@ -4,6 +4,7 @@ mod game_session;
 mod local_analysis;
 mod models;
 mod online_beatmaps;
+mod obs;
 mod osu_api;
 mod pp_calc;
 mod replay_render;
@@ -15,7 +16,7 @@ mod tosu;
 
 use account::{
     begin_oauth_login, cancel_oauth_login, clear_profile_cache, disconnect_osu,
-    export_replay_video, get_auth_status, get_best_scores, get_own_profile, get_settings,
+    export_replay_video, get_auth_status, get_own_profile, get_scores, get_settings,
     save_oauth_credentials, update_settings,
 };
 use game_session::{
@@ -35,6 +36,7 @@ use online_beatmaps::{
     get_online_beatmap, get_online_beatmap_provider_status, get_online_beatmapset,
     search_online_beatmapsets,
 };
+use obs::{get_obs_status, get_obs_scenes, save_obs_connection, refresh_selected_obs_scene, start_obs_monitor};
 use pp_calc::calculate_beatmap_pp;
 use replay_render::submit_replay_render;
 use similarity::{configure_similarity_index, get_similarity_index_status, query_similar_beatmaps};
@@ -71,6 +73,7 @@ pub fn run() {
                 state.game_monitor.clone(),
                 app.handle().clone(),
             );
+            start_obs_monitor(app.handle().clone());
             let icon = app
                 .default_window_icon()
                 .expect("application bundle must include an icon")
@@ -101,7 +104,7 @@ pub fn run() {
             cancel_oauth_login,
             disconnect_osu,
             get_own_profile,
-            get_best_scores,
+            get_scores,
             search_online_beatmapsets,
             collect_online_beatmapsets,
             get_online_beatmapset,
@@ -153,6 +156,10 @@ pub fn run() {
             set_tosu_lyrics_executable,
             start_tosu,
             stop_tosu,
+            get_obs_status,
+            get_obs_scenes,
+            save_obs_connection,
+            refresh_selected_obs_scene,
             exit_app,
         ])
         .run(tauri::generate_context!())

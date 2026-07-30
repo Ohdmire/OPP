@@ -22,13 +22,15 @@ OPP 是一个使用 Tauri、Rust 与 React 构建的 Windows 桌面应用。它�
 > [!IMPORTANT]
 > OPP 是独立的社区项目，与 ppy Pty Ltd 或 osu! 官方无隶属关系。osu! 是 ppy Pty Ltd 的商标。
 
-## 相似铺面数据集
+## 相似铺面
 
-相似铺面功能的源代码保持开源，但数据集当前不会随仓库、安装包或 Release 公开发布。
+如何使用：先在https://github.com/osuplusplus/osu-difficulty-lab下载release中的数据集
 
-完成数据说明和可复现构建后，数据集会以独立、版本化的方式公开。
+将数据集解压到某个位置
 
-详见[数据集说明](./docs/similarity-dataset.md)。
+然后再软件内的相似铺面界面选择解压的文件夹中的osu-difficulty-lab-dataset-v0.1.0 
+
+！！注意解压后可能出现两层文件夹！！
 
 ## 功能概览
 

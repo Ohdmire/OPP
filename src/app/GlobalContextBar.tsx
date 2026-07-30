@@ -7,6 +7,7 @@ import type { GameStatusSnapshot } from "../shared/types/osu";
 import { useMode } from "./ModeContext";
 
 const routeContexts = [
+  ["/data", "数据中心"],
   ["/online/overview", "个人概览"],
   ["/online/scores", "最佳成绩"],
   ["/online/profile", "详细档案"],

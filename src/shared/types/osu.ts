@@ -1,4 +1,5 @@
 export type Ruleset = "osu" | "taiko" | "fruits" | "mania";
+export type ScoreCategory = "best" | "pinned";
 export type OsuClient = "stable" | "lazer";
 export type Completeness = "complete" | "partial";
 export type CapabilityLevel = "full" | "partial" | "unavailable";
@@ -50,8 +51,27 @@ export interface AppSettings {
   theme_secondary: ThemeColor;
   theme_mode?: ThemeMode;
   launch_tosu_on_game_detect?: boolean;
+  obs_websocket_url?: string;
+  obs_selected_scene?: string | null;
+  launch_tosu_on_obs_detect?: boolean;
+  suppress_tosu_launch_prompt?: boolean;
   game_session_analysis_on_detect?: boolean;
   preview_volume?: number;
+}
+
+export interface ObsStatus {
+  running: boolean;
+  websocket_url: string;
+  connected: boolean;
+  password_configured: boolean;
+  selected_scene: string | null;
+  last_error: string | null;
+}
+
+export interface ObsRefreshResult {
+  refreshed_sources: string[];
+  skipped: boolean;
+  message: string;
 }
 
 export type SimilarityIndexState =

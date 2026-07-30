@@ -62,6 +62,10 @@ const base: AppSettings = {
   theme_secondary: "cyan",
   theme_mode: "dark",
   launch_tosu_on_game_detect: false,
+  obs_websocket_url: "ws://127.0.0.1:4455",
+  obs_selected_scene: null,
+  launch_tosu_on_obs_detect: false,
+  suppress_tosu_launch_prompt: false,
   game_session_analysis_on_detect: true,
   preview_volume: 65,
 };
@@ -285,14 +289,10 @@ export function SettingsPage() {
           </Card>
 
           <Card className="p-6">
-            <SectionTitle title="游戏检测自动化" />
+            <SectionTitle title="直播自动化" description="OBS 启动检测、场景和密码在 tosu 直播集成页面配置。" />
             <div className="mt-5 space-y-3">
-              <Toggle
-                checked={settings.launch_tosu_on_game_detect ?? false}
-                description="检测到 Stable 或 Lazer 运行时启动已配置的 tosu。"
-                label="检测到游戏后启动 tosu"
-                onChange={(value) => void save({ ...settings, launch_tosu_on_game_detect: value })}
-              />
+              <Toggle checked={settings.launch_tosu_on_obs_detect ?? false} description="检测到 OBS 启动时自动启动已配置的 tosu。" label="检测到 OBS 后启动 tosu" onChange={(value) => void save({ ...settings, launch_tosu_on_obs_detect: value })} />
+              <Toggle checked={settings.suppress_tosu_launch_prompt ?? false} description="关闭后，每次 Tosu 启动都会显示自动启动偏好提示。" label="不再显示 Tosu 启动提示" onChange={(value) => void save({ ...settings, suppress_tosu_launch_prompt: value })} />
             </div>
           </Card>
 

@@ -30,6 +30,22 @@ impl fmt::Display for Ruleset {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "lowercase")]
+pub enum ScoreCategory {
+    Best,
+    Pinned,
+}
+
+impl fmt::Display for ScoreCategory {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Best => "best",
+            Self::Pinned => "pinned",
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OwnProfile {
     pub id: u64,
@@ -152,6 +168,14 @@ pub struct AppSettings {
     pub theme_mode: String,
     #[serde(default)]
     pub launch_tosu_on_game_detect: bool,
+    #[serde(default = "default_obs_websocket_url")]
+    pub obs_websocket_url: String,
+    #[serde(default)]
+    pub obs_selected_scene: Option<String>,
+    #[serde(default)]
+    pub launch_tosu_on_obs_detect: bool,
+    #[serde(default)]
+    pub suppress_tosu_launch_prompt: bool,
     #[serde(default)]
     pub game_session_analysis_on_detect: bool,
     #[serde(default = "default_preview_volume")]
@@ -182,6 +206,10 @@ fn default_preview_volume() -> u8 {
     65
 }
 
+fn default_obs_websocket_url() -> String {
+    "ws://127.0.0.1:4455".into()
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -199,6 +227,10 @@ impl Default for AppSettings {
             theme_secondary: default_theme_secondary(),
             theme_mode: default_theme_mode(),
             launch_tosu_on_game_detect: false,
+            obs_websocket_url: default_obs_websocket_url(),
+            obs_selected_scene: None,
+            launch_tosu_on_obs_detect: false,
+            suppress_tosu_launch_prompt: false,
             game_session_analysis_on_detect: false,
             preview_volume: default_preview_volume(),
         }

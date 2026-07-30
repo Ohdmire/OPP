@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUp } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Outlet } from "react-router-dom";
-import type { CommandError, Ruleset } from "../shared/types/osu";
+import type { AppSettings, CommandError, Ruleset } from "../shared/types/osu";
 import { authQueryKey } from "../features/auth/api";
 import { useOwnProfile } from "../features/profile/api";
 import { useMode } from "./ModeContext";
@@ -22,6 +22,14 @@ function GameCompletionOverlay({ session, onClose }: { session: GameSessionSumma
   return <div className="fixed inset-0 z-[100] grid place-items-center bg-black/65 p-6 backdrop-blur-sm"><Card className="w-full max-w-xl p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><Badge tone="success">游戏已结束</Badge><h2 className="mt-3 text-2xl font-semibold text-white">本次游戏总结</h2><p className="mt-1 text-sm text-slate-500">{dateTime(session.started_at)} → {dateTime(session.ended_at)}</p></div><Button onClick={onClose} size="sm">关闭</Button></div><div className="mt-5"><DataLine label="PP" value={`${end.pp?.toFixed(2) ?? "—"} (${change(session.start.pp, end.pp)})`} /><DataLine label="BP 最高 PP" value={`${end.best_pp?.toFixed(2) ?? "—"} (${change(session.start.best_pp, end.best_pp)})`} /><DataLine label="BP 数量" value={`${end.best_count} (${end.best_count - session.start.best_count >= 0 ? "+" : ""}${end.best_count - session.start.best_count})`} /><DataLine label="准确率" value={`${percent(end.hit_accuracy)} (${change(session.start.hit_accuracy, end.hit_accuracy)}%)`} /><DataLine label="游玩次数" value={`${fullNumber(end.play_count)} (${end.play_count !== null && session.start.play_count !== null ? end.play_count - session.start.play_count : "—"})`} /><DataLine label="总命中数" value={`${fullNumber(end.total_hits)} (${end.total_hits !== null && session.start.total_hits !== null ? end.total_hits - session.start.total_hits : "—"})`} /><DataLine label="最大连击" value={`${fullNumber(end.maximum_combo)} (${end.maximum_combo !== null && session.start.maximum_combo !== null ? end.maximum_combo - session.start.maximum_combo : "—"})`} /></div></Card></div>;
 }
 
+function TosuLaunchPrompt({ settings, onClose }: { settings: AppSettings; onClose: () => void }) {
+  const [autoLaunch, setAutoLaunch] = useState(settings.launch_tosu_on_obs_detect ?? false);
+  const [dontAsk, setDontAsk] = useState(settings.suppress_tosu_launch_prompt ?? false);
+  const [busy, setBusy] = useState(false);
+  const start = async () => { setBusy(true); try { await desktopApi.updateSettings({ ...settings, launch_tosu_on_obs_detect: autoLaunch, suppress_tosu_launch_prompt: dontAsk }); await desktopApi.startTosu(); onClose(); } finally { setBusy(false); } };
+  return <div className="fixed inset-0 z-[220] grid place-items-center bg-black/60 p-6 backdrop-blur-sm"><Card className="w-full max-w-md p-6 shadow-2xl"><h2 className="text-lg font-semibold text-white">启动 tosu</h2><p className="mt-2 text-sm leading-6 text-slate-400">检测到 OBS 已启动。Tosu 就绪后会刷新所选场景中的浏览器源。</p><label className="mt-5 flex items-center gap-3 text-sm text-slate-200"><input checked={autoLaunch} onChange={(event) => setAutoLaunch(event.target.checked)} type="checkbox" />每次检测到 OBS 启动时自动打开 tosu</label><label className="mt-3 flex items-center gap-3 text-sm text-slate-200"><input checked={dontAsk} onChange={(event) => setDontAsk(event.target.checked)} type="checkbox" />不再提示</label><div className="mt-6 flex justify-end gap-2"><Button disabled={busy} onClick={onClose} variant="ghost">取消</Button><Button loading={busy} onClick={() => void start()}>启动 tosu</Button></div></Card></div>;
+}
+
 export function AppShell() {
   const { ruleset, setRuleset, hasRulesetPreference } = useMode();
   const profileQuery = useOwnProfile(ruleset);
@@ -30,6 +38,7 @@ export function AppShell() {
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [completedSession, setCompletedSession] = useState<GameSessionSummary | null>(null);
   const [dismissedSession, setDismissedSession] = useState<string | null>(null);
+  const [tosuPromptSettings, setTosuPromptSettings] = useState<AppSettings | null>(null);
   const analysisEnabled = true;
 
   useEffect(() => {
@@ -55,14 +64,27 @@ export function AppShell() {
           void desktopApi.startDetectedGameSession(ruleset, client.client).catch(() => undefined);
         }
       });
-      void desktopApi.getSettings().then((settings) => {
-        if (settings.launch_tosu_on_game_detect) return desktopApi.startTosu();
-      }).catch(() => undefined);
     };
     void desktopApi.getGameStatus().then(handleStatus).catch(() => undefined);
     void desktopApi.onGameStatusChanged(handleStatus).then((unlisten) => { if (disposed) unlisten(); else off = unlisten; });
     return () => { disposed = true; off?.(); };
   }, [ruleset]);
+
+  useEffect(() => {
+    let disposed = false; let off: (() => void) | undefined;
+    const handleObs = (status: { running: boolean }) => {
+      if (!status.running || disposed) return;
+      void desktopApi.getSettings().then((settings) => { if (!disposed && !settings.suppress_tosu_launch_prompt) setTosuPromptSettings(settings); }).catch(() => undefined);
+    };
+    void desktopApi.onObsStatusChanged(handleObs).then((unlisten) => { if (disposed) unlisten(); else off = unlisten; });
+    return () => { disposed = true; off?.(); };
+  }, []);
+
+  useEffect(() => {
+    const requestLaunch = () => { void desktopApi.getSettings().then((settings) => { if (settings.suppress_tosu_launch_prompt) void desktopApi.startTosu(); else setTosuPromptSettings(settings); }).catch(() => undefined); };
+    window.addEventListener("opp:request-tosu-launch", requestLaunch);
+    return () => window.removeEventListener("opp:request-tosu-launch", requestLaunch);
+  }, []);
 
   useEffect(() => {
     const onScroll = () => setShowBackToTop(window.scrollY > 420);
@@ -121,6 +143,7 @@ export function AppShell() {
         </button>
       ) : null}
       {completedSession ? <><GameCompletionOverlay session={completedSession} onClose={() => { setDismissedSession(completedSession.started_at); setCompletedSession(null); }} /><div className="fixed bottom-8 left-1/2 z-[110] -translate-x-1/2 rounded-xl border border-cyan-300/15 bg-[#0b101b]/95 px-4 py-2 text-xs text-slate-400 shadow-xl">Tips：嘛，如果拘泥于数据就会让游戏本来的乐趣消失哦</div></> : null}
+      {tosuPromptSettings ? <TosuLaunchPrompt settings={tosuPromptSettings} onClose={() => setTosuPromptSettings(null)} /> : null}
     </div>
   );
 }
