@@ -2,8 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Download, Headphones, Pause } from "lucide-react";
 
 import { Badge, Button, Card } from "../../shared/components/ui";
+import { DifficultyIcon } from "../../shared/components/DifficultyIcon";
 import { desktopApi, isTauri } from "../../shared/lib/tauri";
-import type { SimilarityResult } from "../../shared/types/osu";
+import type { Ruleset, SimilarityResult } from "../../shared/types/osu";
 
 function durationLabel(seconds: number) {
   const rounded = Math.max(0, Math.round(seconds));
@@ -39,14 +40,17 @@ function Metric({
   );
 }
 
-function readStars(value: Record<string, unknown>) {
+function readDifficulty(value: Record<string, unknown>) {
   const rating = value.difficulty_rating;
-  return typeof rating === "number" && Number.isFinite(rating) ? rating : null;
+  const mode = value.mode;
+  return {
+    stars: typeof rating === "number" && Number.isFinite(rating) ? rating : null,
+    mode: mode === "taiko" || mode === "fruits" || mode === "mania" ? mode : "osu",
+  } satisfies { stars: number | null; mode: Ruleset };
 }
 
 export function SimilarityResultCard({
   result,
-  rank,
   selected,
   onSelect,
   onOpen,
@@ -58,7 +62,6 @@ export function SimilarityResultCard({
   downloadDisabled,
 }: {
   result: SimilarityResult;
-  rank: number;
   selected: boolean;
   onSelect: () => void;
   onOpen: () => void;
@@ -69,17 +72,29 @@ export function SimilarityResultCard({
   downloading: boolean;
   downloadDisabled: boolean;
 }) {
-  const stars = useQuery({
-    queryKey: ["similarity-result-stars", result.beatmap_id],
-    queryFn: async () => readStars(await desktopApi.getOnlineBeatmap(result.beatmap_id)),
+  const beatmapset = useQuery({
+    queryKey: ["similarity-result-beatmapset", result.beatmapset_id],
+    queryFn: () => desktopApi.getOnlineBeatmapset(result.beatmapset_id),
     enabled: isTauri(),
     staleTime: Infinity,
     retry: 1,
+  });
+  const onlineBeatmap = beatmapset.data?.beatmaps?.find((beatmap) => beatmap.id === result.beatmap_id);
+  const fallbackDifficulty = useQuery({
+    queryKey: ["similarity-result-stars-fallback", result.beatmap_id],
+    queryFn: async () => readDifficulty(await desktopApi.getOnlineBeatmap(result.beatmap_id)),
+    enabled: isTauri() && (beatmapset.isError || Boolean(beatmapset.data && !onlineBeatmap)),
+    staleTime: Infinity,
+    retry: 1,
   }).data;
+  const difficulty = onlineBeatmap
+    ? { stars: onlineBeatmap.difficulty_rating, mode: onlineBeatmap.mode }
+    : fallbackDifficulty;
+  const cover = beatmapset.data?.covers?.card ?? beatmapset.data?.covers?.list ?? beatmapset.data?.covers?.cover;
 
   return (
     <Card
-      className={`cursor-pointer p-4 transition ${
+      className={`relative cursor-pointer overflow-hidden p-4 transition ${
         selected
           ? "border-[var(--theme-primary-soft)] bg-[var(--theme-primary-muted)]"
           : "hover:border-white/[0.16] hover:bg-white/[0.035]"
@@ -88,20 +103,22 @@ export function SimilarityResultCard({
       role="button"
       tabIndex={0}
     >
-      <div className="flex items-start gap-4">
-        <div className="grid size-10 shrink-0 place-items-center rounded-lg border border-white/10 bg-black/20 font-mono text-sm font-bold text-slate-300">
-          {rank}
-        </div>
+      {cover ? <img alt="" className="theme-beatmap-background pointer-events-none absolute inset-0 size-full object-cover opacity-[0.16]" src={cover} /> : null}
+      <div className="relative flex items-start gap-4">
+        <DifficultyIcon
+          className="bg-[#0a0f1a]/85 shadow-lg backdrop-blur-sm"
+          mode={difficulty?.mode}
+          stars={difficulty?.stars}
+        />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={rank <= 3 ? "cyan" : "neutral"}>难度距离 {result.difficulty_distance.toFixed(4)}</Badge>
+            <Badge tone="cyan">难度距离 {result.difficulty_distance.toFixed(4)}</Badge>
             <span className="truncate text-xs text-slate-500">#{result.beatmap_id}</span>
           </div>
           <h3 className="mt-2 truncate text-sm font-semibold text-white">{result.artist} - {result.title}</h3>
           <p className="mt-1 truncate text-xs text-slate-400">[{result.version}] · mapped by {result.creator}</p>
 
-          <div className="mt-3 grid grid-cols-5 gap-2">
-            <Metric label="Star" tone={stars == null ? "metric-tone-muted" : osuTone(stars, 10)} value={stars == null ? "—" : `${stars.toFixed(2)}★`} />
+          <div className="mt-3 grid grid-cols-4 gap-2">
             <Metric label="AR" tone={osuTone(result.base.ar)} value={result.base.ar.toFixed(1)} />
             <Metric label="CS" tone={osuTone(result.base.cs)} value={result.base.cs.toFixed(1)} />
             <Metric label="OD" tone={osuTone(result.base.od)} value={result.base.od.toFixed(1)} />
@@ -110,7 +127,6 @@ export function SimilarityResultCard({
             <Metric label="长度" tone={osuTone(result.base.length_seconds, 360)} value={durationLabel(result.base.length_seconds)} />
             <Metric label="密度" tone={osuTone(result.base.object_density)} value={result.base.object_density.toFixed(2)} />
             <Metric label="物件" tone={osuTone(result.base.object_count, 1600)} value={Math.round(result.base.object_count).toString()} />
-            <Metric label="圆 / 滑" tone={osuTone(result.base.slider_ratio, 1)} value={`${Math.round(result.base.circle_ratio * 100)} / ${Math.round(result.base.slider_ratio * 100)}%`} />
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">

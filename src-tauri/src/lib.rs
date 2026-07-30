@@ -84,12 +84,11 @@ pub fn run() {
                         button_state: MouseButtonState::Up,
                         ..
                     } = event
+                        && let Some(window) = tray.app_handle().get_webview_window("main")
                     {
-                        if let Some(window) = tray.app_handle().get_webview_window("main") {
-                            let _ = window.unminimize();
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
+                        let _ = window.unminimize();
+                        let _ = window.show();
+                        let _ = window.set_focus();
                     }
                 })
                 .build(app)?;

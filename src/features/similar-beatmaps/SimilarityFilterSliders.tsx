@@ -44,6 +44,18 @@ function RangeFilter({
     const maximum = Math.max(value, currentMin);
     onChange({ ...filters, [control.maxKey]: maximum === control.ceiling ? null : maximum });
   };
+  const setTypedValue = (bound: "min" | "max", rawValue: string) => {
+    const key = bound === "min" ? control.minKey : control.maxKey;
+    if (rawValue.trim() === "") {
+      onChange({ ...filters, [key]: null });
+      return;
+    }
+    const value = Number(rawValue);
+    if (!Number.isFinite(value)) return;
+    const clamped = Math.max(control.floor, Math.min(control.ceiling, value));
+    if (bound === "min") setMinimum(clamped);
+    else setMaximum(clamped);
+  };
 
   return (
     <section className="rounded-xl border border-white/[0.08] bg-black/[0.08] px-3.5 py-3">
@@ -66,6 +78,16 @@ function RangeFilter({
             type="range"
             value={currentMin}
           />
+          <input
+            aria-label={`${control.label} minimum input`}
+            className="w-16 rounded-md border border-white/[0.1] bg-black/20 px-1.5 py-1 text-right font-mono text-[11px] text-slate-200 outline-none focus:border-[var(--theme-primary-soft)]"
+            max={currentMax}
+            min={control.floor}
+            onChange={(event) => setTypedValue("min", event.target.value)}
+            step={control.step}
+            type="number"
+            value={filters[control.minKey] ?? ""}
+          />
         </label>
         <label className="flex items-center gap-2 text-[10px] text-slate-500">
           <span className="w-6">最高</span>
@@ -78,6 +100,16 @@ function RangeFilter({
             step={control.step}
             type="range"
             value={currentMax}
+          />
+          <input
+            aria-label={`${control.label} maximum input`}
+            className="w-16 rounded-md border border-white/[0.1] bg-black/20 px-1.5 py-1 text-right font-mono text-[11px] text-slate-200 outline-none focus:border-[var(--theme-primary-soft)]"
+            max={control.ceiling}
+            min={currentMin}
+            onChange={(event) => setTypedValue("max", event.target.value)}
+            step={control.step}
+            type="number"
+            value={filters[control.maxKey] ?? ""}
           />
         </label>
       </div>

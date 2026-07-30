@@ -5,7 +5,7 @@
 
   **一站式 osu! 工具集合**
 
-  [![Version](https://img.shields.io/badge/version-0.3.0-ff6aa7?style=for-the-badge)](./src-tauri/tauri.conf.json)
+  [![Version](https://img.shields.io/badge/version-0.3.0a-ff6aa7?style=for-the-badge)](./src-tauri/tauri.conf.json)
   [![Platform](https://img.shields.io/badge/platform-Windows-5ce1e6?style=for-the-badge&logo=windows11&logoColor=white)](#运行要求)
   [![Tauri](https://img.shields.io/badge/Tauri-2-a673ff?style=for-the-badge&logo=tauri&logoColor=white)](https://tauri.app/)
   [![Vibe Coding](https://img.shields.io/badge/Vibe_Coding-AI_Collaborative-8b5cf6?style=for-the-badge)](#vibe-coding)

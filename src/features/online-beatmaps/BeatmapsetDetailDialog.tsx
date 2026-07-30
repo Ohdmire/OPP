@@ -193,7 +193,7 @@ export function BeatmapsetDetailDialog({
                         >
                           <div className="flex items-center gap-3">
                             <div className="grid size-10 shrink-0 place-items-center rounded-xl border border-white/[0.08] bg-black/15 text-slate-300"><ModeIcon mode={beatmap.mode} /></div>
-                            <DifficultyIcon stars={beatmap.difficulty_rating} />
+                            <DifficultyIcon mode={beatmap.mode} stars={beatmap.difficulty_rating} />
                             <Button
                               onClick={(event) => {
                                 event.stopPropagation();
@@ -206,7 +206,7 @@ export function BeatmapsetDetailDialog({
                               查找相似
                             </Button>
                             <div className="min-w-0 flex-1"><p className="truncate font-medium text-slate-100">{beatmap.version}</p><p className="mt-1 text-[10px] uppercase tracking-wider text-slate-600">{beatmap.mode}</p></div>
-                            <div className="hidden text-right sm:block"><p className="font-mono text-lg font-semibold text-amber-100">{beatmap.difficulty_rating.toFixed(2)}★</p><p className="mt-1 text-[10px] text-slate-600">{durationLabel(beatmap.total_length)}</p></div>
+                            <div className="hidden text-right sm:block"><DifficultyIcon mode={beatmap.mode} stars={beatmap.difficulty_rating} /><p className="mt-1 text-[10px] text-slate-600">{durationLabel(beatmap.total_length)}</p></div>
                             <span className="grid size-9 shrink-0 place-items-center rounded-lg border border-cyan-300/20 text-cyan-200 transition group-hover:border-cyan-300/50 group-hover:bg-cyan-300/10" title="打开 PP 计算器"><Calculator className="size-4" /></span>
                           </div>
                           <div className="mt-4 grid grid-cols-3 gap-x-4 gap-y-2 border-t border-white/[0.055] pt-3 text-xs sm:grid-cols-6">
@@ -232,7 +232,7 @@ export function BeatmapsetDetailDialog({
                     </div>
                     <div className="flex gap-2"><Button onClick={() => setShowCalculator(false)} size="sm" variant="ghost">关闭</Button><Button disabled={!selectedBeatmapId} loading={false} onClick={calculate} size="sm">计算</Button></div>
                   </div>
-          {calculation ? <div className="mt-4 rounded-xl border border-[var(--theme-primary-soft)] bg-[var(--theme-primary-muted)] p-5 text-center"><p className="text-xs uppercase tracking-[0.2em] text-[var(--theme-primary)]">Performance</p><p className="mt-1 text-5xl font-semibold tracking-tight text-white">{calculation.pp.toFixed(2)}<span className="ml-2 text-lg text-[var(--theme-primary)]">pp</span></p><div className="mt-4 grid grid-cols-3 gap-2 text-left"><DataLine label="Stars" value={calculation.stars.toFixed(2)} /><DataLine label="Max PP" value={calculation.max_pp.toFixed(2)} /><DataLine label="Max Combo" value={calculation.max_combo} /></div></div> : <div className="mt-4 rounded-xl border border-dashed border-white/10 p-5 text-center text-sm text-slate-500">调整参数后点击“计算”，查看谱面性能结果</div>}
+          {calculation ? <div className="mt-4 rounded-xl border border-[var(--theme-primary-soft)] bg-[var(--theme-primary-muted)] p-5 text-center"><p className="text-xs uppercase tracking-[0.2em] text-[var(--theme-primary)]">Performance</p><p className="mt-1 text-5xl font-semibold tracking-tight text-white">{calculation.pp.toFixed(2)}<span className="ml-2 text-lg text-[var(--theme-primary)]">pp</span></p><div className="mt-4 grid grid-cols-3 gap-2 text-left"><DataLine label="Stars" value={<DifficultyIcon mode={selectedMode} stars={calculation.stars} />} /><DataLine label="Max PP" value={calculation.max_pp.toFixed(2)} /><DataLine label="Max Combo" value={calculation.max_combo} /></div></div> : <div className="mt-4 rounded-xl border border-dashed border-white/10 p-5 text-center text-sm text-slate-500">调整参数后点击“计算”，查看谱面性能结果</div>}
                   <div className="mt-4 grid grid-cols-2 gap-3">
                     <label className="text-xs text-slate-500">Accuracy %<input className="mt-1 w-full rounded-xl border border-white/[0.08] bg-black/20 px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-300/40" max="100" min="0" onChange={(e) => setAccuracy(e.target.value)} type="number" value={accuracy} /></label>
                     <label className="text-xs text-slate-500">Misses<input className="mt-1 w-full rounded-xl border border-white/[0.08] bg-black/20 px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-300/40" min="0" onChange={(e) => setMisses(e.target.value)} type="number" value={misses} /></label>

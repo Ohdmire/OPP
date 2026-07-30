@@ -99,18 +99,6 @@ function formatDuration(milliseconds: number) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-function starTone(stars?: number | null) {
-  if (stars === null || stars === undefined) {
-    return "border-slate-400/20 bg-slate-400/10 text-slate-300";
-  }
-  if (stars < 2) return "border-emerald-300/20 bg-emerald-300/10 text-emerald-200";
-  if (stars < 2.7) return "border-cyan-300/20 bg-cyan-300/10 text-cyan-100";
-  if (stars < 4) return "border-yellow-300/20 bg-yellow-300/10 text-yellow-100";
-  if (stars < 5.3) return "border-pink-300/20 bg-pink-300/10 text-pink-100";
-  if (stars < 6.5) return "border-violet-300/20 bg-violet-300/10 text-violet-100";
-  return "border-white/25 bg-white/10 text-white";
-}
-
 function Metric({
   icon: Icon,
   label,
@@ -203,21 +191,6 @@ function BeatmapSetCard({
         <div className="min-w-0 flex-1">
           <BeatmapDifficultyStrip difficulties={set.difficulties.map((difficulty) => ({ id: difficulty.resource.resource_id, mode: difficulty.ruleset, stars: difficulty.stars, label: difficulty.difficulty_name, onClick: () => onOpen(difficulty.resource.resource_id) }))} />
         </div>
-        <div className="hidden">
-          {set.difficulties.slice(0, 8).map((difficulty) => (
-            <span
-              className={`shrink-0 rounded-lg border px-2 py-1 font-mono text-[10px] font-semibold ${starTone(difficulty.stars)}`}
-              key={difficulty.resource.resource_id}
-            >
-              {difficulty.stars?.toFixed(2) ?? "—"}★ · {difficulty.difficulty_name}
-            </span>
-          ))}
-          {set.difficulties.length > 8 ? (
-            <span className="shrink-0 px-2 py-1 text-[10px] text-slate-600">
-              +{set.difficulties.length - 8}
-            </span>
-          ) : null}
-        </div>
         <Button
           aria-label="在资源管理器中打开谱面"
           disabled={!set.difficulties[0]?.resource.logical_path}
@@ -257,10 +230,7 @@ function BeatmapSetCard({
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <ModeIcon mode={difficulty.ruleset} />
-                  <DifficultyIcon stars={difficulty.stars ?? 0} />
-                  <span className="hidden">
-                    {difficulty.stars?.toFixed(2) ?? "—"}★
-                  </span>
+                  <DifficultyIcon mode={difficulty.ruleset} stars={difficulty.stars} />
                   <p className="truncate text-sm font-semibold text-white">
                     [{difficulty.difficulty_name}]
                   </p>

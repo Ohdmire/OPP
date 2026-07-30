@@ -607,10 +607,9 @@ export function SimilarBeatmapsPage() {
 
                 {filteredResults.length ? (
                   <div className="space-y-3">
-                    {filteredResults.map((result, index) => (
+                    {filteredResults.map((result) => (
                       <SimilarityResultCard
                         key={result.beatmap_id}
-                        rank={index + 1}
                         result={result}
                         selected={selected?.beatmap_id === result.beatmap_id}
                         onSelect={() => setSelectedResultId(result.beatmap_id)}

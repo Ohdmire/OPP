@@ -1,5 +1,6 @@
 import { Search } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../lib/cn";
 
 export interface SearchSuggestion {
@@ -41,11 +42,13 @@ export function SearchAutocomplete({
   className,
   inputClassName,
   iconClassName,
-  maxSuggestions = 8,
+  maxSuggestions = 50,
 }: SearchAutocompleteProps) {
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
+  const [menuStyle, setMenuStyle] = useState<CSSProperties | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const normalized = value.trim().toLocaleLowerCase();
   const matches = useMemo(() => {
@@ -59,14 +62,48 @@ export function SearchAutocomplete({
       })
       .slice(0, maxSuggestions);
   }, [maxSuggestions, normalized, suggestions]);
+  const activeIndex = Math.min(highlighted, Math.max(0, matches.length - 1));
 
   useEffect(() => {
     const close = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      if (
+        !rootRef.current?.contains(event.target as Node) &&
+        !menuRef.current?.contains(event.target as Node)
+      ) {
+        setOpen(false);
+      }
     };
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
   }, []);
+
+  const updateMenuPosition = useCallback(() => {
+    const rect = inputRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const gap = 6;
+    const minimumHeight = 120;
+    const roomBelow = window.innerHeight - rect.bottom - gap - 8;
+    const roomAbove = rect.top - gap - 8;
+    const openAbove = roomBelow < minimumHeight && roomAbove > roomBelow;
+    const availableHeight = Math.max(minimumHeight, Math.min(320, openAbove ? roomAbove : roomBelow));
+    setMenuStyle({
+      left: rect.left,
+      top: openAbove ? Math.max(8, rect.top - gap - availableHeight) : rect.bottom + gap,
+      width: rect.width,
+      maxHeight: availableHeight,
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open || !matches.length) return;
+    updateMenuPosition();
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [matches.length, open, updateMenuPosition]);
 
   const choose = (suggestion: SearchSuggestion) => {
     onChange(suggestion.value);
@@ -88,30 +125,37 @@ export function SearchAutocomplete({
           if (!open || !matches.length) return;
           if (event.key === "ArrowDown") { event.preventDefault(); setHighlighted((current) => (current + 1) % matches.length); }
           if (event.key === "ArrowUp") { event.preventDefault(); setHighlighted((current) => (current - 1 + matches.length) % matches.length); }
-          if (event.key === "Enter" || event.key === "Tab") { event.preventDefault(); choose(matches[highlighted]); }
+          if (event.key === "Enter" || event.key === "Tab") { event.preventDefault(); choose(matches[activeIndex]); }
           if (event.key === "Escape") setOpen(false);
         }}
         placeholder={placeholder}
         role="combobox"
         value={value}
       />
-      {open && matches.length ? (
-        <div className="absolute inset-x-0 top-[calc(100%+0.35rem)] z-50 overflow-hidden rounded-xl border border-white/10 bg-[#111725] p-1 shadow-2xl shadow-black/40" role="listbox">
+      {open && matches.length && menuStyle && typeof document !== "undefined" ? createPortal(
+        <div
+          className="fixed z-[250] overflow-y-auto overscroll-contain rounded-xl border border-white/10 bg-[#111725] p-1 shadow-2xl shadow-black/40"
+          onPointerDown={(event) => event.stopPropagation()}
+          ref={menuRef}
+          role="listbox"
+          style={menuStyle}
+        >
           {matches.map((suggestion, index) => (
             <button
-              className={cn("flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm", index === highlighted ? "bg-cyan-300/10 text-cyan-100" : "text-slate-300 hover:bg-white/[0.06]")}
+              className={cn("flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm", index === activeIndex ? "bg-cyan-300/10 text-cyan-100" : "text-slate-300 hover:bg-white/[0.06]")}
               key={`${suggestion.value}-${index}`}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => choose(suggestion)}
               role="option"
-              aria-selected={index === highlighted}
+              aria-selected={index === activeIndex}
               type="button"
             >
               <span className="truncate">{suggestion.label ?? suggestion.value}</span>
               {suggestion.detail ? <span className="shrink-0 text-xs text-slate-500">{suggestion.detail}</span> : null}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );

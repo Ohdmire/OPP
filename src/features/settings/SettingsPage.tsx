@@ -51,6 +51,7 @@ const base: AppSettings = {
   reduce_motion: false,
   similarity_index_directory: null,
   beatmap_download_directory: null,
+  open_downloaded_beatmaps_after_download: false,
   replay_export_directory: null,
   tosu_executable_path: null,
   tosu_api_base_url: "http://127.0.0.1:24050",
@@ -326,6 +327,14 @@ export function SettingsPage() {
                 ) : null}
               </div>
             </div>
+            <div className="mt-3">
+              <Toggle
+                checked={settings.open_downloaded_beatmaps_after_download}
+                description="下载成功后用系统默认程序打开每个新下载的 .osz 文件，osu! 会自动导入这些谱面。此选项同时适用于在线批量下载和相似谱面的快捷下载。"
+                label="下载完成后自动打开谱面"
+                onChange={(value) => void save({ ...settings, open_downloaded_beatmaps_after_download: value })}
+              />
+            </div>
           </Card>
 
           <Card className="p-6">
@@ -334,7 +343,7 @@ export function SettingsPage() {
                 <SectionTitle title="关于" />
                 <p className="mt-3 flex items-center gap-2 text-sm text-slate-300">
                   <Gamepad2 className="size-4 text-[var(--theme-primary)]" />
-                  OPP v0.3.0
+                  OPP v0.3.0a
                 </p>
               </div>
               <Button onClick={() => void desktopApi.openExternal("https://github.com/L1rics06/OPP")} size="sm" variant="secondary">

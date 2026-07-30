@@ -5,6 +5,7 @@ mod tools;
 
 use std::{
     collections::HashSet,
+    path::PathBuf,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -25,6 +26,7 @@ use models::{
 };
 use serde_json::Value;
 use tauri::{AppHandle, Manager, State};
+use tauri_plugin_opener::OpenerExt;
 use tools::{
     MAX_BATCH_ITEMS, MAX_COLLECT_RESULTS, annotate_source, emit_progress, find_existing_beatmapset,
     prepare_destination, progress_for_item, search_with_adapters,
@@ -169,6 +171,7 @@ pub async fn download_online_beatmapsets(
 
     let total = items.len();
     let mut completed = 0;
+    let mut completed_paths = Vec::<PathBuf>::new();
     let mut skipped = 0;
     let mut failures = Vec::new();
     emit_progress(
@@ -254,6 +257,7 @@ pub async fn download_online_beatmapsets(
                 match write_result {
                     Ok(()) => {
                         completed += 1;
+                        completed_paths.push(target.clone());
                         emit_progress(
                             &app,
                             progress_for_item(
@@ -359,6 +363,16 @@ pub async fn download_online_beatmapsets(
             }),
         },
     );
+
+    if state
+        .store
+        .snapshot()
+        .is_ok_and(|saved| saved.settings.open_downloaded_beatmaps_after_download)
+    {
+        for path in completed_paths {
+            let _ = app.opener().open_path(path.to_string_lossy(), None::<&str>);
+        }
+    }
 
     if let Ok(mut runtime) = state.beatmap_download.lock()
         && runtime

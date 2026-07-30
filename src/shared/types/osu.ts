@@ -39,6 +39,7 @@ export interface AppSettings {
   reduce_motion: boolean;
   similarity_index_directory: string | null;
   beatmap_download_directory: string | null;
+  open_downloaded_beatmaps_after_download: boolean;
   replay_export_directory: string | null;
   tosu_executable_path: string | null;
   tosu_api_base_url: string;
@@ -584,6 +585,7 @@ export interface StrainSeries {
 }
 
 export interface StrainAnalysis {
+  first_object_time_ms: number;
   section_length_ms: number;
   series: StrainSeries[];
 }

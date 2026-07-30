@@ -131,6 +131,8 @@ pub struct AppSettings {
     #[serde(default)]
     pub beatmap_download_directory: Option<String>,
     #[serde(default)]
+    pub open_downloaded_beatmaps_after_download: bool,
+    #[serde(default)]
     pub replay_export_directory: Option<String>,
     #[serde(default)]
     pub tosu_executable_path: Option<String>,
@@ -186,6 +188,7 @@ impl Default for AppSettings {
             reduce_motion: false,
             similarity_index_directory: None,
             beatmap_download_directory: None,
+            open_downloaded_beatmaps_after_download: false,
             replay_export_directory: None,
             tosu_executable_path: None,
             tosu_api_base_url: default_tosu_api_base_url(),

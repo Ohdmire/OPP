@@ -339,6 +339,10 @@ pub fn parse_beatmap(
 pub fn calculate_strains(bytes: &[u8]) -> Result<StrainAnalysis, String> {
     let map = rosu_pp::Beatmap::from_bytes(bytes)
         .map_err(|error| format!("无法为谱面计算 strain：{error}"))?;
+    let first_object_time_ms = map
+        .hit_objects
+        .first()
+        .map_or(0.0, |object| object.start_time);
     let strains = Difficulty::new()
         .checked_strains(&map)
         .map_err(|error| format!("谱面被安全检查跳过 strain 计算：{error:?}"))?;
@@ -387,6 +391,7 @@ pub fn calculate_strains(bytes: &[u8]) -> Result<StrainAnalysis, String> {
     };
 
     Ok(StrainAnalysis {
+        first_object_time_ms,
         section_length_ms,
         series,
     })
@@ -706,6 +711,7 @@ SliderTickRate:1
                 "{ruleset} should expose a positive NoMod full-combo pp value"
             );
             let strains = calculate_strains(source.as_bytes()).expect("strains");
+            assert_eq!(strains.first_object_time_ms, 1_000.0);
             assert!(strains.section_length_ms > 0.0);
             assert_eq!(
                 strains

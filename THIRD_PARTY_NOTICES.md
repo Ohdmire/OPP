@@ -1,5 +1,12 @@
 # Third-party notices
 
+## osu-difficulty-icons
+
+Difficulty icons are loaded at runtime from the static image URLs published by
+[hiderikzki/osu-difficulty-icons](https://github.com/hiderikzki/osu-difficulty-icons).
+No copies of those assets are bundled with OPP. The upstream collection is
+licensed under GPL-3.0.
+
 ## osu-difficulty-lab runtime
 
 The read-only beatmap similarity runtime is derived from

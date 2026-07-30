@@ -26,6 +26,7 @@ import {
   Skeleton,
 } from "../../shared/components/ui";
 import { SearchAutocomplete } from "../../shared/components/SearchAutocomplete";
+import { DifficultyIcon } from "../../shared/components/DifficultyIcon";
 import { desktopApi } from "../../shared/lib/tauri";
 import {
   dateTime,
@@ -135,9 +136,7 @@ function ScoreRow({
         </div>
         <div>
           <p className="text-[9px] uppercase tracking-wider text-slate-600">Stars</p>
-          <p className="mt-1 font-mono text-xs text-slate-400">
-            {beatmap?.difficulty_rating?.toFixed(2) ?? "—"}★
-          </p>
+          <div className="mt-1"><DifficultyIcon mode={beatmap?.mode} stars={beatmap?.difficulty_rating} /></div>
         </div>
         <div>
           <p className="text-[9px] uppercase tracking-wider text-slate-600">Weight</p>
@@ -248,7 +247,7 @@ function ScoreDialog({
               <Layers3 className="size-4 text-cyan-200" />
               谱面参数
             </div>
-            <DataLine label="星数" value={`${beatmap?.difficulty_rating?.toFixed(2) ?? "—"}★`} />
+            <DataLine label="星数" value={<DifficultyIcon mode={beatmap?.mode} stars={beatmap?.difficulty_rating} />} />
             <DataLine label="BPM" value={beatmap?.bpm?.toFixed(0) ?? "—"} />
             <DataLine label="AR" value={beatmap?.ar?.toFixed(1) ?? "—"} />
             <DataLine label="OD" value={beatmap?.accuracy?.toFixed(1) ?? "—"} />

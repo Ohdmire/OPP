@@ -93,12 +93,12 @@
 :root[data-theme-mode="light"] [class*="text-green-"] { color: #166534 !important; }
 :root[data-theme-mode="light"] [class*="text-amber-"],
 :root[data-theme-mode="light"] [class*="text-orange-"] { color: #92400e !important; }
-:root[data-theme-mode="light"] .theme-beatmap-background { opacity: .30 !important; }
+:root[data-theme-mode="light"] .theme-beatmap-background { opacity: .42 !important; }
 :root[data-theme-mode="light"] .theme-beatmap-overlay-primary {
-  background: linear-gradient(90deg, rgba(255,255,255,.98), rgba(255,255,255,.88) 58%, rgba(255,255,255,.30)) !important;
+  background: linear-gradient(90deg, rgba(255,255,255,.94), rgba(255,255,255,.72) 58%, rgba(255,255,255,.14)) !important;
 }
 :root[data-theme-mode="light"] .theme-beatmap-overlay-secondary {
-  background: linear-gradient(0deg, rgba(255,255,255,.86), rgba(255,255,255,0) 72%) !important;
+  background: linear-gradient(0deg, rgba(255,255,255,.72), rgba(255,255,255,0) 72%) !important;
 }
 [class*="from-[#ff6aa7"] { background-image: linear-gradient(90deg, var(--theme-primary), var(--theme-secondary)) !important; }
 :root[data-theme-mode="light"] input,

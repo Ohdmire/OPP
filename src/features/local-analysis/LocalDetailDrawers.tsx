@@ -1,4 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
+import { useState } from "react";
 import {
   AreaChart,
   ChevronRight,
@@ -18,6 +19,7 @@ import {
   YAxis,
 } from "recharts";
 import { ErrorPanel } from "../../shared/components/ErrorPanel";
+import { DifficultyIcon } from "../../shared/components/DifficultyIcon";
 import { Badge, Card, DataLine } from "../../shared/components/ui";
 import { dateTime, fullNumber } from "../../shared/lib/format";
 import type { OsuClient } from "../../shared/types/osu";
@@ -27,6 +29,36 @@ import {
 } from "./api";
 
 const chartColors = ["#73e5ea", "#ff79ad", "#a98bff", "#f5c66f"];
+
+function editorTimestamp(milliseconds: number) {
+  const totalMilliseconds = Math.max(0, Math.round(milliseconds));
+  const minutes = Math.floor(totalMilliseconds / 60_000);
+  const seconds = Math.floor((totalMilliseconds % 60_000) / 1_000);
+  const remainder = totalMilliseconds % 1_000;
+  return `${minutes}:${String(seconds).padStart(2, "0")}:${String(remainder).padStart(3, "0")}`;
+}
+
+async function copyTimestamp(milliseconds: number) {
+  const timestamp = editorTimestamp(milliseconds);
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(timestamp);
+    return;
+  }
+
+  const field = document.createElement("textarea");
+  field.value = timestamp;
+  field.setAttribute("readonly", "");
+  field.style.cssText = "position:fixed;opacity:0";
+  document.body.append(field);
+  field.select();
+  document.execCommand("copy");
+  field.remove();
+}
+
+function timestampFromChartLabel(value: unknown) {
+  const timestamp = Number(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
 
 function formatBytes(value?: number | null) {
   if (value === null || value === undefined) return "—";
@@ -83,10 +115,13 @@ export function BeatmapDetailDrawer({
 }) {
   const query = useLocalBeatmapDetail(client, resourceId);
   const detail = query.data;
+  const [hoveredStrainTime, setHoveredStrainTime] = useState<number | null>(null);
   const strainRows =
     detail?.strains?.series[0]?.values.map((_, index) => {
       const row: Record<string, number> = {
-        time: (index * (detail.strains?.section_length_ms ?? 0)) / 1000,
+        time:
+          (detail.strains?.first_object_time_ms ?? 0) +
+          index * (detail.strains?.section_length_ms ?? 0),
       };
       detail.strains?.series.forEach((series) => {
         row[series.key] = series.values[index] ?? 0;
@@ -119,9 +154,7 @@ export function BeatmapDetailDrawer({
             <div className="space-y-5">
               <div className="flex flex-wrap gap-2">
                 <Badge tone="cyan">{detail.summary.ruleset}</Badge>
-                <Badge tone="pink">
-                  {detail.summary.stars?.toFixed(2) ?? "—"}★
-                </Badge>
+                  <DifficultyIcon mode={detail.summary.ruleset} stars={detail.summary.stars} />
                 <Badge>
                   {detail.calculation.engine} {detail.calculation.engine_version} ·{" "}
                   {detail.calculation.engine_released_at}
@@ -132,6 +165,94 @@ export function BeatmapDetailDrawer({
                   {detail.calculation.upstream_date}
                 </Badge>
               </div>
+
+              <Card className="border-violet-300/20 bg-violet-300/[0.035] p-5 shadow-[0_14px_40px_rgba(169,139,255,.08)]">
+                <div className="mb-5 flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                      <AreaChart className="size-4 text-violet-200" />
+                      Strain 时间序列
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {hoveredStrainTime === null ? (
+                        "悬停曲线后点击图表，即可复制编辑器时间戳。"
+                      ) : (
+                        <>
+                          当前 <code className="font-mono text-cyan-200">{editorTimestamp(hoveredStrainTime)}</code>
+                          <span className="ml-1">· 点击图表复制</span>
+                        </>
+                      )}
+                    </p>
+                  </div>
+                  <span className="text-xs text-slate-500">
+                    原生 section {(detail.strains?.section_length_ms ?? 0).toFixed(0)} ms
+                  </span>
+                </div>
+                {strainRows.length ? (
+                  <div
+                    className="h-80 w-full cursor-crosshair"
+                    onClick={() => {
+                      if (hoveredStrainTime !== null) void copyTimestamp(hoveredStrainTime);
+                    }}
+                    onKeyDown={(event) => {
+                      if ((event.key === "Enter" || event.key === " ") && hoveredStrainTime !== null) {
+                        event.preventDefault();
+                        void copyTimestamp(hoveredStrainTime);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    title="悬停曲线后点击复制时间戳"
+                  >
+                    <ResponsiveContainer height="100%" width="100%">
+                      <LineChart
+                        data={strainRows}
+                        margin={{ left: 4, right: 12 }}
+                        onMouseLeave={() => setHoveredStrainTime(null)}
+                        onMouseMove={({ activeLabel }) => {
+                          const timestamp = timestampFromChartLabel(activeLabel);
+                          setHoveredStrainTime((current) => current === timestamp ? current : timestamp);
+                        }}
+                      >
+                        <CartesianGrid stroke="rgba(255,255,255,.05)" vertical={false} />
+                        <XAxis
+                          dataKey="time"
+                          domain={[0, "dataMax"]}
+                          stroke="#586174"
+                          tickFormatter={(value) => editorTimestamp(Number(value))}
+                          tickLine={false}
+                          type="number"
+                        />
+                        <YAxis stroke="#586174" tickLine={false} width={38} />
+                        <Tooltip
+                          contentStyle={{
+                            background: "#111927",
+                            border: "1px solid rgba(255,255,255,.1)",
+                            borderRadius: 12,
+                          }}
+                          labelFormatter={(value) => editorTimestamp(Number(value))}
+                          wrapperStyle={{ pointerEvents: "none" }}
+                        />
+                        {detail.strains?.series.map((series, index) => (
+                          <Line
+                            dataKey={series.key}
+                            dot={false}
+                            key={series.key}
+                            name={series.key}
+                            stroke={chartColors[index % chartColors.length]}
+                            strokeWidth={1.7}
+                            type="monotone"
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <p className="py-16 text-center text-sm text-slate-500">
+                    该谱面没有可绘制的 strain 数据
+                  </p>
+                )}
+              </Card>
 
               <div className="grid grid-cols-2 gap-5">
                 <Card className="p-5">
@@ -167,57 +288,6 @@ export function BeatmapDetailDrawer({
                   <DataLine label="格式版本" value={`v${detail.summary.format_version}`} />
                 </Card>
               </div>
-
-              <Card className="p-5">
-                <div className="mb-5 flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                    <AreaChart className="size-4 text-violet-200" />
-                    Strain 时间序列
-                  </div>
-                  <span className="text-xs text-slate-500">
-                    原生 section {(detail.strains?.section_length_ms ?? 0).toFixed(0)} ms
-                  </span>
-                </div>
-                {strainRows.length ? (
-                  <div className="h-72 w-full">
-                    <ResponsiveContainer height="100%" width="100%">
-                      <LineChart data={strainRows}>
-                        <CartesianGrid stroke="rgba(255,255,255,.05)" vertical={false} />
-                        <XAxis
-                          dataKey="time"
-                          stroke="#586174"
-                          tickFormatter={(value) => `${Number(value).toFixed(0)}s`}
-                          tickLine={false}
-                        />
-                        <YAxis stroke="#586174" tickLine={false} width={38} />
-                        <Tooltip
-                          contentStyle={{
-                            background: "#111927",
-                            border: "1px solid rgba(255,255,255,.1)",
-                            borderRadius: 12,
-                          }}
-                          labelFormatter={(value) => `${Number(value).toFixed(1)} 秒`}
-                        />
-                        {detail.strains?.series.map((series, index) => (
-                          <Line
-                            dataKey={series.key}
-                            dot={false}
-                            key={series.key}
-                            name={series.key}
-                            stroke={chartColors[index % chartColors.length]}
-                            strokeWidth={1.7}
-                            type="monotone"
-                          />
-                        ))}
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : (
-                  <p className="py-16 text-center text-sm text-slate-500">
-                    该谱面没有可绘制的 strain 数据
-                  </p>
-                )}
-              </Card>
 
               <Card className="p-5">
                 <DataLine label="谱面 ID" value={detail.summary.beatmap_id ?? "未提交"} />
