@@ -10,7 +10,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::{
@@ -186,6 +186,9 @@ pub async fn download_online_beatmapsets(
             current_beatmapset_id: None,
             current_title: None,
             message: Some(format!("准备下载 {total} 个谱面集")),
+            downloaded_bytes: 0,
+            total_bytes: None,
+            bytes_per_second: 0.0,
         },
     );
 
@@ -232,12 +235,25 @@ pub async fn download_online_beatmapsets(
             ),
         );
 
+        let started_at = Instant::now();
         match download_with_adapters(&state, item.beatmapset_id, &request.provider).await {
             Ok(download) if cancel.load(Ordering::Relaxed) => {
                 let _ = download;
                 break;
             }
             Ok(download) => {
+                let downloaded_bytes = download.bytes.len() as u64;
+                let bytes_per_second = downloaded_bytes as f64 / started_at.elapsed().as_secs_f64().max(0.001);
+                let mut byte_progress = progress_for_item(
+                    "downloading",
+                    DownloadProgressCounts { total, processed, completed, skipped, failed: failures.len() },
+                    item,
+                    Some("正在写入下载文件".into()),
+                );
+                byte_progress.downloaded_bytes = downloaded_bytes;
+                byte_progress.total_bytes = Some(downloaded_bytes);
+                byte_progress.bytes_per_second = bytes_per_second;
+                emit_progress(&app, byte_progress);
                 let file_name = download_file_name(item, download.suggested_filename.as_deref());
                 let target = destination.join(file_name);
                 let temporary = destination.join(format!(
@@ -361,6 +377,9 @@ pub async fn download_online_beatmapsets(
                     completed, skipped, result.failed
                 )
             }),
+            downloaded_bytes: 0,
+            total_bytes: None,
+            bytes_per_second: 0.0,
         },
     );
 

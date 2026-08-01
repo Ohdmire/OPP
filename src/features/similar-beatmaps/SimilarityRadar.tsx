@@ -39,7 +39,7 @@ export function SimilarityRadar({
     <div className={compact ? "h-56" : "h-72"}>
       <ResponsiveContainer height="100%" width="100%">
         <RadarChart data={data} outerRadius={compact ? "68%" : "72%"}>
-          <PolarGrid stroke="rgba(255,255,255,.11)" />
+          <PolarGrid gridType="polygon" radialLines stroke="rgba(0,0,0,.72)" strokeWidth={1.35} />
           <PolarAngleAxis
             dataKey="dimension"
             tick={{ fill: "#94a3b8", fontSize: 11 }}
@@ -48,6 +48,7 @@ export function SimilarityRadar({
             axisLine={false}
             domain={[0, 1]}
             tick={false}
+            tickCount={3}
           />
           <Radar
             dataKey="target"

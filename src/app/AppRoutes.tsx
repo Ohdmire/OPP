@@ -14,6 +14,7 @@ const ReplayRenderPage = lazy(() => import("../features/local-media/ReplayRender
 const SettingsPage = lazy(() => import("../features/settings/SettingsPage").then((module) => ({ default: module.SettingsPage })));
 const ToolsPage = lazy(() => import("../features/tools/ToolsPage").then((module) => ({ default: module.ToolsPage })));
 const TosuPage = lazy(() => import("../features/tools/TosuPage").then((module) => ({ default: module.TosuPage })));
+const TrainerPage = lazy(() => import("../features/trainer/TrainerPage").then((module) => ({ default: module.TrainerPage })));
 
 export function AppRoutes() {
   return (
@@ -27,6 +28,7 @@ export function AppRoutes() {
           <Route path="/online/scores" element={<Navigate replace to="/data#scores" />} />
           <Route path="/online/beatmaps" element={<OnlineBeatmapsPage />} />
           <Route path="/online/similar" element={<SimilarBeatmapsPage />} />
+          <Route path="/trainer" element={<TrainerPage />} />
           <Route path="/local" element={<Navigate replace to="/local/maps" />} />
           <Route path="/local/maps" element={<LocalAnalysisPage section="maps" />} />
           <Route path="/local/skins" element={<LocalAnalysisPage section="skins" />} />

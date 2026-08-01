@@ -13,6 +13,7 @@ mod state;
 mod storage;
 mod tools;
 mod tosu;
+mod trainer;
 
 use account::{
     begin_oauth_login, cancel_oauth_login, clear_profile_cache, disconnect_osu,
@@ -47,8 +48,9 @@ use tauri::{
 };
 use tools::{
     convert_mania_beatmaps, get_default_file_clients, open_local_resource_in_explorer,
-    set_default_file_client,
+    set_default_file_client, set_display_gamma,
 };
+use trainer::generate_trainer_beatmap;
 use tosu::{
     get_tosu_logs, get_tosu_status, set_tosu_executable, set_tosu_lyrics_executable, start_tosu,
     stop_tosu,
@@ -149,7 +151,9 @@ pub fn run() {
             open_local_resource_in_explorer,
             get_default_file_clients,
             set_default_file_client,
+            set_display_gamma,
             convert_mania_beatmaps,
+            generate_trainer_beatmap,
             get_tosu_status,
             get_tosu_logs,
             set_tosu_executable,

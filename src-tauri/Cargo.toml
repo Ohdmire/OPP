@@ -50,6 +50,7 @@ osu-difficulty-runtime = { path = "crates/osu-difficulty-runtime" }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_ColorSystem"] }
 
 [dev-dependencies]
 tempfile = "3"

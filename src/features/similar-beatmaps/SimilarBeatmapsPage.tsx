@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { FolderOpen, RefreshCw, Search, Upload } from "lucide-react";
+import { Download, FolderOpen, RefreshCw, Search, Upload } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { PageHeader } from "../../shared/components/PageHeader";
@@ -39,10 +39,23 @@ const DIFFICULTY_DIMENSIONS = [
   ["overlap", "Overlap"],
 ] as const;
 
-function matchesCandidateFilters(base: SimilarityBaseFeatures, filters: SimilarityFilters) {
+function matchesCandidateFilters(
+  base: SimilarityBaseFeatures,
+  difficulty: { aim: number; speed: number },
+  filters: SimilarityFilters,
+) {
+  // The private similarity index does not retain an official star field. Use
+  // the existing normalized aim/speed dimensions for a stable local estimate.
+  const star = Math.hypot(difficulty.aim, difficulty.speed) * 5;
   return (
+    (filters.min_star == null || star >= filters.min_star) &&
+    (filters.max_star == null || star <= filters.max_star) &&
     (filters.min_ar == null || base.ar >= filters.min_ar) &&
     (filters.max_ar == null || base.ar <= filters.max_ar) &&
+    (filters.min_cs == null || base.cs >= filters.min_cs) &&
+    (filters.max_cs == null || base.cs <= filters.max_cs) &&
+    (filters.min_od == null || base.od >= filters.min_od) &&
+    (filters.max_od == null || base.od <= filters.max_od) &&
     (filters.min_bpm == null || base.bpm >= filters.min_bpm) &&
     (filters.max_bpm == null || base.bpm <= filters.max_bpm) &&
     (filters.min_length_seconds == null || base.length_seconds >= filters.min_length_seconds) &&
@@ -170,7 +183,7 @@ export function SimilarBeatmapsPage() {
   const previewVolume = settings.data?.preview_volume ?? 65;
 
   const filteredResults = useMemo(
-    () => response?.results.filter((result) => matchesCandidateFilters(result.base, request.filters)) ?? [],
+    () => response?.results.filter((result) => matchesCandidateFilters(result.base, result.difficulty, request.filters)) ?? [],
     [request.filters, response],
   );
 
@@ -292,7 +305,8 @@ export function SimilarBeatmapsPage() {
     }));
   }
 
-  async function downloadResult(result: SimilarityQueryResponse["results"][number]) {
+  async function downloadResults(results: SimilarityQueryResponse["results"]) {
+    if (!results.length) return;
     let destination =
       quickDownloadDirectory ?? settings.data?.beatmap_download_directory ?? "";
     if (!destination) {
@@ -310,19 +324,13 @@ export function SimilarBeatmapsPage() {
 
     setConfigurationError(null);
     setDownloadNotice(null);
-    setQuickDownloadId(result.beatmap_id);
+    setQuickDownloadId(results.length === 1 ? results[0].beatmap_id : -1);
     try {
       const downloaded = await desktopApi.downloadOnlineBeatmapsets({
         destination,
         provider: "catboy",
         overwrite: false,
-        items: [
-          {
-            beatmapset_id: result.beatmapset_id,
-            artist: result.artist,
-            title: result.title,
-          },
-        ],
+        items: Array.from(new Map(results.map((result) => [result.beatmapset_id, { beatmapset_id: result.beatmapset_id, artist: result.artist, title: result.title }])).values()),
       });
       setDownloadNotice(
         downloaded.completed > 0
@@ -334,6 +342,10 @@ export function SimilarBeatmapsPage() {
     } finally {
       setQuickDownloadId(null);
     }
+  }
+
+  async function downloadResult(result: SimilarityQueryResponse["results"][number]) {
+    await downloadResults([result]);
   }
 
   function openOnlineBeatmap(result: SimilarityQueryResponse["results"][number]) {
@@ -603,6 +615,7 @@ export function SimilarBeatmapsPage() {
                     <h2 className="mt-1 text-base font-semibold text-white">{filteredResults.length} 个相似谱面集</h2>
                   </div>
                   <span className="text-xs text-slate-500">距离越低越相似</span>
+                  <Button disabled={!filteredResults.length || quickDownloadId !== null} loading={quickDownloadId === -1} onClick={() => void downloadResults(filteredResults)} size="sm" variant="primary"><Download className="size-3.5" />批量下载当前结果</Button>
                 </div>
 
                 {filteredResults.length ? (

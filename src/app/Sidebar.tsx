@@ -11,6 +11,7 @@ import {
   Play,
   Radio,
   ScanSearch,
+  WandSparkles,
   Settings,
   Wrench,
 } from "lucide-react";
@@ -26,7 +27,7 @@ interface NavItemProps {
   to: string;
   label: string;
   icon: typeof LayoutDashboard;
-  emphasis?: "beatmaps" | "similar";
+  emphasis?: "beatmaps" | "similar" | "trainer";
 }
 
 function NavItem({ to, label, icon: Icon, emphasis }: NavItemProps) {
@@ -46,6 +47,7 @@ function NavItem({ to, label, icon: Icon, emphasis }: NavItemProps) {
         "group relative flex min-h-10 items-center gap-3 rounded-lg border border-transparent px-2.5 text-[13px] font-medium text-slate-400 outline-none transition-colors duration-200 hover:bg-white/[0.045] hover:text-slate-100 focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]",
         emphasis === "beatmaps" && "min-h-12 border-cyan-300/20 bg-cyan-300/[0.075] px-3 text-cyan-50 hover:bg-cyan-300/[0.13]",
         emphasis === "similar" && "min-h-12 border-violet-300/20 bg-violet-300/[0.075] px-3 text-violet-50 hover:bg-violet-300/[0.13]",
+        emphasis === "trainer" && "min-h-12 border-pink-300/20 bg-pink-300/[0.075] px-3 text-pink-50 hover:bg-pink-300/[0.13]",
         active && "selected-mask border-[var(--theme-primary)] text-white before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-[var(--theme-primary)]",
       )}
       end
@@ -53,7 +55,7 @@ function NavItem({ to, label, icon: Icon, emphasis }: NavItemProps) {
       to={to}
     >
       {emphasis ? (
-        <span className={cn("grid size-7 shrink-0 place-items-center rounded-md", emphasis === "beatmaps" ? "bg-cyan-300/15 text-cyan-200" : "bg-violet-300/15 text-violet-200")}>
+        <span className={cn("grid size-7 shrink-0 place-items-center rounded-md", emphasis === "beatmaps" ? "bg-cyan-300/15 text-cyan-200" : emphasis === "similar" ? "bg-violet-300/15 text-violet-200" : "bg-pink-300/15 text-pink-200")}>
           <Icon className="size-4" />
         </span>
       ) : <Icon className="size-4 shrink-0" />}
@@ -87,6 +89,7 @@ export function Sidebar({ profile, loading }: { profile?: OwnProfile; loading: b
         <NavGroup label="核心功能">
           <NavItem emphasis="beatmaps" icon={Music2} label="在线铺面" to="/online/beatmaps" />
           <NavItem emphasis="similar" icon={ScanSearch} label="相似铺面" to="/online/similar" />
+          <NavItem emphasis="trainer" icon={WandSparkles} label="铺面练习生成器" to="/trainer" />
         </NavGroup>
         <NavGroup label="资料与资源">
           <NavItem icon={Database} label="数据中心" to="/data" />

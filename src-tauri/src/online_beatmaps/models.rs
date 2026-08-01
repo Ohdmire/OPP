@@ -110,6 +110,9 @@ pub struct BeatmapDownloadProgress {
     pub current_beatmapset_id: Option<u64>,
     pub current_title: Option<String>,
     pub message: Option<String>,
+    pub downloaded_bytes: u64,
+    pub total_bytes: Option<u64>,
+    pub bytes_per_second: f64,
 }
 
 pub struct DownloadProgressCounts {

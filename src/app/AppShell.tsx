@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUp } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Outlet } from "react-router-dom";
-import type { AppSettings, CommandError, Ruleset } from "../shared/types/osu";
+import type { AppSettings, BeatmapDownloadProgress, CommandError, Ruleset } from "../shared/types/osu";
 import { authQueryKey } from "../features/auth/api";
 import { useOwnProfile } from "../features/profile/api";
 import { useMode } from "./ModeContext";
@@ -14,6 +14,32 @@ import { dateTime, fullNumber, percent } from "../shared/lib/format";
 import { Badge, Button, Card, DataLine } from "../shared/components/ui";
 
 const validRulesets: Ruleset[] = ["osu", "taiko", "fruits", "mania"];
+
+function formatTransfer(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "计算中";
+  const units = ["B/s", "KB/s", "MB/s", "GB/s"];
+  let size = value; let index = 0;
+  while (size >= 1024 && index < units.length - 1) { size /= 1024; index += 1; }
+  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[index]}`;
+}
+
+function DownloadToast() {
+  const [progress, setProgress] = useState<BeatmapDownloadProgress | null>(null);
+  useEffect(() => {
+    let dispose: (() => void) | undefined;
+    let timer: number | undefined;
+    void desktopApi.onBeatmapDownloadProgress((next) => {
+      window.clearTimeout(timer);
+      setProgress(next);
+      if (next.phase === "finished" || next.phase === "cancelled") timer = window.setTimeout(() => setProgress(null), 4_500);
+    }).then((unlisten) => { dispose = unlisten; });
+    return () => { window.clearTimeout(timer); dispose?.(); };
+  }, []);
+  if (!progress) return null;
+  const completed = progress.phase === "finished" || progress.phase === "cancelled";
+  const percent = progress.total ? Math.min(100, progress.processed / progress.total * 100) : 0;
+  return <div aria-live="polite" className="fixed bottom-6 right-6 z-[180] w-[340px] rounded-2xl border border-cyan-300/20 bg-[#0b101b]/95 p-4 shadow-2xl backdrop-blur"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-sm font-semibold text-white">{completed ? "下载完成" : "正在下载谱面"}</p><p className="mt-1 truncate text-xs text-slate-400">{progress.current_title ?? progress.message ?? "准备下载"}</p></div><span className="shrink-0 font-mono text-xs text-cyan-200">{progress.processed}/{progress.total}</span></div><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.08]"><div className="h-full rounded-full bg-[var(--theme-primary)] transition-[width]" style={{ width: `${percent}%` }} /></div><div className="mt-2 flex justify-between text-xs"><span className="text-slate-500">{progress.downloaded_bytes ? `${(progress.downloaded_bytes / 1024 / 1024).toFixed(1)} MB` : progress.message ?? "等待连接"}</span><strong className="font-mono text-emerald-200">{formatTransfer(progress.bytes_per_second ?? 0)}</strong></div></div>;
+}
 
 function GameCompletionOverlay({ session, onClose }: { session: GameSessionSummary; onClose: () => void }) {
   const end = session.end;
@@ -144,6 +170,7 @@ export function AppShell() {
       ) : null}
       {completedSession ? <><GameCompletionOverlay session={completedSession} onClose={() => { setDismissedSession(completedSession.started_at); setCompletedSession(null); }} /><div className="fixed bottom-8 left-1/2 z-[110] -translate-x-1/2 rounded-xl border border-cyan-300/15 bg-[#0b101b]/95 px-4 py-2 text-xs text-slate-400 shadow-xl">Tips：嘛，如果拘泥于数据就会让游戏本来的乐趣消失哦</div></> : null}
       {tosuPromptSettings ? <TosuLaunchPrompt settings={tosuPromptSettings} onClose={() => setTosuPromptSettings(null)} /> : null}
+      <DownloadToast />
     </div>
   );
 }

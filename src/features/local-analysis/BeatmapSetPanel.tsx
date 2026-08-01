@@ -14,10 +14,12 @@ import {
   Hash,
   ListFilter,
   RotateCcw,
+  ScanSearch,
   SlidersHorizontal,
   Sparkles,
   Timer,
   Trophy,
+  WandSparkles,
   Zap,
 } from "lucide-react";
 import { ErrorPanel } from "../../shared/components/ErrorPanel";
@@ -215,7 +217,7 @@ function BeatmapSetCard({
         <div className="grid gap-2 border-t border-white/[0.055] p-3">
           {set.difficulties.map((difficulty) => (
             <div
-              className="grid grid-cols-[minmax(0,1fr)_84px_70px_70px_78px_70px_78px] items-center gap-3 rounded-xl border border-white/[0.055] bg-white/[0.025] px-4 py-3 text-left transition hover:border-cyan-300/20 hover:bg-cyan-300/[0.045]"
+              className="grid grid-cols-[minmax(0,1fr)_84px_70px_70px_78px_70px_78px_auto_auto] items-center gap-3 rounded-xl border border-white/[0.055] bg-white/[0.025] px-4 py-3 text-left transition hover:border-cyan-300/20 hover:bg-cyan-300/[0.045]"
               key={difficulty.resource.resource_id}
               onClick={() => onOpen(difficulty.resource.resource_id)}
               onKeyDown={(event) => {
@@ -259,9 +261,22 @@ function BeatmapSetCard({
                   onFindSimilar(difficulty.resource.resource_id);
                 }}
                 size="sm"
-                variant="ghost"
+                variant="primary"
               >
+                <ScanSearch className="size-3.5" />
                 查找相似
+              </Button>
+              <Button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  const params = new URLSearchParams({ client, resource: difficulty.resource.resource_id });
+                  window.location.hash = `/trainer?${params}`;
+                }}
+                size="sm"
+                variant="primary"
+              >
+                <WandSparkles className="size-3.5" />
+                导入 Trainer
               </Button>
             </div>
           ))}

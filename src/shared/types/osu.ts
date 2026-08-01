@@ -125,8 +125,14 @@ export interface SimilarityBaseWeights {
 }
 
 export interface SimilarityFilters {
+  min_star: number | null;
+  max_star: number | null;
   min_ar: number | null;
   max_ar: number | null;
+  min_cs: number | null;
+  max_cs: number | null;
+  min_od: number | null;
+  max_od: number | null;
   min_bpm: number | null;
   max_bpm: number | null;
   min_length_seconds: number | null;
@@ -849,6 +855,29 @@ export interface BeatmapDownloadProgress {
   current_beatmapset_id: number | null;
   current_title: string | null;
   message: string | null;
+  downloaded_bytes?: number;
+  total_bytes?: number | null;
+  bytes_per_second?: number;
+}
+
+export interface TrainerRequest {
+  client: OsuClient;
+  resource_id: string;
+  rate: number;
+  ar: number;
+  od: number;
+  cs: number;
+  hp: number;
+  min_bpm: number | null;
+  max_bpm: number | null;
+  start_time_ms: number | null;
+  end_time_ms: number | null;
+}
+
+export interface TrainerResult {
+  directory: string;
+  beatmap_path: string;
+  included_objects: number;
 }
 
 export interface LocalBeatmapSetSummary {

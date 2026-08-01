@@ -24,8 +24,14 @@ export const defaultBaseWeights: SimilarityBaseWeights = {
 };
 
 export const defaultSimilarityFilters: SimilarityFilters = {
+  min_star: null,
+  max_star: null,
   min_ar: null,
   max_ar: null,
+  min_cs: null,
+  max_cs: null,
+  min_od: null,
+  max_od: null,
   min_bpm: null,
   max_bpm: null,
   min_length_seconds: null,

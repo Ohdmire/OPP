@@ -55,6 +55,8 @@ import type {
   TosuLiveSnapshot,
   TosuLogEntry,
   TosuStatus,
+  TrainerRequest,
+  TrainerResult,
   ObsRefreshResult,
   ObsStatus,
 } from "../types/osu";
@@ -152,7 +154,7 @@ function browserPreviewValue<T>(command: string, args?: Record<string, unknown>)
     } as T;
   }
   if (command === "update_settings") return args?.settings as T;
-  if (["clear_profile_cache", "set_default_file_client", "set_local_source", "reset_local_source", "start_tosu", "stop_tosu", "set_tosu_executable", "set_tosu_lyrics_executable", "cancel_online_beatmap_download", "exit_app"].includes(command)) return null as T;
+  if (["clear_profile_cache", "set_default_file_client", "set_display_gamma", "set_local_source", "reset_local_source", "start_tosu", "stop_tosu", "set_tosu_executable", "set_tosu_lyrics_executable", "cancel_online_beatmap_download", "exit_app"].includes(command)) return null as T;
   return undefined;
 }
 
@@ -229,6 +231,9 @@ export const desktopApi = {
   getDefaultFileClients: () => call<DefaultFileClients>("get_default_file_clients"),
   setDefaultFileClient: (kind: "beatmap" | "skin", client: OsuClient) =>
     call<void>("set_default_file_client", { kind, client }),
+  setDisplayGamma: (gamma: number) => call<void>("set_display_gamma", { gamma }),
+  generateTrainerBeatmap: (request: TrainerRequest) =>
+    call<TrainerResult>("generate_trainer_beatmap", { request }),
   getTosuStatus: () => call<TosuStatus>("get_tosu_status"),
   getTosuLogs: () => call<TosuLogEntry[]>("get_tosu_logs"),
   setTosuExecutable: (path: string) => call<TosuStatus>("set_tosu_executable", { path }),

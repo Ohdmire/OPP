@@ -390,6 +390,9 @@ pub fn progress_for_item(
         current_beatmapset_id: Some(item.beatmapset_id),
         current_title: Some(format!("{} — {}", item.artist, item.title)),
         message,
+        downloaded_bytes: 0,
+        total_bytes: None,
+        bytes_per_second: 0.0,
     }
 }
 
