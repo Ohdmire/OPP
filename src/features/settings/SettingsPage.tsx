@@ -347,7 +347,7 @@ export function SettingsPage() {
                   OPP v0.3.0a
                 </p>
               </div>
-              <Button onClick={() => void desktopApi.openExternal("https://github.com/L1rics06/OPP")} size="sm" variant="secondary">
+              <Button onClick={() => void desktopApi.openExternal("https://github.com/osuplusplus/OPP")} size="sm" variant="secondary">
                 <ExternalLink className="size-4" />项目仓库
               </Button>
             </div>

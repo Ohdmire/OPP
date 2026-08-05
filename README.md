@@ -55,7 +55,7 @@ OPP 是一个使用 Tauri、Rust 与 React 构建的 Windows 桌面应用。它�
 - Microsoft Edge WebView2 Runtime
 - osu! 个人 OAuth 应用
 
-从仓库的 [Releases](https://github.com/L1rics06/OPP/releases/latest) 页面下载最新的 Windows x64 EXE。Release 中的 `OPP-vX.Y.Z-windows-x64.exe` 无需安装，可直接运行；首次启动仍需要系统已安装 WebView2 Runtime。
+从仓库的 [Releases](https://github.com/osuplusplus/OPP/releases/latest) 页面下载最新的 Windows x64 EXE。Release 中的 `OPP-vX.Y.Z-windows-x64.exe` 无需安装，可直接运行；首次启动仍需要系统已安装 WebView2 Runtime。
 
 ### 配置 OAuth
 
@@ -164,7 +164,7 @@ crate `rosu`使用的pp计算算法是2025年10月快照，这导致我们本地
 
 ### 关联仓库
 
-- [OPP](https://github.com/L1rics06/OPP)
+- [OPP](https://github.com/osuplusplus/OPP)
 - [ppy/osu](https://github.com/ppy/osu)
 - [tosuapp/tosu](https://github.com/tosuapp/tosu)
 - [HollisMeynell/tosu-lyrics](https://github.com/HollisMeynell/tosu-lyrics)
