@@ -2826,6 +2826,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "netease-cloud-music"
+version = "0.1.0"
+dependencies = [
+ "reqwest 0.12.28",
+ "serde",
+ "thiserror 2.0.19",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
 name = "new_debug_unreachable"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3104,7 +3114,7 @@ checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
 
 [[package]]
 name = "opp"
-version = "0.3.0-a"
+version = "0.3.5"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -3116,6 +3126,7 @@ dependencies = [
  "keyring",
  "mania-converter",
  "md-5",
+ "netease-cloud-music",
  "osu-difficulty-runtime",
  "rayon",
  "reqwest 0.12.28",

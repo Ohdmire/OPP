@@ -1,0 +1,14 @@
+[package]
+name = "netease-cloud-music"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "NetEase Cloud Music song resolver and Windows URL Scheme launcher"
+
+[dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }

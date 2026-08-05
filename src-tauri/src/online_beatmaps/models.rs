@@ -78,7 +78,7 @@ pub struct BeatmapDownloadRequest {
 }
 
 fn default_download_provider() -> String {
-    "catboy".into()
+    "hinai".into()
 }
 
 #[derive(Debug, Clone, Serialize)]

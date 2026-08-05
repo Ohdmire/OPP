@@ -10,12 +10,12 @@ use crate::{
     error::CommandResult,
     game_session::{GameMonitorRuntime, GameSessionRuntime},
     local_analysis::LocalAnalysisService,
+    obs::ObsRuntime,
     online_beatmaps::providers::ProviderRegistry,
     osu_api::OsuApi,
     similarity::SimilarityRuntime,
     storage::StateStore,
     tosu::TosuRuntime,
-    obs::ObsRuntime,
 };
 
 #[derive(Default)]

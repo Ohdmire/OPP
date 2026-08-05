@@ -17,6 +17,10 @@ describe("online beatmap filters", () => {
     expect(activeFilterCount(query)).toBe(3);
   });
 
+  it("uses relevance as the default sort for keyword searches", () => {
+    expect(createDefaultSearchQuery("osu").sort).toBe("relevance_desc");
+  });
+
   it("normalizes official protocol-relative previews", () => {
     expect(normalizePreviewUrl("//b.ppy.sh/preview/1.mp3")).toBe(
       "https://b.ppy.sh/preview/1.mp3",

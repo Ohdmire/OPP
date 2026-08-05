@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Download, FolderOpen, RefreshCw, Search, Upload } from "lucide-react";
+import { Download, FolderOpen, History, RefreshCw, Search, Trophy, Upload } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { PageHeader } from "../../shared/components/PageHeader";
@@ -14,11 +14,15 @@ import type {
   SimilarityIndexStatus,
   SimilarityQueryRequest,
   SimilarityQueryResponse,
+  SimilarityRecommendationKind,
+  SimilarityRecommendationResponse,
+  SimilarityResult,
 } from "../../shared/types/osu";
 import {
   similarityIndexStatusKey,
   useSimilarityIndexStatus,
   useSimilarityQuery,
+  useSimilarityRecommendation,
 } from "./api";
 import { createSimilarityRequest, defaultSimilarityFilters } from "./defaults";
 import { SimilarityAdvancedPanel } from "./SimilarityAdvancedPanel";
@@ -35,7 +39,7 @@ const DIFFICULTY_DIMENSIONS = [
   ["aim", "Aim"],
   ["speed", "Speed"],
   ["reading", "Reading"],
-  ["flashlight", "Flashlight"],
+  ["slider", "Slider"],
   ["overlap", "Overlap"],
 ] as const;
 
@@ -72,6 +76,7 @@ function matchesCandidateFilters(
 interface SimilaritySession {
   request: SimilarityQueryRequest;
   response: SimilarityQueryResponse | null;
+  recommendationResponse: SimilarityRecommendationResponse | null;
   selectedResultId: number | null;
   advancedOpen: boolean;
   scrollY: number | null;
@@ -159,6 +164,7 @@ export function SimilarBeatmapsPage() {
   const queryClient = useQueryClient();
   const statusQuery = useSimilarityIndexStatus();
   const similarityQuery = useSimilarityQuery();
+  const similarityRecommendation = useSimilarityRecommendation();
   const settings = useSettings();
   const [request, setRequest] = useState<SimilarityQueryRequest>(() =>
     similaritySession?.request ?? createSimilarityRequest({ kind: "beatmap_id", value: "" }),
@@ -174,6 +180,10 @@ export function SimilarBeatmapsPage() {
   const [response, setResponse] = useState<SimilarityQueryResponse | null>(
     () => similaritySession?.response ?? null,
   );
+  const [recommendationResponse, setRecommendationResponse] =
+    useState<SimilarityRecommendationResponse | null>(
+      () => similaritySession?.recommendationResponse ?? null,
+    );
   const [selectedResultId, setSelectedResultId] = useState<number | null>(
     () => similaritySession?.selectedResultId ?? null,
   );
@@ -183,8 +193,10 @@ export function SimilarBeatmapsPage() {
   const previewVolume = settings.data?.preview_volume ?? 65;
 
   const filteredResults = useMemo(
-    () => response?.results.filter((result) => matchesCandidateFilters(result.base, result.difficulty, request.filters)) ?? [],
-    [request.filters, response],
+    () => (recommendationResponse?.results ?? response?.results ?? []).filter(
+      (result) => matchesCandidateFilters(result.base, result.difficulty, request.filters),
+    ),
+    [recommendationResponse, request.filters, response],
   );
 
   const selected = useMemo(() => {
@@ -196,6 +208,12 @@ export function SimilarBeatmapsPage() {
       ) ?? filteredResults[0]
     );
   }, [filteredResults, selectedResultId]);
+  const recommendedBy = selected
+    ? recommendationResponse?.results.find(
+        (result) => result.beatmap_id === selected.beatmap_id,
+      )?.recommended_by ?? null
+    : null;
+  const comparisonTarget = recommendedBy ?? response?.target ?? null;
 
   const status =
     statusQuery.data ??
@@ -214,11 +232,12 @@ export function SimilarBeatmapsPage() {
     saveSimilaritySession({
       request,
       response,
+      recommendationResponse,
       selectedResultId,
       advancedOpen,
       scrollY: restoreScrollY.current,
     });
-  }, [advancedOpen, request, response, selectedResultId]);
+  }, [advancedOpen, recommendationResponse, request, response, selectedResultId]);
 
   useLayoutEffect(() => {
     const scrollY = restoreScrollY.current;
@@ -253,6 +272,7 @@ export function SimilarBeatmapsPage() {
       const nextRequest = createSimilarityRequest(source);
       setRequest(nextRequest);
       setResponse(null);
+      setRecommendationResponse(null);
       setSelectedResultId(null);
       similarityQuery.mutate(nextRequest, { onSuccess: setResponse });
       setSearchParams(new URLSearchParams(), { replace: true });
@@ -274,7 +294,9 @@ export function SimilarBeatmapsPage() {
       queryClient.setQueryData(similarityIndexStatusKey, status);
       await queryClient.invalidateQueries({ queryKey: settingsQueryKey });
       similarityQuery.reset();
+      similarityRecommendation.reset();
       setResponse(null);
+      setRecommendationResponse(null);
       setSelectedResultId(null);
     } catch (error) {
       setConfigurationError(errorMessage(error));
@@ -285,7 +307,9 @@ export function SimilarBeatmapsPage() {
 
   function switchSource(kind: "beatmap_id" | "local_file") {
     similarityQuery.reset();
+    similarityRecommendation.reset();
     setResponse(null);
+    setRecommendationResponse(null);
     setSelectedResultId(null);
     setRequest((current) => ({
       ...current,
@@ -305,7 +329,7 @@ export function SimilarBeatmapsPage() {
     }));
   }
 
-  async function downloadResults(results: SimilarityQueryResponse["results"]) {
+  async function downloadResults(results: SimilarityResult[]) {
     if (!results.length) return;
     let destination =
       quickDownloadDirectory ?? settings.data?.beatmap_download_directory ?? "";
@@ -344,14 +368,15 @@ export function SimilarBeatmapsPage() {
     }
   }
 
-  async function downloadResult(result: SimilarityQueryResponse["results"][number]) {
+  async function downloadResult(result: SimilarityResult) {
     await downloadResults([result]);
   }
 
-  function openOnlineBeatmap(result: SimilarityQueryResponse["results"][number]) {
+  function openOnlineBeatmap(result: SimilarityResult) {
     saveSimilaritySession({
       request,
       response,
+      recommendationResponse,
       selectedResultId,
       advancedOpen,
       scrollY: window.scrollY || null,
@@ -361,7 +386,7 @@ export function SimilarBeatmapsPage() {
     });
   }
 
-  async function togglePreview(result: SimilarityQueryResponse["results"][number]) {
+  async function togglePreview(result: SimilarityResult) {
     if (playingId === result.beatmap_id && audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
@@ -400,6 +425,8 @@ export function SimilarBeatmapsPage() {
     if (!value) return;
     setSelectedResultId(null);
     setResponse(null);
+    setRecommendationResponse(null);
+    similarityRecommendation.reset();
     similarityQuery.mutate({
       ...request,
       filters: { ...defaultSimilarityFilters },
@@ -408,6 +435,24 @@ export function SimilarBeatmapsPage() {
           ? { kind: "beatmap_id", value }
           : { kind: "local_file", path: value },
     }, { onSuccess: setResponse });
+  }
+
+  function recommend(kind: SimilarityRecommendationKind) {
+    setConfigurationError(null);
+    setSelectedResultId(null);
+    setResponse(null);
+    setRecommendationResponse(null);
+    similarityQuery.reset();
+    similarityRecommendation.mutate(
+      {
+        kind,
+        difficulty_weights: request.difficulty_weights,
+        base_weights: request.base_weights,
+        filters: { ...defaultSimilarityFilters },
+        result_limit: request.result_limit,
+      },
+      { onSuccess: setRecommendationResponse },
+    );
   }
 
   if (statusQuery.isLoading) {
@@ -491,6 +536,33 @@ export function SimilarBeatmapsPage() {
           </Card>
 
           <Card className="mb-5 p-5">
+          <div className="mb-5 border-b border-white/[0.07] pb-5">
+            <div className="mb-3">
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--theme-primary)]">为你推荐</span>
+              <p className="mt-1 text-xs text-slate-400">从最近通过或 BP 前 20 张谱面出发，按总距离寻找最接近的谱面。</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="primary"
+                disabled={similarityQuery.isPending || similarityRecommendation.isPending}
+                loading={similarityRecommendation.isPending && similarityRecommendation.variables?.kind === "recent"}
+                onClick={() => recommend("recent")}
+              >
+                <History size={16} aria-hidden="true" />
+                根据最近游玩推荐
+              </Button>
+              <Button
+                type="button"
+                disabled={similarityQuery.isPending || similarityRecommendation.isPending}
+                loading={similarityRecommendation.isPending && similarityRecommendation.variables?.kind === "best"}
+                onClick={() => recommend("best")}
+              >
+                <Trophy size={16} aria-hidden="true" />
+                根据你的 BP 推荐
+              </Button>
+            </div>
+          </div>
           <form onSubmit={submit}>
             <div className="mb-5 inline-flex rounded-lg border border-white/[0.08] bg-black/15 p-1" role="tablist" aria-label="参考谱面输入方式">
               <Button
@@ -557,7 +629,7 @@ export function SimilarBeatmapsPage() {
                   !(request.source.kind === "beatmap_id"
                     ? request.source.value
                     : request.source.path
-                  ).trim() || similarityQuery.isPending
+                  ).trim() || similarityQuery.isPending || similarityRecommendation.isPending
                 }
               >
                 <Search size={16} aria-hidden="true" />
@@ -584,30 +656,45 @@ export function SimilarBeatmapsPage() {
 
           <SimilarityFilterSliders request={request} onChange={setRequest} />
 
-          {similarityQuery.error ? (
+          {similarityQuery.error || similarityRecommendation.error ? (
             <div className="mb-5 rounded-xl border border-rose-300/20 bg-rose-300/10 px-4 py-3 text-sm text-rose-100">
-              {errorMessage(similarityQuery.error)}
+              {errorMessage(similarityQuery.error ?? similarityRecommendation.error)}
             </div>
           ) : null}
 
-          {response ? (
+          {response || recommendationResponse ? (
             <section className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
               <div className="min-w-0">
-                <Card className="mb-5 grid items-center gap-4 p-5 sm:grid-cols-[minmax(0,1fr)_320px]">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--theme-primary)]">参考谱面</span>
-                    <h2 className="mt-2 text-lg font-semibold text-white">{response.target.version || "本地谱面"}</h2>
+                {recommendationResponse ? (
+                  <Card className="mb-5 p-5">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--theme-primary)]">个性化推荐</span>
+                    <h2 className="mt-2 text-lg font-semibold text-white">
+                      {recommendationResponse.kind === "recent" ? "根据最近游玩生成" : "根据你的 BP 生成"}
+                    </h2>
                     <p className="mt-1 text-sm text-slate-400">
-                      {response.target.artist} — {response.target.title}
+                      已使用 {recommendationResponse.seed_count} 张参考谱面
+                      {recommendationResponse.skipped_seed_count
+                        ? `，跳过 ${recommendationResponse.skipped_seed_count} 张无法读取的谱面`
+                        : ""}
                     </p>
-                    <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-400">
-                      <span>AR {formatMetric(response.target.base.ar, 1)}</span>
-                      <span>BPM {formatMetric(response.target.base.bpm, 0)}</span>
-                      <span>长度 {formatMetric(response.target.base.length_seconds, 0)}s</span>
+                  </Card>
+                ) : response ? (
+                  <Card className="mb-5 grid items-center gap-4 p-5 sm:grid-cols-[minmax(0,1fr)_320px]">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--theme-primary)]">参考谱面</span>
+                      <h2 className="mt-2 text-lg font-semibold text-white">{response.target.version || "本地谱面"}</h2>
+                      <p className="mt-1 text-sm text-slate-400">
+                        {response.target.artist} — {response.target.title}
+                      </p>
+                      <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-400">
+                        <span>AR {formatMetric(response.target.base.ar, 1)}</span>
+                        <span>BPM {formatMetric(response.target.base.bpm, 0)}</span>
+                        <span>长度 {formatMetric(response.target.base.length_seconds, 0)}s</span>
+                      </div>
                     </div>
-                  </div>
-                  <SimilarityRadar target={response.target.difficulty} />
-                </Card>
+                    <SimilarityRadar target={response.target.difficulty} />
+                  </Card>
+                ) : null}
 
                 <div className="mb-3 flex items-end justify-between">
                   <div>
@@ -624,6 +711,7 @@ export function SimilarBeatmapsPage() {
                       <SimilarityResultCard
                         key={result.beatmap_id}
                         result={result}
+                        recommendedBy={recommendationResponse?.results.find((item) => item.beatmap_id === result.beatmap_id)?.recommended_by}
                         selected={selected?.beatmap_id === result.beatmap_id}
                         onSelect={() => setSelectedResultId(result.beatmap_id)}
                         onDownload={() => void downloadResult(result)}
@@ -644,7 +732,7 @@ export function SimilarBeatmapsPage() {
                 )}
               </div>
 
-              {selected ? (
+              {selected && comparisonTarget ? (
                 <aside className="sticky top-[120px] self-start">
                 <Card className="max-h-[calc(100vh-140px)] overflow-y-auto p-5">
                   <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--theme-primary)]">特征对比</span>
@@ -652,14 +740,19 @@ export function SimilarBeatmapsPage() {
                   <p className="mt-1 truncate text-xs text-slate-400">
                     {selected.artist} — {selected.title}
                   </p>
+                  {recommendedBy ? (
+                    <p className="mt-2 text-xs text-cyan-200">
+                      由 {recommendedBy.artist} - {recommendedBy.title} [{recommendedBy.version}] 推荐
+                    </p>
+                  ) : null}
                   <SimilarityRadar
-                    target={response.target.difficulty}
+                    target={comparisonTarget.difficulty}
                     comparison={selected.difficulty}
                   />
                   <div className="mb-4 space-y-1.5">
                     {DIFFICULTY_DIMENSIONS.map(([key, label]) => {
                       const difference =
-                        selected.difficulty[key] - response.target.difficulty[key];
+                        selected.difficulty[key] - comparisonTarget.difficulty[key];
                       return (
                         <div
                           className="flex items-center justify-between border-b border-white/[0.055] py-1.5 text-xs last:border-b-0"

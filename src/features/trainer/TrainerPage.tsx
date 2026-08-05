@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FolderCheck, Gauge, Music4, SlidersHorizontal, Timer, WandSparkles } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { useMode } from "../../app/ModeContext";
 import { ErrorPanel } from "../../shared/components/ErrorPanel";
@@ -9,6 +9,33 @@ import { Badge, Button, Card, DataLine, EmptyState, SectionTitle } from "../../s
 import { desktopApi } from "../../shared/lib/tauri";
 import type { OsuClient, TrainerRequest } from "../../shared/types/osu";
 import { useLocalBeatmapDetail } from "../local-analysis/api";
+
+const TRAINER_DRAFT_KEY = "opp.trainer-draft.v1";
+
+interface TrainerDraft {
+  client: OsuClient;
+  resourceId: string;
+  rate: string;
+  ar: string;
+  od: string;
+  cs: string;
+  hp: string;
+  minBpm: string;
+  maxBpm: string;
+  start: string;
+  end: string;
+  result: { directory: string; included_objects: number } | null;
+}
+
+function loadDraft(): TrainerDraft | null {
+  try {
+    const value: unknown = JSON.parse(sessionStorage.getItem(TRAINER_DRAFT_KEY) ?? "null");
+    if (!value || typeof value !== "object" || !("resourceId" in value) || typeof value.resourceId !== "string") return null;
+    return value as TrainerDraft;
+  } catch {
+    return null;
+  }
+}
 
 function numeric(value: string, fallback: number) {
   const parsed = Number(value);
@@ -26,27 +53,38 @@ function Field({ label, value, onChange, min, max, step = "0.1" }: { label: stri
 
 export function TrainerPage() {
   const { client: activeClient } = useMode();
+  const navigate = useNavigate();
   const [params] = useSearchParams();
-  const client = (params.get("client") === "lazer" ? "lazer" : params.get("client") === "stable" ? "stable" : activeClient) as OsuClient;
-  const resourceId = params.get("resource") ?? "";
+  const savedDraft = useMemo(() => loadDraft(), []);
+  const requestedClient = params.get("client") === "lazer" ? "lazer" : params.get("client") === "stable" ? "stable" : null;
+  const requestedResourceId = params.get("resource");
+  const draft = savedDraft && (!requestedResourceId || (savedDraft.resourceId === requestedResourceId && (!requestedClient || savedDraft.client === requestedClient))) ? savedDraft : null;
+  const client = (requestedClient ?? draft?.client ?? activeClient) as OsuClient;
+  const resourceId = requestedResourceId ?? draft?.resourceId ?? "";
   const detail = useLocalBeatmapDetail(client, resourceId || null);
   const map = detail.data?.summary;
-  const [rate, setRate] = useState("1");
-  const [ar, setAr] = useState("");
-  const [od, setOd] = useState("");
-  const [cs, setCs] = useState("");
-  const [hp, setHp] = useState("");
-  const [minBpm, setMinBpm] = useState("");
-  const [maxBpm, setMaxBpm] = useState("");
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
+  const [rate, setRate] = useState(() => draft?.rate ?? "1");
+  const [ar, setAr] = useState(() => draft?.ar ?? "");
+  const [od, setOd] = useState(() => draft?.od ?? "");
+  const [cs, setCs] = useState(() => draft?.cs ?? "");
+  const [hp, setHp] = useState(() => draft?.hp ?? "");
+  const [minBpm, setMinBpm] = useState(() => draft?.minBpm ?? "");
+  const [maxBpm, setMaxBpm] = useState(() => draft?.maxBpm ?? "");
+  const [start, setStart] = useState(() => draft?.start ?? "");
+  const [end, setEnd] = useState(() => draft?.end ?? "");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  const [result, setResult] = useState<{ directory: string; included_objects: number } | null>(null);
+  const [result, setResult] = useState<{ directory: string; included_objects: number } | null>(() => draft?.result ?? null);
 
   const values = useMemo(() => ({
     rate: numeric(rate, 1), ar: numeric(ar, map?.ar ?? 5), od: numeric(od, map?.od ?? 5), cs: numeric(cs, map?.cs ?? 4), hp: numeric(hp, map?.hp ?? 5),
   }), [ar, cs, hp, map?.ar, map?.cs, map?.hp, map?.od, od, rate]);
+
+  useEffect(() => {
+    if (!resourceId) return;
+    const next: TrainerDraft = { client, resourceId, rate, ar, od, cs, hp, minBpm, maxBpm, start, end, result };
+    try { sessionStorage.setItem(TRAINER_DRAFT_KEY, JSON.stringify(next)); } catch { /* Session storage is optional. */ }
+  }, [ar, client, cs, end, hp, maxBpm, minBpm, od, rate, resourceId, result, start]);
 
   const generate = async () => {
     if (!map) return;
@@ -58,7 +96,7 @@ export function TrainerPage() {
     } catch (caught) { setError(caught); } finally { setGenerating(false); }
   };
 
-  if (!resourceId) return <><PageHeader eyebrow="Core feature" title="铺面练习生成器" description="从本地铺面难度一键带入，再生成可直接被 osu! Songs 识别的训练副本。" /><EmptyState action={<Button onClick={() => history.back()}><Music4 className="size-4" />前往本地铺面</Button>} icon={<WandSparkles className="size-6" />} title="先选择一个本地难度" description="在“本地铺面”展开任意难度，点击“导入 Trainer”即可开始。" /></>;
+  if (!resourceId) return <><PageHeader eyebrow="Core feature" title="铺面练习生成器" description="从本地铺面难度一键带入，再生成可直接被 osu! Songs 识别的训练副本。" /><EmptyState action={<Button onClick={() => navigate("/local/maps")}><Music4 className="size-4" />前往本地铺面</Button>} icon={<WandSparkles className="size-6" />} title="先选择一个本地难度" description="在“本地铺面”展开任意难度，点击“导入 Trainer”即可开始。" /></>;
   if (detail.isLoading) return <><PageHeader eyebrow="Core feature" title="铺面练习生成器" description="正在读取铺面参数…" /><Card className="h-64 animate-pulse" /></>;
   if (!map || detail.error) return <><PageHeader eyebrow="Core feature" title="铺面练习生成器" description="无法读取要训练的铺面。" />{detail.error ? <ErrorPanel error={detail.error} /> : null}</>;
 

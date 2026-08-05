@@ -3,8 +3,9 @@ mod error;
 mod game_session;
 mod local_analysis;
 mod models;
-mod online_beatmaps;
+mod netease_music;
 mod obs;
+mod online_beatmaps;
 mod osu_api;
 mod pp_calc;
 mod replay_render;
@@ -32,15 +33,22 @@ use local_analysis::{
     query_local_skins, replace_local_skin_asset, reset_local_source, scan_local_source,
     set_local_source,
 };
+use netease_music::open_netease_music_search;
+use obs::{
+    get_obs_scenes, get_obs_status, refresh_selected_obs_scene, save_obs_connection,
+    start_obs_monitor,
+};
 use online_beatmaps::{
     cancel_online_beatmap_download, collect_online_beatmapsets, download_online_beatmapsets,
     get_online_beatmap, get_online_beatmap_provider_status, get_online_beatmapset,
     search_online_beatmapsets,
 };
-use obs::{get_obs_status, get_obs_scenes, save_obs_connection, refresh_selected_obs_scene, start_obs_monitor};
 use pp_calc::calculate_beatmap_pp;
 use replay_render::submit_replay_render;
-use similarity::{configure_similarity_index, get_similarity_index_status, query_similar_beatmaps};
+use similarity::{
+    configure_similarity_index, get_similarity_index_status, query_similar_beatmaps,
+    recommend_similar_beatmaps,
+};
 use state::AppState;
 use tauri::{
     Manager,
@@ -50,11 +58,11 @@ use tools::{
     convert_mania_beatmaps, get_default_file_clients, open_local_resource_in_explorer,
     set_default_file_client, set_display_gamma,
 };
-use trainer::generate_trainer_beatmap;
 use tosu::{
     get_tosu_logs, get_tosu_status, set_tosu_executable, set_tosu_lyrics_executable, start_tosu,
     stop_tosu,
 };
+use trainer::generate_trainer_beatmap;
 
 #[tauri::command]
 fn exit_app(app: tauri::AppHandle) {
@@ -117,6 +125,7 @@ pub fn run() {
             get_similarity_index_status,
             configure_similarity_index,
             query_similar_beatmaps,
+            recommend_similar_beatmaps,
             start_game_session,
             start_detected_game_session,
             get_game_status,
@@ -152,6 +161,7 @@ pub fn run() {
             get_default_file_clients,
             set_default_file_client,
             set_display_gamma,
+            open_netease_music_search,
             convert_mania_beatmaps,
             generate_trainer_beatmap,
             get_tosu_status,

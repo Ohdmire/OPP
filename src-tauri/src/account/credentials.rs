@@ -76,7 +76,11 @@ impl CredentialStore {
     }
 
     pub fn set_obs_websocket_password(&self, password: &str) -> CommandResult<()> {
-        if password.is_empty() { Self::delete(OBS_WEBSOCKET_PASSWORD_ENTRY) } else { Self::write_password(OBS_WEBSOCKET_PASSWORD_ENTRY, password) }
+        if password.is_empty() {
+            Self::delete(OBS_WEBSOCKET_PASSWORD_ENTRY)
+        } else {
+            Self::write_password(OBS_WEBSOCKET_PASSWORD_ENTRY, password)
+        }
     }
 
     pub fn get_obs_websocket_password(&self) -> CommandResult<Option<String>> {

@@ -1,0 +1,45 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+
+import type { OnlineBeatmapset } from "../../shared/types/osu";
+import { BeatmapsetCard } from "./BeatmapsetCard";
+
+const beatmapset: OnlineBeatmapset = {
+  id: 697087,
+  artist: "Y&Co.",
+  title: "Daisuke",
+  creator: "moph",
+  status: "ranked",
+  beatmaps: [],
+};
+
+describe("BeatmapsetCard", () => {
+  it("keeps queue selection separate from direct download", async () => {
+    const user = userEvent.setup();
+    const onDownload = vi.fn();
+    const onOpen = vi.fn();
+    const onSelect = vi.fn();
+
+    render(
+      <BeatmapsetCard
+        beatmapset={beatmapset}
+        downloading={false}
+        onDownload={onDownload}
+        onOpen={onOpen}
+        onPreview={vi.fn()}
+        onSelect={onSelect}
+        playing={false}
+        selected={false}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "下载谱面" }));
+    expect(onDownload).toHaveBeenCalledOnce();
+    expect(onOpen).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "加入下载队列" }));
+    expect(onSelect).toHaveBeenCalledOnce();
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+});

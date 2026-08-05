@@ -35,6 +35,7 @@ impl fmt::Display for Ruleset {
 pub enum ScoreCategory {
     Best,
     Pinned,
+    Recent,
 }
 
 impl fmt::Display for ScoreCategory {
@@ -42,6 +43,7 @@ impl fmt::Display for ScoreCategory {
         f.write_str(match self {
             Self::Best => "best",
             Self::Pinned => "pinned",
+            Self::Recent => "recent",
         })
     }
 }

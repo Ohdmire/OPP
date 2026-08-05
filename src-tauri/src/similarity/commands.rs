@@ -1,15 +1,21 @@
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 use tauri::State;
 
 use crate::{
+    account::ensure_access_token,
     error::{CommandError, CommandResult},
+    models::{Ruleset, Score},
     similarity::{
         models::{
             SimilarityIndexStatus, SimilarityQueryRequest, SimilarityQueryResponse,
-            SimilaritySource,
+            SimilarityRecommendationKind, SimilarityRecommendationRequest,
+            SimilarityRecommendationResponse, SimilaritySource,
         },
-        query::{map_runtime_error, options_from_request, response_from_runtime},
+        query::{
+            map_runtime_error, options_from_recommendation_request, options_from_request,
+            recommendation_response_from_runtime, response_from_runtime,
+        },
         source::{fetch_online_osu, parse_beatmap_id, read_local_osu},
     },
     state::AppState,
@@ -98,6 +104,116 @@ pub async fn query_similar_beatmaps(
     .map_err(|_| CommandError::new("SIMILARITY_RUNTIME_ERROR", "相似谱面查询任务意外停止"))?
 }
 
+#[tauri::command]
+pub async fn recommend_similar_beatmaps(
+    request: SimilarityRecommendationRequest,
+    state: State<'_, AppState>,
+) -> CommandResult<SimilarityRecommendationResponse> {
+    const SEED_LIMIT: usize = 20;
+
+    let directory = configured_directory(&state)?.ok_or_else(|| {
+        CommandError::new(
+            "SIMILARITY_INDEX_NOT_CONFIGURED",
+            "请先选择本地相似谱面索引目录",
+        )
+    })?;
+    let runtime = state.similarity.clone();
+    let dataset_directory = directory.clone();
+    let dataset = tauri::async_runtime::spawn_blocking(move || {
+        runtime
+            .dataset(&dataset_directory)
+            .map_err(map_runtime_error)
+    })
+    .await
+    .map_err(|_| CommandError::new("SIMILARITY_RUNTIME_ERROR", "相似谱面运行时意外停止"))??;
+    let options = options_from_recommendation_request(&request)?;
+
+    let access_token = ensure_access_token(&state).await?;
+    let profile = state
+        .api
+        .get_own_profile(&access_token, Ruleset::Osu)
+        .await?;
+    let scores = match request.kind {
+        SimilarityRecommendationKind::Recent => {
+            state
+                .api
+                .get_recent_scores(&access_token, profile.id, Ruleset::Osu)
+                .await?
+        }
+        SimilarityRecommendationKind::Best => {
+            state
+                .api
+                .get_best_scores(&access_token, profile.id, Ruleset::Osu)
+                .await?
+        }
+    };
+    let seed_ids = recommendation_seed_ids(&scores, SEED_LIMIT);
+    if seed_ids.is_empty() {
+        return Err(CommandError::new(
+            "NO_RECOMMENDATION_SEEDS",
+            match request.kind {
+                SimilarityRecommendationKind::Recent => "没有可用于推荐的最近通过成绩",
+                SimilarityRecommendationKind::Best => "没有可用于推荐的 BP 成绩",
+            },
+        ));
+    }
+
+    let mut targets = Vec::with_capacity(seed_ids.len());
+    let mut skipped_seed_count = 0;
+    for beatmap_id in seed_ids {
+        let target = if dataset.contains(beatmap_id) {
+            dataset.target_for_id(beatmap_id).map_err(map_runtime_error)
+        } else {
+            match fetch_online_osu(&state.providers, beatmap_id).await {
+                Ok(bytes) => dataset.analyze_target(&bytes).map_err(map_runtime_error),
+                Err(_) => {
+                    skipped_seed_count += 1;
+                    continue;
+                }
+            }
+        };
+        match target {
+            Ok(target) => targets.push(target),
+            Err(_) => skipped_seed_count += 1,
+        }
+    }
+    if targets.is_empty() {
+        return Err(CommandError::new(
+            "NO_USABLE_RECOMMENDATION_SEEDS",
+            "成绩中的谱面均无法从本地索引或在线谱面源读取",
+        ));
+    }
+
+    let kind = request.kind;
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut batches = Vec::with_capacity(targets.len());
+        for target in targets {
+            let results = dataset
+                .query(&target, &options)
+                .map_err(map_runtime_error)?;
+            batches.push((target, results));
+        }
+        Ok(recommendation_response_from_runtime(
+            kind,
+            batches,
+            skipped_seed_count,
+            options.result_limit,
+        ))
+    })
+    .await
+    .map_err(|_| CommandError::new("SIMILARITY_RUNTIME_ERROR", "推荐谱面查询任务意外停止"))?
+}
+
+fn recommendation_seed_ids(scores: &[Score], limit: usize) -> Vec<u64> {
+    let mut seen = HashSet::new();
+    scores
+        .iter()
+        .filter_map(|score| score.beatmap.as_ref()?.get("id")?.as_u64())
+        .filter(|beatmap_id| seen.insert(*beatmap_id))
+        .take(limit)
+        .collect()
+}
+
 async fn inspect(
     runtime: Arc<crate::similarity::dataset::SimilarityRuntime>,
     directory: Option<String>,
@@ -109,4 +225,27 @@ async fn inspect(
 
 fn configured_directory(state: &AppState) -> CommandResult<Option<String>> {
     Ok(state.store.snapshot()?.settings.similarity_index_directory)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    fn score(beatmap_id: Option<u64>) -> Score {
+        serde_json::from_value(json!({
+            "user_id": 1,
+            "rank": "A",
+            "statistics": {},
+            "beatmap": beatmap_id.map(|id| json!({ "id": id }))
+        }))
+        .expect("score fixture")
+    }
+
+    #[test]
+    fn recommendation_seeds_are_ordered_deduplicated_and_limited() {
+        let scores = vec![score(Some(8)), score(None), score(Some(8)), score(Some(9))];
+        assert_eq!(recommendation_seed_ids(&scores, 2), vec![8, 9]);
+    }
 }

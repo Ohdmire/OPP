@@ -10,7 +10,7 @@ export const defaultDifficultyWeights: DifficultyFeatureVector = {
   aim: 1,
   speed: 1,
   reading: 1,
-  flashlight: 1,
+  slider: 1,
   overlap: 1,
 };
 

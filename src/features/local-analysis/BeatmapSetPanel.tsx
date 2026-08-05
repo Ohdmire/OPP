@@ -13,6 +13,7 @@ import {
   Gauge,
   Hash,
   ListFilter,
+  Music4,
   RotateCcw,
   ScanSearch,
   SlidersHorizontal,
@@ -32,7 +33,7 @@ import {
 } from "../../shared/components/ui";
 import { SearchAutocomplete } from "../../shared/components/SearchAutocomplete";
 import { BeatmapDifficultyStrip, BeatmapInfoBar } from "../../shared/components/BeatmapSetVisuals";
-import { fullNumber, rulesetLabels } from "../../shared/lib/format";
+import { errorMessage, fullNumber, rulesetLabels } from "../../shared/lib/format";
 import { desktopApi } from "../../shared/lib/tauri";
 import { DifficultyIcon, ModeIcon } from "../online-beatmaps/BeatmapVisuals";
 import { similarityRouteForLocalResource } from "../similar-beatmaps/navigation";
@@ -152,6 +153,7 @@ function BeatmapSetCard({
   onFindSimilar: (resourceId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [neteaseError, setNeteaseError] = useState<unknown>(null);
   const starRange =
     set.min_stars === null
       ? "待计算"
@@ -203,6 +205,20 @@ function BeatmapSetCard({
           打开文件
         </Button>
         <Button
+          aria-label="在网易云音乐客户端中播放歌曲"
+          onClick={() => {
+            setNeteaseError(null);
+            void desktopApi
+              .openNeteaseMusicSearch(set.artist_unicode || set.artist, set.title_unicode || set.title)
+              .catch(setNeteaseError);
+          }}
+          size="sm"
+          variant="secondary"
+        >
+          <Music4 className="size-3.5" />
+          在网易云中播放
+        </Button>
+        <Button
           aria-expanded={expanded}
           onClick={() => setExpanded((value) => !value)}
           className="ml-auto shrink-0"
@@ -212,6 +228,7 @@ function BeatmapSetCard({
           {expanded ? "收起难度" : "展开难度"}
         </Button>
       </div>
+      {neteaseError ? <p className="border-t border-rose-300/15 bg-rose-300/[0.05] px-5 py-2 text-xs text-rose-100" role="alert">{errorMessage(neteaseError)}</p> : null}
 
       {expanded ? (
         <div className="grid gap-2 border-t border-white/[0.055] p-3">

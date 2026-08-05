@@ -243,10 +243,17 @@ pub async fn download_online_beatmapsets(
             }
             Ok(download) => {
                 let downloaded_bytes = download.bytes.len() as u64;
-                let bytes_per_second = downloaded_bytes as f64 / started_at.elapsed().as_secs_f64().max(0.001);
+                let bytes_per_second =
+                    downloaded_bytes as f64 / started_at.elapsed().as_secs_f64().max(0.001);
                 let mut byte_progress = progress_for_item(
                     "downloading",
-                    DownloadProgressCounts { total, processed, completed, skipped, failed: failures.len() },
+                    DownloadProgressCounts {
+                        total,
+                        processed,
+                        completed,
+                        skipped,
+                        failed: failures.len(),
+                    },
                     item,
                     Some("正在写入下载文件".into()),
                 );

@@ -4,7 +4,7 @@ import { ArrowRight, Download, Headphones, Pause } from "lucide-react";
 import { Badge, Button, Card } from "../../shared/components/ui";
 import { DifficultyIcon } from "../../shared/components/DifficultyIcon";
 import { desktopApi, isTauri } from "../../shared/lib/tauri";
-import type { Ruleset, SimilarityResult } from "../../shared/types/osu";
+import type { Ruleset, SimilarityBeatmap, SimilarityResult } from "../../shared/types/osu";
 
 function durationLabel(seconds: number) {
   const rounded = Math.max(0, Math.round(seconds));
@@ -51,6 +51,7 @@ function readDifficulty(value: Record<string, unknown>) {
 
 export function SimilarityResultCard({
   result,
+  recommendedBy,
   selected,
   onSelect,
   onOpen,
@@ -62,6 +63,7 @@ export function SimilarityResultCard({
   downloadDisabled,
 }: {
   result: SimilarityResult;
+  recommendedBy?: SimilarityBeatmap;
   selected: boolean;
   onSelect: () => void;
   onOpen: () => void;
@@ -117,6 +119,11 @@ export function SimilarityResultCard({
           </div>
           <h3 className="mt-2 truncate text-sm font-semibold text-white">{result.artist} - {result.title}</h3>
           <p className="mt-1 truncate text-xs text-slate-400">[{result.version}] · mapped by {result.creator}</p>
+          {recommendedBy ? (
+            <p className="mt-1.5 truncate text-xs text-cyan-200/90">
+              由 {recommendedBy.artist} - {recommendedBy.title} [{recommendedBy.version}] 推荐
+            </p>
+          ) : null}
 
           <div className="mt-3 grid grid-cols-4 gap-2">
             <Metric label="AR" tone={osuTone(result.base.ar)} value={result.base.ar.toFixed(1)} />

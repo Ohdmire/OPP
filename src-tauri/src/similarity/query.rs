@@ -1,71 +1,89 @@
+use std::collections::{HashMap, HashSet};
+
 use osu_difficulty_runtime::{
-    QueryOptions, QueryResult as RuntimeQueryResult, QueryTarget as RuntimeQueryTarget,
-    RuntimeError, RuntimeErrorKind,
+    BaseFeatureWeights, DifficultyWeights, QueryFilters, QueryOptions,
+    QueryResult as RuntimeQueryResult, QueryTarget as RuntimeQueryTarget, RuntimeError,
+    RuntimeErrorKind,
 };
 
 use crate::{
     error::{CommandError, CommandResult},
     similarity::models::{
-        SimilarityBeatmap, SimilarityQueryRequest, SimilarityQueryResponse, SimilarityResult,
+        SimilarityBeatmap, SimilarityQueryRequest, SimilarityQueryResponse,
+        SimilarityRecommendationKind, SimilarityRecommendationRequest,
+        SimilarityRecommendationResponse, SimilarityRecommendationResult, SimilarityResult,
         SimilarityTarget,
     },
 };
 
 pub fn options_from_request(request: &SimilarityQueryRequest) -> CommandResult<QueryOptions> {
-    if !(5..=50).contains(&request.result_limit) {
+    options_from_parts(
+        request.difficulty_weights,
+        request.base_weights,
+        &request.filters,
+        request.result_limit,
+    )
+}
+
+pub fn options_from_recommendation_request(
+    request: &SimilarityRecommendationRequest,
+) -> CommandResult<QueryOptions> {
+    options_from_parts(
+        request.difficulty_weights,
+        request.base_weights,
+        &request.filters,
+        request.result_limit,
+    )
+}
+
+fn options_from_parts(
+    difficulty_weights: DifficultyWeights,
+    base_weights: BaseFeatureWeights,
+    filters: &QueryFilters,
+    result_limit: usize,
+) -> CommandResult<QueryOptions> {
+    if !(5..=50).contains(&result_limit) {
         return Err(CommandError::new(
             "INVALID_RESULT_LIMIT",
             "结果数量必须在 5 到 50 之间",
         ));
     }
+    validate_range(filters.min_ar, filters.max_ar, 0.0, 11.0, "AR")?;
+    validate_range(filters.min_bpm, filters.max_bpm, 0.0, 1000.0, "BPM")?;
     validate_range(
-        request.filters.min_ar,
-        request.filters.max_ar,
-        0.0,
-        11.0,
-        "AR",
-    )?;
-    validate_range(
-        request.filters.min_bpm,
-        request.filters.max_bpm,
-        0.0,
-        1000.0,
-        "BPM",
-    )?;
-    validate_range(
-        request.filters.min_length_seconds,
-        request.filters.max_length_seconds,
+        filters.min_length_seconds,
+        filters.max_length_seconds,
         0.0,
         7200.0,
         "length",
     )?;
     validate_range(
-        request.filters.min_object_density,
-        request.filters.max_object_density,
+        filters.min_object_density,
+        filters.max_object_density,
         0.0,
         100.0,
         "object density",
     )?;
     validate_range(
-        request.filters.min_circle_ratio,
-        request.filters.max_circle_ratio,
+        filters.min_circle_ratio,
+        filters.max_circle_ratio,
         0.0,
         1.0,
         "circle ratio",
     )?;
     validate_range(
-        request.filters.min_slider_ratio,
-        request.filters.max_slider_ratio,
+        filters.min_slider_ratio,
+        filters.max_slider_ratio,
         0.0,
         1.0,
         "slider ratio",
     )?;
-    let difficulty = request.difficulty_weights;
+    let difficulty = difficulty_weights;
     let weights = [
         difficulty.aim,
         difficulty.speed,
         difficulty.reading,
-        difficulty.flashlight,
+        difficulty.slider,
         difficulty.overlap,
     ];
     if weights
@@ -79,10 +97,10 @@ pub fn options_from_request(request: &SimilarityQueryRequest) -> CommandResult<Q
         ));
     }
     Ok(QueryOptions {
-        difficulty_weights: request.difficulty_weights,
-        base_weights: request.base_weights,
-        filters: request.filters.clone(),
-        result_limit: request.result_limit,
+        difficulty_weights,
+        base_weights,
+        filters: filters.clone(),
+        result_limit,
     })
 }
 
@@ -129,6 +147,85 @@ pub fn response_from_runtime(
     }
 }
 
+pub fn recommendation_response_from_runtime(
+    kind: SimilarityRecommendationKind,
+    batches: Vec<(RuntimeQueryTarget, Vec<RuntimeQueryResult>)>,
+    skipped_seed_count: usize,
+    result_limit: usize,
+) -> SimilarityRecommendationResponse {
+    let seed_count = batches.len();
+    let seed_ids = batches
+        .iter()
+        .map(|(target, _)| target.record.beatmap_id)
+        .collect::<HashSet<_>>();
+    let seed_sets = batches
+        .iter()
+        .map(|(target, _)| target.record.beatmapset_id)
+        .filter(|beatmapset_id| *beatmapset_id != 0)
+        .collect::<HashSet<_>>();
+    let mut nearest_by_set = HashMap::<u64, SimilarityRecommendationResult>::new();
+
+    for (target, results) in batches {
+        let recommended_by = beatmap_from_parts(target.metadata, target.record);
+        for result in results {
+            if seed_ids.contains(&result.record.beatmap_id)
+                || (result.record.beatmapset_id != 0
+                    && seed_sets.contains(&result.record.beatmapset_id))
+            {
+                continue;
+            }
+            let beatmapset_id = result.record.beatmapset_id;
+            let recommendation = SimilarityRecommendationResult {
+                result: SimilarityResult {
+                    beatmap: beatmap_from_parts(result.metadata, result.record),
+                    final_distance: result.final_distance,
+                    difficulty_distance: result.difficulty_distance,
+                    base_distance: result.base_distance,
+                },
+                recommended_by: recommended_by.clone(),
+            };
+            let should_replace = nearest_by_set.get(&beatmapset_id).is_none_or(|current| {
+                recommendation
+                    .result
+                    .final_distance
+                    .total_cmp(&current.result.final_distance)
+                    .then_with(|| {
+                        recommendation
+                            .result
+                            .beatmap
+                            .beatmap_id
+                            .cmp(&current.result.beatmap.beatmap_id)
+                    })
+                    .is_lt()
+            });
+            if should_replace {
+                nearest_by_set.insert(beatmapset_id, recommendation);
+            }
+        }
+    }
+
+    let mut results = nearest_by_set.into_values().collect::<Vec<_>>();
+    results.sort_by(|left, right| {
+        left.result
+            .final_distance
+            .total_cmp(&right.result.final_distance)
+            .then_with(|| {
+                left.result
+                    .beatmap
+                    .beatmap_id
+                    .cmp(&right.result.beatmap.beatmap_id)
+            })
+    });
+    results.truncate(result_limit);
+
+    SimilarityRecommendationResponse {
+        kind,
+        seed_count,
+        skipped_seed_count,
+        results,
+    }
+}
+
 fn beatmap_from_parts(
     metadata: osu_difficulty_runtime::BeatmapMetadata,
     record: osu_difficulty_runtime::BeatmapFeatureRecord,
@@ -166,7 +263,9 @@ pub fn map_runtime_error(error: RuntimeError) -> CommandError {
 
 #[cfg(test)]
 mod tests {
-    use osu_difficulty_runtime::{BaseFeatureWeights, DifficultyWeights, QueryFilters};
+    use osu_difficulty_runtime::{
+        BaseFeatureWeights, BeatmapFeatureRecord, BeatmapMetadata, DifficultyWeights, QueryFilters,
+    };
 
     use super::*;
     use crate::similarity::models::SimilaritySource;
@@ -196,9 +295,77 @@ mod tests {
             aim: 0.0,
             speed: 0.0,
             reading: 0.0,
-            flashlight: 0.0,
+            slider: 0.0,
             overlap: 0.0,
         };
         assert!(options_from_request(&request).is_err());
+    }
+
+    fn target(id: u64, set: u64) -> RuntimeQueryTarget {
+        RuntimeQueryTarget {
+            metadata: metadata(id, set),
+            record: record(id, set),
+        }
+    }
+
+    fn result(id: u64, set: u64, distance: f32) -> RuntimeQueryResult {
+        RuntimeQueryResult {
+            metadata: metadata(id, set),
+            record: record(id, set),
+            final_distance: distance,
+            difficulty_distance: distance,
+            base_distance: 0.0,
+        }
+    }
+
+    fn metadata(id: u64, set: u64) -> BeatmapMetadata {
+        BeatmapMetadata {
+            beatmap_id: id,
+            beatmapset_id: set,
+            checksum: format!("checksum-{id}"),
+            artist: format!("Artist {id}"),
+            title: format!("Title {id}"),
+            version: "Insane".into(),
+            creator: "Mapper".into(),
+            online_url: format!("https://osu.ppy.sh/beatmaps/{id}"),
+        }
+    }
+
+    fn record(id: u64, set: u64) -> BeatmapFeatureRecord {
+        BeatmapFeatureRecord {
+            beatmap_id: id,
+            beatmapset_id: set,
+            ..BeatmapFeatureRecord::default()
+        }
+    }
+
+    #[test]
+    fn recommendation_keeps_the_nearest_source_and_excludes_all_seed_sets() {
+        let response = recommendation_response_from_runtime(
+            SimilarityRecommendationKind::Recent,
+            vec![
+                (
+                    target(1, 10),
+                    vec![
+                        result(100, 100, 0.4),
+                        result(101, 101, 0.2),
+                        result(2, 20, 0.1),
+                    ],
+                ),
+                (
+                    target(2, 20),
+                    vec![result(102, 100, 0.1), result(1, 10, 0.05)],
+                ),
+            ],
+            3,
+            20,
+        );
+
+        assert_eq!(response.seed_count, 2);
+        assert_eq!(response.skipped_seed_count, 3);
+        assert_eq!(response.results.len(), 2);
+        assert_eq!(response.results[0].result.beatmap.beatmap_id, 102);
+        assert_eq!(response.results[0].recommended_by.beatmap_id, 2);
+        assert_eq!(response.results[1].result.beatmap.beatmap_id, 101);
     }
 }

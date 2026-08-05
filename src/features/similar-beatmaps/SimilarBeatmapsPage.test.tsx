@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +8,7 @@ import { desktopApi } from "../../shared/lib/tauri";
 import type {
   SimilarityIndexStatus,
   SimilarityQueryResponse,
+  SimilarityRecommendationResponse,
 } from "../../shared/types/osu";
 import { SimilarBeatmapsPage } from "./SimilarBeatmapsPage";
 
@@ -35,9 +36,9 @@ const ready: SimilarityIndexStatus = {
   directory: "D:/private-index",
   message: "本地索引已就绪。",
   record_count: 3,
-  analyzer_version: 2,
+  analyzer_version: 3,
   normalization_version: 1,
-  algorithm_id: "five-dimension-baseline-v2",
+  algorithm_id: "five-dimension-slider-v3",
   data_cutoff_at: 1_785_140_308,
 };
 
@@ -45,7 +46,7 @@ const feature = {
   aim: 0.7,
   speed: 0.6,
   reading: 0.8,
-  flashlight: 0.2,
+  slider: 0.2,
   overlap: 0.5,
 };
 
@@ -76,7 +77,7 @@ const response: SimilarityQueryResponse = {
     difficulty: feature,
     base,
     source: "index",
-    analyzer_version: 2,
+    analyzer_version: 3,
     normalization_version: 1,
   },
   results: [
@@ -93,6 +94,18 @@ const response: SimilarityQueryResponse = {
       final_distance: 0.04,
       difficulty_distance: 0.03,
       base_distance: 0.08,
+    },
+  ],
+};
+
+const recommendationResponse: SimilarityRecommendationResponse = {
+  kind: "recent",
+  seed_count: 20,
+  skipped_seed_count: 1,
+  results: [
+    {
+      ...response.results[0],
+      recommended_by: response.target,
     },
   ],
 };
@@ -212,6 +225,32 @@ describe("SimilarBeatmapsPage", () => {
       "D:/maps/reference.osu",
     );
     expect(screen.getByRole("button", { name: "查找相似谱面" })).toBeEnabled();
+  });
+
+  it("recommends from recent plays or BP and shows the nearest source beatmap", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(desktopApi, "getSimilarityIndexStatus").mockResolvedValue(ready);
+    const recommend = vi
+      .spyOn(desktopApi, "recommendSimilarBeatmaps")
+      .mockImplementation(async (request) => ({
+        ...recommendationResponse,
+        kind: request.kind,
+      }));
+
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "根据最近游玩推荐" }));
+
+    expect(await screen.findByText("根据最近游玩生成")).toBeInTheDocument();
+    expect(screen.getAllByText(/由 Reference - Target \[Insane\] 推荐/).length).toBeGreaterThan(0);
+    expect(recommend).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: "recent", result_limit: 20 }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "根据你的 BP 推荐" }));
+    await waitFor(() => expect(screen.getByText("根据你的 BP 生成")).toBeInTheDocument());
+    expect(recommend).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: "best", result_limit: 20 }),
+    );
   });
 
   it("applies range sliders to the recalled candidate batch without changing the query", async () => {

@@ -10,6 +10,7 @@ use crate::error::{CommandError, CommandResult};
 
 pub const NERINYAN_BASE_URL: &str = "https://api.nerinyan.moe";
 pub const CATBOY_BASE_URL: &str = "https://catboy.best";
+pub const HINAI_BASE_URL: &str = "https://mirror.hinamizawa.ai";
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ProviderStatus {
@@ -77,6 +78,16 @@ impl ProviderRegistry {
         .await
     }
 
+    /// Downloads through Hinamizawa.ai's public cascade endpoint.
+    pub async fn hinai_osz(&self, id: u64) -> CommandResult<ProviderBytes> {
+        self.bytes_get(
+            &format!("{HINAI_BASE_URL}/api/v1/hinai/d/{id}"),
+            "HINAI_DOWNLOAD_FAILED",
+            "hinai",
+        )
+        .await
+    }
+
     pub async fn catboy_osu(&self, id: u64) -> CommandResult<ProviderBytes> {
         self.bytes_or_json_get(
             &format!("{CATBOY_BASE_URL}/osu/{id}"),
@@ -134,9 +145,11 @@ impl ProviderRegistry {
     pub async fn statuses(&self) -> Vec<ProviderStatus> {
         let nerinyan_health = format!("{NERINYAN_BASE_URL}/health");
         let catboy_health = format!("{CATBOY_BASE_URL}/health");
-        let (nerinyan, catboy) = tokio::join!(
+        let hinai_health = format!("{HINAI_BASE_URL}/docs/beatmap-download");
+        let (nerinyan, catboy, hinai) = tokio::join!(
             self.health("nerinyan", &nerinyan_health),
             self.health("catboy", &catboy_health),
+            self.health("hinai", &hinai_health),
         );
         vec![
             ProviderStatus {
@@ -172,6 +185,17 @@ impl ProviderRegistry {
                 retry_after_seconds: error.retry_after_seconds,
                 message: Some(error.message),
             }),
+            hinai.unwrap_or_else(|error| ProviderStatus {
+                id: "hinai".into(),
+                label: "Hinai Mirror".into(),
+                online: false,
+                supports_search: false,
+                supports_metadata: false,
+                supports_osu_download: false,
+                supports_osz_download: true,
+                retry_after_seconds: error.retry_after_seconds,
+                message: Some(error.message),
+            }),
         ]
     }
 
@@ -189,7 +213,7 @@ impl ProviderRegistry {
                 label: id.into(),
                 online: true,
                 supports_search: id == "nerinyan",
-                supports_metadata: true,
+                supports_metadata: id != "hinai",
                 supports_osu_download: id == "catboy",
                 supports_osz_download: true,
                 retry_after_seconds: retry_after,

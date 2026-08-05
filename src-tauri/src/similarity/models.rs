@@ -93,3 +93,35 @@ pub struct SimilarityQueryResponse {
     pub target: SimilarityTarget,
     pub results: Vec<SimilarityResult>,
 }
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SimilarityRecommendationKind {
+    Recent,
+    Best,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SimilarityRecommendationRequest {
+    pub kind: SimilarityRecommendationKind,
+    pub difficulty_weights: DifficultyWeights,
+    pub base_weights: BaseFeatureWeights,
+    #[serde(default)]
+    pub filters: QueryFilters,
+    pub result_limit: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SimilarityRecommendationResult {
+    #[serde(flatten)]
+    pub result: SimilarityResult,
+    pub recommended_by: SimilarityBeatmap,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SimilarityRecommendationResponse {
+    pub kind: SimilarityRecommendationKind,
+    pub seed_count: usize,
+    pub skipped_seed_count: usize,
+    pub results: Vec<SimilarityRecommendationResult>,
+}

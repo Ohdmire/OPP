@@ -1,20 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { CheckSquare2, ChevronDown, DownloadCloud, Music2, SearchX } from "lucide-react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useMode } from "../../app/ModeContext";
 import { ErrorPanel } from "../../shared/components/ErrorPanel";
 import { PageHeader } from "../../shared/components/PageHeader";
 import { Badge, Button, EmptyState, Skeleton } from "../../shared/components/ui";
-import type { OnlineBeatmapSearchQuery, OnlineBeatmapset, Ruleset } from "../../shared/types/osu";
+import { desktopApi } from "../../shared/lib/tauri";
+import type { CommandError, OnlineBeatmapSearchQuery, OnlineBeatmapset, Ruleset } from "../../shared/types/osu";
 import { useOnlineBeatmapProviderStatus, useOnlineBeatmapsets } from "./api";
-import { BeatmapDownloadPanel } from "./BeatmapDownloadPanel";
+import { BeatmapDownloadPanel, beatmapDownloadDirectoryKey } from "./BeatmapDownloadPanel";
 import { BeatmapsetCard } from "./BeatmapsetCard";
 import { BeatmapsetDetailDialog } from "./BeatmapsetDetailDialog";
 import { parseOnlineBeatmapDeepLink } from "./deepLink";
 import { createDefaultSearchQuery, normalizePreviewUrl } from "./filters";
 import { OnlineBeatmapFilters } from "./OnlineBeatmapFilters";
 import { similarityRouteForBeatmap } from "../similar-beatmaps/navigation";
-import { useSettings } from "../settings/api";
+import { settingsQueryKey, useSettings } from "../settings/api";
 
 function uniqueBeatmapsets(items: OnlineBeatmapset[]) {
   const seen = new Set<number>();
@@ -23,6 +25,7 @@ function uniqueBeatmapsets(items: OnlineBeatmapset[]) {
 
 function OnlineBeatmapsClient({ ruleset }: { ruleset: Ruleset }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const deepLink = parseOnlineBeatmapDeepLink(searchParams);
@@ -32,6 +35,9 @@ function OnlineBeatmapsClient({ ruleset }: { ruleset: Ruleset }) {
   const [manualDetailId, setManualDetailId] = useState<number | null>(null);
   const detailId = deepLink.beatmapsetId ?? manualDetailId;
   const [playingId, setPlayingId] = useState<number | null>(null);
+  const [directDownloadId, setDirectDownloadId] = useState<number | null>(null);
+  const [directDownloadError, setDirectDownloadError] = useState<string | null>(null);
+  const [directDownloadDirectory, setDirectDownloadDirectory] = useState(() => localStorage.getItem(beatmapDownloadDirectoryKey) ?? "");
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const search = useOnlineBeatmapsets(activeQuery, true);
   const providers = useOnlineBeatmapProviderStatus();
@@ -71,6 +77,36 @@ function OnlineBeatmapsClient({ ruleset }: { ruleset: Ruleset }) {
     return next;
   });
 
+  const downloadBeatmapset = async (beatmapset: OnlineBeatmapset) => {
+    if (directDownloadId !== null || beatmapset.availability?.download_disabled) return;
+    setDirectDownloadId(beatmapset.id);
+    setDirectDownloadError(null);
+    try {
+      let destination = directDownloadDirectory || settings.data?.beatmap_download_directory || "";
+      if (!destination) {
+        destination = await desktopApi.chooseBeatmapDownloadDirectory(null) ?? "";
+        if (!destination) return;
+        setDirectDownloadDirectory(destination);
+        localStorage.setItem(beatmapDownloadDirectoryKey, destination);
+        if (settings.data) {
+          const saved = await desktopApi.updateSettings({ ...settings.data, beatmap_download_directory: destination });
+          queryClient.setQueryData(settingsQueryKey, saved);
+        }
+      }
+      const result = await desktopApi.downloadOnlineBeatmapsets({
+        destination,
+        provider: "hinai",
+        overwrite: false,
+        items: [{ beatmapset_id: beatmapset.id, artist: beatmapset.artist, title: beatmapset.title }],
+      });
+      if (result.failed) setDirectDownloadError(result.failures[0]?.message ?? "谱面下载失败");
+    } catch (caught) {
+      setDirectDownloadError((caught as CommandError).message ?? String(caught));
+    } finally {
+      setDirectDownloadId(null);
+    }
+  };
+
   const reset = () => { const next = createDefaultSearchQuery(ruleset); setDraft(next); setActiveQuery(next); };
   const closeDetail = () => {
     setManualDetailId(null);
@@ -103,12 +139,13 @@ function OnlineBeatmapsClient({ ruleset }: { ruleset: Ruleset }) {
             <div className="text-sm text-slate-400">已加载 <strong className="font-mono text-slate-100">{items.length}</strong>{availableTotal !== null ? <> / 共 <strong className="font-mono text-slate-100">{availableTotal}</strong></> : null}</div>
             <Button disabled={!items.length} onClick={() => setQueue((current) => { const next = new Map(current); items.forEach((item) => { if (!item.availability?.download_disabled) next.set(item.id, item); }); return next; })} size="sm" variant="ghost"><CheckSquare2 className="size-4" />将当前结果全部加入队列</Button>
           </div>
+          {directDownloadError ? <div className="mb-4 rounded-xl border border-amber-300/10 bg-amber-300/[0.05] px-4 py-3 text-sm text-amber-100">{directDownloadError}</div> : null}
           {search.isLoading ? <div className="space-y-4">{Array.from({ length: 5 }, (_, index) => <Skeleton className="h-44" key={index} />)}</div> : search.error ? <ErrorPanel error={search.error} onRetry={() => search.refetch()} /> : !items.length ? <EmptyState action={<Button onClick={reset}><Music2 className="size-4" />查看近期 Ranked</Button>} description="请放宽筛选条件，或更换内容筛选标签。" icon={<SearchX className="size-5" />} title="没有找到匹配的谱面" /> : <>
-            <div className="space-y-4">{items.map((beatmapset) => <BeatmapsetCard beatmapset={beatmapset} key={beatmapset.id} onOpen={() => setManualDetailId(beatmapset.id)} onPreview={() => togglePreview(beatmapset)} onSelect={() => toggleQueue(beatmapset)} playing={playingId === beatmapset.id} selected={queue.has(beatmapset.id)} />)}</div>
+            <div className="space-y-4">{items.map((beatmapset) => <BeatmapsetCard beatmapset={beatmapset} downloading={directDownloadId === beatmapset.id} key={beatmapset.id} onDownload={() => void downloadBeatmapset(beatmapset)} onOpen={() => setManualDetailId(beatmapset.id)} onPreview={() => togglePreview(beatmapset)} onSelect={() => toggleQueue(beatmapset)} playing={playingId === beatmapset.id} selected={queue.has(beatmapset.id)} />)}</div>
             {search.hasNextPage ? <Button className="mt-5 w-full" loading={search.isFetchingNextPage} onClick={() => search.fetchNextPage()}><ChevronDown className="size-4" />加载下一页</Button> : <p className="py-8 text-center text-sm text-slate-600">已到达搜索结果末尾</p>}
           </>}
         </section>
-        <BeatmapDownloadPanel availableTotal={availableTotal} onClear={() => setQueue(new Map())} onRemove={(id) => setQueue((current) => { const next = new Map(current); next.delete(id); return next; })} onReplace={(items) => setQueue(new Map(items.map((item) => [item.id, item])))} query={activeQuery} queue={queueItems} />
+        <BeatmapDownloadPanel availableTotal={availableTotal} externalDownloadActive={directDownloadId !== null} onClear={() => setQueue(new Map())} onRemove={(id) => setQueue((current) => { const next = new Map(current); next.delete(id); return next; })} onReplace={(items) => setQueue(new Map(items.map((item) => [item.id, item])))} query={activeQuery} queue={queueItems} />
       </div>
     </div>
 

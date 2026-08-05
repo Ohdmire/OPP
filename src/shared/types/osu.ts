@@ -96,7 +96,7 @@ export interface DifficultyFeatureVector {
   aim: number;
   speed: number;
   reading: number;
-  flashlight: number;
+  slider: number;
   overlap: number;
 }
 
@@ -184,6 +184,27 @@ export interface SimilarityResult extends SimilarityBeatmap {
 export interface SimilarityQueryResponse {
   target: SimilarityTarget;
   results: SimilarityResult[];
+}
+
+export type SimilarityRecommendationKind = "recent" | "best";
+
+export interface SimilarityRecommendationRequest {
+  kind: SimilarityRecommendationKind;
+  difficulty_weights: DifficultyFeatureVector;
+  base_weights: SimilarityBaseWeights;
+  filters: SimilarityFilters;
+  result_limit: number;
+}
+
+export interface SimilarityRecommendationResult extends SimilarityResult {
+  recommended_by: SimilarityBeatmap;
+}
+
+export interface SimilarityRecommendationResponse {
+  kind: SimilarityRecommendationKind;
+  seed_count: number;
+  skipped_seed_count: number;
+  results: SimilarityRecommendationResult[];
 }
 
 export type ThemeColor = "cyan" | "blue" | "violet" | "pink" | "orange" | "green";
@@ -818,7 +839,7 @@ export interface BeatmapDownloadItem {
 export interface BeatmapDownloadRequest {
   destination: string;
   items: BeatmapDownloadItem[];
-  provider: "catboy" | "nerinyan" | "none";
+  provider: "hinai" | "catboy" | "nerinyan" | "none";
   overwrite: boolean;
 }
 

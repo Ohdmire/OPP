@@ -16,7 +16,7 @@ const dimensions: Array<{
   { key: "aim", label: "Aim" },
   { key: "speed", label: "Speed" },
   { key: "reading", label: "Reading" },
-  { key: "flashlight", label: "Flashlight" },
+  { key: "slider", label: "Slider" },
   { key: "overlap", label: "Overlap" },
 ];
 

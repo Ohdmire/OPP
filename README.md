@@ -5,7 +5,7 @@
 
   **一站式 osu! 工具集合**
 
-  [![Version](https://img.shields.io/badge/version-0.3.0a-ff6aa7?style=for-the-badge)](./src-tauri/tauri.conf.json)
+  [![Version](https://img.shields.io/badge/version-0.3.5-ff6aa7?style=for-the-badge)](./src-tauri/tauri.conf.json)
   [![Platform](https://img.shields.io/badge/platform-Windows-5ce1e6?style=for-the-badge&logo=windows11&logoColor=white)](#运行要求)
   [![Tauri](https://img.shields.io/badge/Tauri-2-a673ff?style=for-the-badge&logo=tauri&logoColor=white)](https://tauri.app/)
   [![Vibe Coding](https://img.shields.io/badge/Vibe_Coding-AI_Collaborative-8b5cf6?style=for-the-badge)](#vibe-coding)
@@ -22,24 +22,24 @@ OPP 是一个使用 Tauri、Rust 与 React 构建的 Windows 桌面应用。它�
 > [!IMPORTANT]
 > OPP 是独立的社区项目，与 ppy Pty Ltd 或 osu! 官方无隶属关系。osu! 是 ppy Pty Ltd 的商标。
 
-## 相似铺面
+## 相似谱面
 
-如何使用：先在https://github.com/osuplusplus/osu-difficulty-lab下载release中的数据集
+1. 从 [`osu-difficulty-lab` Releases](https://github.com/osuplusplus/osu-difficulty-lab/releases) 下载与 Analyzer v3 兼容的数据集。
+2. 将数据集完整解压到本地目录。
+3. 在 OPP 的“相似谱面”页面选择数据集根目录。该目录应直接包含 `metadata.sqlite`、`features-v*.bin`、`indexes/` 和 `normalizers/`。
 
-将数据集解压到某个位置
-
-然后再软件内的相似铺面界面选择解压的文件夹中的osu-difficulty-lab-dataset-v0.1.0 
-
-！！注意解压后可能出现两层文件夹！！
+如果解压后出现两层同名目录，请选择内层、实际包含上述文件的目录。旧版 Analyzer v2 数据集无法直接迁移，需要重新下载或生成 v3 数据集。更多说明见 [相似谱面数据集](./docs/similarity-dataset.md)。
 
 ## 功能概览
 
-- 通过官方 osu! API v2 OAuth 登录,查看个人全面数据
-- 提供铺面镜像下载批量下载，提供强大筛选器
-- 内置 pp calculator 支持不同模式MOD
-- 支持本地铺面，皮肤，截图，回放预览，管理
-- 支持启动双端游戏，自动记录一次游戏数据变化
-- 支持tosu以及tosu-lyrics一件配置启动
+- 通过官方 osu! API v2 OAuth 登录，查看玩家资料与成绩数据
+- 提供谱面镜像批量下载、筛选队列与多镜像自动回退
+- 根据本地索引查找相似谱面，并可基于最近成绩或 BP 生成推荐
+- 内置 pp calculator，支持不同模式与 Mod
+- 支持本地谱面、Skin、截图和回放的预览与管理
+- 支持启动 Stable 与 Lazer，并记录一次游戏会话的数据变化
+- 支持 tosu、tosu-lyrics 与 OBS 直播工作流
+- 支持 Trainer 练习谱面生成和网易云音乐客户端搜索
 - 内置各种实用小工具
 
 当前算法口径为 [`rosu-pp 4.0.1`](https://github.com/MaxOhn/rosu-pp/tree/v4.0.1)，对应
@@ -55,7 +55,7 @@ OPP 是一个使用 Tauri、Rust 与 React 构建的 Windows 桌面应用。它�
 - Microsoft Edge WebView2 Runtime
 - osu! 个人 OAuth 应用
 
-从仓库的 [Releases](../../releases/latest) 页面下载最新的 Windows 安装包。
+从仓库的 [Releases](https://github.com/L1rics06/OPP/releases/latest) 页面下载最新的 Windows x64 EXE。Release 中的 `OPP-vX.Y.Z-windows-x64.exe` 无需安装，可直接运行；首次启动仍需要系统已安装 WebView2 Runtime。
 
 ### 配置 OAuth
 

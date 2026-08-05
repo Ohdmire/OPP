@@ -106,8 +106,13 @@ impl OsuApi {
         offset: u32,
         limit: u8,
     ) -> CommandResult<Vec<Score>> {
+        let include_fails = if category == crate::models::ScoreCategory::Recent {
+            "&include_fails=0"
+        } else {
+            ""
+        };
         let url = format!(
-            "{}/users/{user_id}/scores/{category}?mode={ruleset}&limit={limit}&offset={offset}&legacy_only=0",
+            "{}/users/{user_id}/scores/{category}?mode={ruleset}&limit={limit}&offset={offset}&legacy_only=0{include_fails}",
             self.api_base_url
         );
         self.authorized_get(&url, access_token).await
@@ -124,6 +129,23 @@ impl OsuApi {
             user_id,
             ruleset,
             crate::models::ScoreCategory::Best,
+            0,
+            100,
+        )
+        .await
+    }
+
+    pub async fn get_recent_scores(
+        &self,
+        access_token: &str,
+        user_id: u64,
+        ruleset: Ruleset,
+    ) -> CommandResult<Vec<Score>> {
+        self.get_user_scores(
+            access_token,
+            user_id,
+            ruleset,
+            crate::models::ScoreCategory::Recent,
             0,
             100,
         )

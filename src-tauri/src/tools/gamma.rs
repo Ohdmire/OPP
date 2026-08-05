@@ -26,15 +26,12 @@ pub fn set_display_gamma(gamma: f64) -> CommandResult<()> {
             UI::ColorSystem::SetDeviceGammaRamp,
         };
 
-        let mut ramp = [[0u16; RAMP_ENTRIES]; 3];
-        for index in 0..RAMP_ENTRIES {
+        let channel: [u16; RAMP_ENTRIES] = std::array::from_fn(|index| {
             let input = index as f64 / (RAMP_ENTRIES - 1) as f64;
             let corrected = input.powf(1.0 / gamma);
-            let value = (corrected * u16::MAX as f64).round() as u16;
-            ramp[0][index] = value;
-            ramp[1][index] = value;
-            ramp[2][index] = value;
-        }
+            (corrected * u16::MAX as f64).round() as u16
+        });
+        let ramp = [channel; 3];
 
         // A null HWND retrieves the desktop DC, which targets the primary display.
         let dc = unsafe { GetDC(std::ptr::null_mut()) };

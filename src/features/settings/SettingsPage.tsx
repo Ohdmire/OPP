@@ -291,6 +291,7 @@ export function SettingsPage() {
           <Card className="p-6">
             <SectionTitle title="直播自动化" description="OBS 启动检测、场景和密码在 tosu 直播集成页面配置。" />
             <div className="mt-5 space-y-3">
+              <Toggle checked={settings.launch_tosu_on_game_detect ?? false} description="检测到 osu! Stable 或 osu!lazer 已运行时，自动在后台启动已配置的 tosu；tosu 已运行时不会重复启动。" label="检测到 osu! 后启动 tosu" onChange={(value) => void save({ ...settings, launch_tosu_on_game_detect: value })} />
               <Toggle checked={settings.launch_tosu_on_obs_detect ?? false} description="检测到 OBS 启动时自动启动已配置的 tosu。" label="检测到 OBS 后启动 tosu" onChange={(value) => void save({ ...settings, launch_tosu_on_obs_detect: value })} />
               <Toggle checked={settings.suppress_tosu_launch_prompt ?? false} description="关闭后，每次 Tosu 启动都会显示自动启动偏好提示。" label="不再显示 Tosu 启动提示" onChange={(value) => void save({ ...settings, suppress_tosu_launch_prompt: value })} />
             </div>

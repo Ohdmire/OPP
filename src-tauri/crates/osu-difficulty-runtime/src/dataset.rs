@@ -15,9 +15,9 @@ use thiserror::Error;
 
 use crate::{
     ANALYZER_ALGORITHM_ID, ANALYZER_VERSION, Analyzer, AnalyzerConfig, BaseFeatures,
-    BeatmapFeatureRecord, BeatmapMetadata, DatasetInfo, DifficultyVector,
-    DifficultyWeights, OVERLAP_ALGORITHM_VERSION, QueryFilters, QueryOptions, QueryResult,
-    QueryTarget, READING_ALGORITHM_VERSION, ROSU_PP_VERSION,
+    BeatmapFeatureRecord, BeatmapMetadata, DatasetInfo, DifficultyVector, DifficultyWeights,
+    OVERLAP_ALGORITHM_VERSION, QueryFilters, QueryOptions, QueryResult, QueryTarget,
+    READING_ALGORITHM_VERSION, ROSU_PP_VERSION,
 };
 
 const FEATURE_HEADER_LEN: usize = 32;
@@ -541,7 +541,7 @@ fn validate_options(options: &QueryOptions) -> Result<(), RuntimeError> {
         difficulty.aim,
         difficulty.speed,
         difficulty.reading,
-        difficulty.flashlight,
+        difficulty.slider,
         difficulty.overlap,
     ];
     if weights
@@ -596,7 +596,7 @@ fn difficulty_distance(
         weights.aim,
         weights.speed,
         weights.reading,
-        weights.flashlight,
+        weights.slider,
         weights.overlap,
     ];
     left.as_array()

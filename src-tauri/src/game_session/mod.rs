@@ -16,7 +16,7 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::Utc;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::{
     account::ensure_access_token,
@@ -157,6 +157,16 @@ fn scan_game_status(
     GameStatusSnapshot { clients }
 }
 
+fn any_client_started(previous: &GameStatusSnapshot, next: &GameStatusSnapshot) -> bool {
+    next.clients.iter().any(|after| {
+        after.running
+            && !previous
+                .clients
+                .iter()
+                .any(|before| before.client == after.client && before.running)
+    })
+}
+
 /// Launch the app-lifetime monitor. The event is emitted only when a client
 /// changes state; the command always returns the most recent snapshot.
 pub fn start_game_monitor(
@@ -172,7 +182,7 @@ pub fn start_game_monitor(
                 .unwrap_or_else(|_| GameStatusSnapshot {
                     clients: Vec::new(),
                 });
-            let changed = monitor
+            let (changed, game_started) = monitor
                 .current
                 .lock()
                 .map(|mut current| {
@@ -186,11 +196,23 @@ pub fn start_game_monitor(
                                     || before.running != after.running
                                     || before.executable != after.executable
                             });
+                    let game_started = any_client_started(&current, &next);
                     *current = next.clone();
-                    changed
+                    (changed, game_started)
                 })
-                .unwrap_or(false);
+                .unwrap_or((false, false));
             if changed {
+                if game_started
+                    && app
+                        .state::<AppState>()
+                        .store
+                        .snapshot()
+                        .map(|saved| saved.settings.launch_tosu_on_game_detect)
+                        .unwrap_or(false)
+                {
+                    let state = app.state::<AppState>();
+                    let _ = start_managed_tosu(&state, app.clone());
+                }
                 let _ = app.emit("game-status-changed", next);
             }
             tokio::time::sleep(Duration::from_secs(1)).await;

@@ -148,7 +148,7 @@ impl OnlineBeatmapSearchQuery {
         }
 
         let sort = self.sort.trim();
-        if !sort.is_empty() && sort != "relevance_desc" {
+        if !sort.is_empty() {
             const SORTS: &[&str] = &[
                 "relevance_asc",
                 "relevance_desc",
@@ -438,6 +438,19 @@ mod tests {
         assert!(q.contains("keys<=4"));
         assert!(parameters.contains(&("m".into(), "3".into())));
         assert!(parameters.contains(&("s".into(), "ranked".into())));
+    }
+
+    #[test]
+    fn forwards_relevance_sort_to_the_official_search_api() {
+        let mut query = query();
+        query.sort = "relevance_desc".into();
+
+        assert!(
+            query
+                .to_api_parameters()
+                .expect("parameters")
+                .contains(&("sort".into(), "relevance_desc".into()))
+        );
     }
 
     #[test]
