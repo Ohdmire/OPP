@@ -21,7 +21,13 @@ import {
   SectionTitle,
 } from "../../shared/components/ui";
 import { desktopApi } from "../../shared/lib/tauri";
-import type { AppSettings, OsuClient, Ruleset, ThemeColor } from "../../shared/types/osu";
+import type {
+  AppSettings,
+  BeatmapDownloadProvider,
+  OsuClient,
+  Ruleset,
+  ThemeColor,
+} from "../../shared/types/osu";
 import { useAuthStatus } from "../auth/api";
 import { localSourcesKey, useLocalSources } from "../local-analysis/api";
 import { useSettings, settingsQueryKey } from "./api";
@@ -51,6 +57,7 @@ const base: AppSettings = {
   reduce_motion: false,
   similarity_index_directory: null,
   beatmap_download_directory: null,
+  default_beatmap_download_provider: "hinai",
   open_downloaded_beatmaps_after_download: false,
   replay_export_directory: null,
   tosu_executable_path: null,
@@ -308,10 +315,29 @@ export function SettingsPage() {
 
           <Card className="p-6">
             <SectionTitle
-              title="默认谱面下载位置"
-              description="相似谱面和在线谱面的下载会直接保存到这里；你仍可随时修改位置。"
+              title="谱面下载"
+              description="设置在线谱面和相似谱面快捷下载使用的默认镜像与保存位置。"
             />
-            <div className="mt-5 rounded-xl border border-white/[0.1] bg-white/[0.035] p-4">
+            <label className="mt-5 block">
+              <span className="mb-2 block text-sm font-medium text-slate-300">默认下载源</span>
+              <select
+                className="w-full rounded-xl border border-white/[0.1] bg-[#0b101b] px-3 py-3 text-sm text-slate-200 outline-none focus:border-cyan-300/45"
+                disabled={busy}
+                onChange={(event) => void save({
+                  ...settings,
+                  default_beatmap_download_provider: event.target.value as BeatmapDownloadProvider,
+                })}
+                value={settings.default_beatmap_download_provider}
+              >
+                <option value="hinai">Hinai Mirror（推荐，多源回退）</option>
+                <option value="catboy">Catboy</option>
+                <option value="nerinyan">Nerinyan</option>
+              </select>
+              <span className="mt-2 block text-xs leading-5 text-slate-500">
+                下载失败时仍会自动尝试其他可用镜像；下载队列中可以临时切换，不会改动此默认值。
+              </span>
+            </label>
+            <div className="mt-4 rounded-xl border border-white/[0.1] bg-white/[0.035] p-4">
               <p className="text-xs text-slate-500">当前默认位置</p>
               <p className="mt-1 break-all text-sm text-slate-200">
                 {settings.beatmap_download_directory ?? "尚未设置；首次下载时会询问保存位置。"}
@@ -344,7 +370,7 @@ export function SettingsPage() {
                 <SectionTitle title="关于" />
                 <p className="mt-3 flex items-center gap-2 text-sm text-slate-300">
                   <Gamepad2 className="size-4 text-[var(--theme-primary)]" />
-                  OPP v0.3.0a
+                  OPP v0.3.5
                 </p>
               </div>
               <Button onClick={() => void desktopApi.openExternal("https://github.com/osuplusplus/OPP")} size="sm" variant="secondary">

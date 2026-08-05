@@ -16,8 +16,8 @@ use thiserror::Error;
 use crate::{
     ANALYZER_ALGORITHM_ID, ANALYZER_VERSION, Analyzer, AnalyzerConfig, BaseFeatures,
     BeatmapFeatureRecord, BeatmapMetadata, DatasetInfo, DifficultyVector, DifficultyWeights,
-    OVERLAP_ALGORITHM_VERSION, QueryFilters, QueryOptions, QueryResult, QueryTarget,
-    READING_ALGORITHM_VERSION, ROSU_PP_VERSION,
+    DynamicWeightProfile, OVERLAP_ALGORITHM_VERSION, QueryFilters, QueryOptions, QueryResponse,
+    QueryResult, QueryTarget, READING_ALGORITHM_VERSION, ROSU_PP_VERSION, WeightingMode,
 };
 
 const FEATURE_HEADER_LEN: usize = 32;
@@ -26,6 +26,9 @@ const FEATURE_FORMAT_VERSION: u32 = 1;
 // its `ef` search pool. The runtime caps `ef` at 128, so the candidate buffer
 // must use that same cap or a large index will panic inside the dependency.
 const CANDIDATE_LIMIT: usize = 128;
+const IGNORED_DIMENSION_PROBES: [f32; 5] = [0.0, 0.25, 0.5, 0.75, 1.0];
+const MIN_STATS_SAMPLE_COUNT: u64 = 200;
+const MIN_STDDEV: f32 = 0.05;
 
 type Graph = Hnsw<WeightedL2, [f32; 5], Pcg64, 16, 32>;
 
@@ -135,6 +138,7 @@ pub struct Dataset {
     normalizer: NormalizerFile,
     analyzer: Analyzer,
     info: DatasetInfo,
+    supports_dynamic_weighting: bool,
 }
 
 impl Dataset {
@@ -217,12 +221,14 @@ impl Dataset {
             ));
         }
 
+        let supports_dynamic_weighting = supports_dynamic_schema(&connection)?;
         let info = DatasetInfo {
             record_count: offsets.len(),
             analyzer_version: ANALYZER_VERSION,
             normalization_version,
             algorithm_id: ANALYZER_ALGORITHM_ID.into(),
             data_cutoff_at: read_data_cutoff(&connection, normalization_version)?,
+            supports_dynamic_weighting,
         };
         Ok(Self {
             metadata_path,
@@ -234,6 +240,7 @@ impl Dataset {
             normalizer,
             analyzer: Analyzer::new(AnalyzerConfig::default()),
             info,
+            supports_dynamic_weighting,
         })
     }
 
@@ -276,11 +283,69 @@ impl Dataset {
         target: &QueryTarget,
         options: &QueryOptions,
     ) -> Result<Vec<QueryResult>, RuntimeError> {
+        Ok(self.query_with_profile(target, options)?.results)
+    }
+
+    pub fn query_with_profile(
+        &self,
+        target: &QueryTarget,
+        options: &QueryOptions,
+    ) -> Result<QueryResponse, RuntimeError> {
         validate_options(options)?;
-        let mut ids = HashSet::new();
-        for index in std::iter::once(&self.main_index).chain(self.delta_index.iter()) {
-            ids.extend(candidates(index, target.record.difficulty.as_array()));
-        }
+        let (ids, weights, weight_profile) = match options.weighting {
+            WeightingMode::Manual {
+                difficulty_weights, ..
+            } => {
+                let mut ids = HashSet::new();
+                let vectors =
+                    candidate_vectors(target.record.difficulty.as_array(), difficulty_weights);
+                for index in std::iter::once(&self.main_index).chain(self.delta_index.iter()) {
+                    for vector in &vectors {
+                        ids.extend(candidates(index, *vector));
+                    }
+                }
+                (ids, difficulty_weights, None)
+            }
+            WeightingMode::Dynamic {
+                lower_sections,
+                upper_sections,
+            } => {
+                if !self.supports_dynamic_weighting {
+                    return Err(RuntimeError::incompatible(
+                        "this dataset does not contain dynamic star-section statistics",
+                    ));
+                }
+                let stars = target
+                    .metadata
+                    .star_rating
+                    .filter(|value| value.is_finite())
+                    .ok_or_else(|| RuntimeError::analysis("target star rating is unavailable"))?;
+                let center = star_section(stars)?;
+                let lower = i32::try_from(lower_sections)
+                    .map_err(|_| RuntimeError::analysis("lower section range is too large"))?;
+                let upper = i32::try_from(upper_sections)
+                    .map_err(|_| RuntimeError::analysis("upper section range is too large"))?;
+                let candidate_min = center.saturating_sub(lower);
+                let candidate_max = center.saturating_add(upper);
+                let connection = open_read_only(&self.metadata_path)?;
+                let ids = read_section_ids(
+                    &connection,
+                    self.info.normalization_version,
+                    candidate_min,
+                    candidate_max,
+                )?;
+                let profile = dynamic_profile(
+                    &connection,
+                    self.info.normalization_version,
+                    stars,
+                    candidate_min,
+                    candidate_max,
+                    target.record.difficulty,
+                )?;
+                let weights = profile.weights;
+                (ids, weights, Some(profile))
+            }
+        };
 
         let mut scored = Vec::new();
         for beatmap_id in ids {
@@ -296,11 +361,8 @@ impl Dataset {
             if !matches_filters(candidate.base, &options.filters) {
                 continue;
             }
-            let difficulty_distance = difficulty_distance(
-                target.record.difficulty,
-                candidate.difficulty,
-                options.difficulty_weights,
-            );
+            let difficulty_distance =
+                difficulty_distance(target.record.difficulty, candidate.difficulty, weights);
             scored.push((
                 beatmap_id,
                 candidate,
@@ -332,7 +394,10 @@ impl Dataset {
                 break;
             }
         }
-        Ok(results)
+        Ok(QueryResponse {
+            results,
+            weight_profile,
+        })
     }
 
     fn record_for_id(&self, beatmap_id: u64) -> Result<BeatmapFeatureRecord, RuntimeError> {
@@ -353,10 +418,15 @@ impl Dataset {
 
     fn metadata_for(&self, beatmap_id: u64) -> Result<BeatmapMetadata, RuntimeError> {
         let connection = open_read_only(&self.metadata_path)?;
+        let star_select = if self.supports_dynamic_weighting {
+            ",star_rating"
+        } else {
+            ",NULL"
+        };
         connection
             .query_row(
-                "SELECT beatmap_id,beatmapset_id,checksum,artist,title,version,creator,online_url \
-                 FROM beatmaps WHERE beatmap_id=?1",
+                &format!("SELECT beatmap_id,beatmapset_id,checksum,artist,title,version,creator,online_url{star_select} \
+                 FROM beatmaps WHERE beatmap_id=?1"),
                 [beatmap_id as i64],
                 |row| {
                     Ok(BeatmapMetadata {
@@ -368,6 +438,7 @@ impl Dataset {
                         version: row.get(5)?,
                         creator: row.get(6)?,
                         online_url: row.get(7)?,
+                        star_rating: row.get(8)?,
                     })
                 },
             )
@@ -411,6 +482,254 @@ fn open_read_only(path: &Path) -> Result<Connection, RuntimeError> {
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
     .map_err(|_| RuntimeError::invalid("metadata database is missing or invalid"))
+}
+
+fn table_columns(connection: &Connection, table: &str) -> Result<HashSet<String>, RuntimeError> {
+    let mut statement = connection
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .map_err(|_| RuntimeError::invalid("metadata schema cannot be read"))?;
+    let rows = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|_| RuntimeError::invalid("metadata schema cannot be read"))?;
+    rows.collect::<Result<HashSet<_>, _>>()
+        .map_err(|_| RuntimeError::invalid("metadata schema cannot be read"))
+}
+
+fn supports_dynamic_schema(connection: &Connection) -> Result<bool, RuntimeError> {
+    let beatmaps = table_columns(connection, "beatmaps")?;
+    if !beatmaps.contains("star_rating") || !beatmaps.contains("star_section") {
+        return Ok(false);
+    }
+    let stats = table_columns(connection, "star_section_stats")?;
+    const REQUIRED: [&str; 13] = [
+        "star_section",
+        "analyzer_version",
+        "normalization_version",
+        "sample_count",
+        "aim_sum",
+        "speed_sum",
+        "reading_sum",
+        "slider_sum",
+        "overlap_sum",
+        "aim_sum_squares",
+        "speed_sum_squares",
+        "reading_sum_squares",
+        "slider_sum_squares",
+    ];
+    Ok(REQUIRED.iter().all(|column| stats.contains(*column))
+        && stats.contains("overlap_sum_squares"))
+}
+
+/// Maps a no-mod star rating to its fixed-width 0.1-star bucket.
+pub fn star_section(stars: f32) -> Result<i32, RuntimeError> {
+    if !stars.is_finite() || stars < 0.0 {
+        return Err(RuntimeError::analysis(
+            "star rating must be finite and non-negative",
+        ));
+    }
+    // The dataset formula uses 1e-6. Runtime ratings arrive as f32, whose
+    // decimal conversion error needs a slightly wider guard at boundaries.
+    let section = ((stars as f64 / 0.1) + 1e-5).floor();
+    if section > i32::MAX as f64 {
+        return Err(RuntimeError::analysis("star rating is too large"));
+    }
+    Ok(section as i32)
+}
+
+fn read_section_ids(
+    connection: &Connection,
+    normalization_version: u32,
+    min_section: i32,
+    max_section: i32,
+) -> Result<HashSet<u64>, RuntimeError> {
+    let mut statement = connection
+        .prepare(
+            "SELECT beatmaps.beatmap_id FROM beatmaps
+             INNER JOIN analyses ON analyses.beatmap_id=beatmaps.beatmap_id
+             WHERE beatmaps.star_section BETWEEN ?1 AND ?2
+               AND beatmaps.star_rating IS NOT NULL
+               AND analyses.analyzer_version=?3
+               AND analyses.normalization_version=?4
+               AND analyses.status=2",
+        )
+        .map_err(|_| RuntimeError::invalid("star-section metadata cannot be read"))?;
+    let rows = statement
+        .query_map(
+            params![
+                min_section,
+                max_section,
+                ANALYZER_VERSION as i64,
+                normalization_version as i64
+            ],
+            |row| row.get::<_, i64>(0),
+        )
+        .map_err(|_| RuntimeError::invalid("star-section metadata cannot be read"))?;
+    let mut ids = HashSet::new();
+    for row in rows {
+        let id = row.map_err(|_| RuntimeError::invalid("star-section beatmap id is invalid"))?;
+        if id >= 0 {
+            ids.insert(id as u64);
+        }
+    }
+    Ok(ids)
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct SectionAggregate {
+    count: u64,
+    sum: [f64; 5],
+    sum_squares: [f64; 5],
+}
+
+fn aggregate_sections(
+    connection: &Connection,
+    normalization_version: u32,
+    min_section: i32,
+    max_section: i32,
+) -> Result<SectionAggregate, RuntimeError> {
+    connection
+        .query_row(
+            "SELECT COALESCE(SUM(sample_count),0),
+                    COALESCE(SUM(aim_sum),0), COALESCE(SUM(speed_sum),0),
+                    COALESCE(SUM(reading_sum),0), COALESCE(SUM(slider_sum),0),
+                    COALESCE(SUM(overlap_sum),0), COALESCE(SUM(aim_sum_squares),0),
+                    COALESCE(SUM(speed_sum_squares),0),
+                    COALESCE(SUM(reading_sum_squares),0),
+                    COALESCE(SUM(slider_sum_squares),0),
+                    COALESCE(SUM(overlap_sum_squares),0)
+             FROM star_section_stats
+             WHERE analyzer_version=?1 AND normalization_version=?2
+               AND star_section BETWEEN ?3 AND ?4",
+            params![
+                ANALYZER_VERSION as i64,
+                normalization_version as i64,
+                min_section,
+                max_section
+            ],
+            |row| {
+                let count = row.get::<_, i64>(0)?;
+                Ok(SectionAggregate {
+                    count: count.max(0) as u64,
+                    sum: std::array::from_fn(|index| row.get(index + 1).unwrap_or(f64::NAN)),
+                    sum_squares: std::array::from_fn(|index| {
+                        row.get(index + 6).unwrap_or(f64::NAN)
+                    }),
+                })
+            },
+        )
+        .map_err(|_| RuntimeError::invalid("star-section statistics cannot be read"))
+}
+
+fn dynamic_profile(
+    connection: &Connection,
+    normalization_version: u32,
+    target_stars: f32,
+    candidate_min: i32,
+    candidate_max: i32,
+    target: DifficultyVector,
+) -> Result<DynamicWeightProfile, RuntimeError> {
+    let bounds = connection
+        .query_row(
+            "SELECT MIN(star_section),MAX(star_section) FROM star_section_stats
+             WHERE analyzer_version=?1 AND normalization_version=?2",
+            params![ANALYZER_VERSION as i64, normalization_version as i64],
+            |row| Ok((row.get::<_, Option<i32>>(0)?, row.get::<_, Option<i32>>(1)?)),
+        )
+        .map_err(|_| RuntimeError::invalid("star-section statistics bounds cannot be read"))?;
+    let (available_min, available_max) = match bounds {
+        (Some(min), Some(max)) => (min, max),
+        _ => (candidate_min, candidate_max),
+    };
+    let mut stats_min = candidate_min.max(available_min);
+    let mut stats_max = candidate_max.min(available_max);
+    if stats_min > stats_max {
+        stats_min = candidate_min;
+        stats_max = candidate_max;
+    }
+    let mut aggregate =
+        aggregate_sections(connection, normalization_version, stats_min, stats_max)?;
+    while aggregate.count < MIN_STATS_SAMPLE_COUNT
+        && (stats_min > available_min || stats_max < available_max)
+    {
+        stats_min = stats_min.saturating_sub(1).max(available_min);
+        stats_max = stats_max.saturating_add(1).min(available_max);
+        aggregate = aggregate_sections(connection, normalization_version, stats_min, stats_max)?;
+    }
+
+    let target_values = target.as_array();
+    let valid = aggregate.count >= 2
+        && aggregate.sum.iter().all(|value| value.is_finite())
+        && aggregate.sum_squares.iter().all(|value| value.is_finite());
+    let (mean, stddev, delta, z_score, weights, fallback_reason) = if valid {
+        let count = aggregate.count as f64;
+        let means = std::array::from_fn(|index| (aggregate.sum[index] / count) as f32);
+        let stddevs = std::array::from_fn(|index| {
+            let mean = aggregate.sum[index] / count;
+            ((aggregate.sum_squares[index] / count - mean * mean)
+                .max(0.0)
+                .sqrt()) as f32
+        });
+        if means.iter().all(|value| value.is_finite())
+            && stddevs.iter().all(|value| value.is_finite())
+        {
+            let deltas = std::array::from_fn(|index| target_values[index] - means[index]);
+            let z =
+                std::array::from_fn(|index| deltas[index].abs() / stddevs[index].max(MIN_STDDEV));
+            let dynamic_weights =
+                std::array::from_fn(|index| (0.25 + 0.75 * z[index]).clamp(0.25, 2.0));
+            (
+                DifficultyVector::from_array(means),
+                DifficultyVector::from_array(stddevs),
+                DifficultyVector::from_array(deltas),
+                DifficultyVector::from_array(z),
+                DifficultyWeights::from_array(dynamic_weights),
+                None,
+            )
+        } else {
+            fallback_profile_values("star-section statistics contain invalid values")
+        }
+    } else {
+        fallback_profile_values(if aggregate.count < 2 {
+            "fewer than two star-section samples are available"
+        } else {
+            "star-section statistics contain invalid values"
+        })
+    };
+
+    Ok(DynamicWeightProfile {
+        target_star_rating: target_stars,
+        candidate_min_section: candidate_min,
+        candidate_max_section: candidate_max,
+        stats_min_section: stats_min,
+        stats_max_section: stats_max,
+        sample_count: aggregate.count,
+        mean,
+        stddev,
+        delta,
+        z_score,
+        weights,
+        fallback_reason,
+    })
+}
+
+fn fallback_profile_values(
+    reason: &str,
+) -> (
+    DifficultyVector,
+    DifficultyVector,
+    DifficultyVector,
+    DifficultyVector,
+    DifficultyWeights,
+    Option<String>,
+) {
+    (
+        DifficultyVector::default(),
+        DifficultyVector::default(),
+        DifficultyVector::default(),
+        DifficultyVector::default(),
+        DifficultyWeights::default(),
+        Some(reason.into()),
+    )
 }
 
 fn validate_algorithm(connection: &Connection) -> Result<(), RuntimeError> {
@@ -530,13 +849,53 @@ fn candidates(index: &IndexFile, vector: [f32; 5]) -> Vec<u64> {
         .collect()
 }
 
+fn candidate_vectors(vector: [f32; 5], weights: DifficultyWeights) -> Vec<[f32; 5]> {
+    let weights = [
+        weights.aim,
+        weights.speed,
+        weights.reading,
+        weights.slider,
+        weights.overlap,
+    ];
+    let mut vectors = vec![vector];
+    for (dimension, weight) in weights.into_iter().enumerate() {
+        if weight != 0.0 {
+            continue;
+        }
+        for probe in IGNORED_DIMENSION_PROBES {
+            if probe == vector[dimension] {
+                continue;
+            }
+            let mut candidate = vector;
+            candidate[dimension] = probe;
+            vectors.push(candidate);
+        }
+    }
+    vectors
+}
+
 fn validate_options(options: &QueryOptions) -> Result<(), RuntimeError> {
-    if !(1..=50).contains(&options.result_limit) {
+    if !(1..=150).contains(&options.result_limit) {
         return Err(RuntimeError::analysis(
-            "result limit must be between 1 and 50",
+            "result limit must be between 1 and 150",
         ));
     }
-    let difficulty = options.difficulty_weights;
+    let difficulty = match options.weighting {
+        WeightingMode::Manual {
+            difficulty_weights, ..
+        } => difficulty_weights,
+        WeightingMode::Dynamic {
+            lower_sections,
+            upper_sections,
+        } => {
+            if lower_sections > 200 || upper_sections > 200 {
+                return Err(RuntimeError::analysis(
+                    "dynamic section ranges must be between 0 and 200",
+                ));
+            }
+            return Ok(());
+        }
+    };
     let weights = [
         difficulty.aim,
         difficulty.speed,
@@ -559,6 +918,10 @@ fn validate_options(options: &QueryOptions) -> Result<(), RuntimeError> {
 fn matches_filters(base: BaseFeatures, filters: &QueryFilters) -> bool {
     filters.min_ar.is_none_or(|value| base.ar >= value)
         && filters.max_ar.is_none_or(|value| base.ar <= value)
+        && filters.min_cs.is_none_or(|value| base.cs >= value)
+        && filters.max_cs.is_none_or(|value| base.cs <= value)
+        && filters.min_od.is_none_or(|value| base.od >= value)
+        && filters.max_od.is_none_or(|value| base.od <= value)
         && filters.min_bpm.is_none_or(|value| base.bpm >= value)
         && filters.max_bpm.is_none_or(|value| base.bpm <= value)
         && filters
@@ -599,12 +962,15 @@ fn difficulty_distance(
         weights.slider,
         weights.overlap,
     ];
-    left.as_array()
+    let weight_sum = weights.iter().sum::<f32>();
+    (left
+        .as_array()
         .iter()
         .zip(right.as_array())
         .zip(weights)
         .map(|((left, right), weight)| weight * (left - right).powi(2))
         .sum::<f32>()
+        / weight_sum)
         .sqrt()
 }
 
@@ -758,6 +1124,54 @@ mod tests {
         directory
     }
 
+    fn add_dynamic_schema(directory: &TempDir) {
+        let connection =
+            Connection::open(directory.path().join("metadata.sqlite")).expect("metadata");
+        connection
+            .execute_batch(
+                "ALTER TABLE beatmaps ADD COLUMN star_rating REAL;
+                 ALTER TABLE beatmaps ADD COLUMN star_section INTEGER;
+                 CREATE INDEX idx_beatmaps_star_section ON beatmaps(star_section);
+                 CREATE TABLE star_section_stats (
+                    star_section INTEGER NOT NULL,
+                    analyzer_version INTEGER NOT NULL,
+                    normalization_version INTEGER NOT NULL,
+                    sample_count INTEGER NOT NULL,
+                    aim_sum REAL NOT NULL, speed_sum REAL NOT NULL,
+                    reading_sum REAL NOT NULL, slider_sum REAL NOT NULL,
+                    overlap_sum REAL NOT NULL, aim_sum_squares REAL NOT NULL,
+                    speed_sum_squares REAL NOT NULL, reading_sum_squares REAL NOT NULL,
+                    slider_sum_squares REAL NOT NULL, overlap_sum_squares REAL NOT NULL,
+                    PRIMARY KEY(star_section,analyzer_version,normalization_version)
+                 );
+                 UPDATE beatmaps SET star_rating=6.1,star_section=61 WHERE beatmap_id=10;
+                 UPDATE beatmaps SET star_rating=6.0,star_section=60 WHERE beatmap_id=20;
+                 UPDATE beatmaps SET star_rating=6.2,star_section=62 WHERE beatmap_id=21;
+                 UPDATE beatmaps SET star_rating=8.0,star_section=80 WHERE beatmap_id=30;",
+            )
+            .expect("dynamic schema");
+        for section in [60_i32, 61, 62] {
+            // A 0.2 mean and 0.1 standard deviation in all five normalized dimensions.
+            connection
+                .execute(
+                    "INSERT INTO star_section_stats VALUES
+                     (?1,?2,1,100,20,20,20,20,20,5,5,5,5,5)",
+                    params![section, ANALYZER_VERSION],
+                )
+                .expect("section stats");
+        }
+    }
+
+    fn manual_options() -> QueryOptions {
+        QueryOptions {
+            weighting: WeightingMode::Manual {
+                difficulty_weights: DifficultyWeights::default(),
+                base_weights: crate::BaseFeatureWeights::default(),
+            },
+            ..QueryOptions::default()
+        }
+    }
+
     fn write_test_index(path: PathBuf, index: &IndexFile) {
         let bytes = bincode::serialize(index).expect("serialize index");
         fs::write(&path, &bytes).expect("write index");
@@ -774,10 +1188,9 @@ mod tests {
         let dataset = Dataset::open(directory.path()).expect("open dataset");
         assert_eq!(dataset.info().record_count, 4);
         assert_eq!(dataset.info().data_cutoff_at, Some(1_700_000_003));
+        assert!(!dataset.info().supports_dynamic_weighting);
         let target = dataset.target_for_id(10).expect("target");
-        let results = dataset
-            .query(&target, &QueryOptions::default())
-            .expect("query");
+        let results = dataset.query(&target, &manual_options()).expect("query");
         assert_eq!(
             results
                 .iter()
@@ -790,6 +1203,139 @@ mod tests {
         }));
         assert!(!directory.path().join("metadata.sqlite-wal").exists());
         assert!(!directory.path().join("metadata.sqlite-shm").exists());
+    }
+
+    #[test]
+    fn dynamic_query_scans_only_requested_star_sections() {
+        let directory = create_dataset();
+        add_dynamic_schema(&directory);
+        let dataset = Dataset::open(directory.path()).expect("open dataset");
+        assert!(dataset.info().supports_dynamic_weighting);
+        let target = dataset.target_for_id(10).expect("target");
+        let response = dataset
+            .query_with_profile(
+                &target,
+                &QueryOptions {
+                    weighting: WeightingMode::Dynamic {
+                        lower_sections: 1,
+                        upper_sections: 1,
+                    },
+                    ..QueryOptions::default()
+                },
+            )
+            .expect("dynamic query");
+        assert_eq!(
+            response
+                .results
+                .iter()
+                .map(|result| result.metadata.beatmap_id)
+                .collect::<Vec<_>>(),
+            vec![20]
+        );
+        let profile = response.weight_profile.expect("profile");
+        assert_eq!(
+            (profile.candidate_min_section, profile.candidate_max_section),
+            (60, 62)
+        );
+        assert_eq!(profile.sample_count, 300);
+        assert!(profile.fallback_reason.is_none());
+    }
+
+    #[test]
+    fn star_sections_floor_stably_at_tenths() {
+        assert_eq!(star_section(6.1).expect("section"), 61);
+        assert_eq!(star_section(5.7).expect("section"), 57);
+        assert_eq!(star_section(6.599_99).expect("section"), 65);
+        let center = star_section(6.1).expect("section");
+        assert_eq!((center - 4, center + 4), (57, 65));
+    }
+
+    #[test]
+    fn normalized_distance_is_independent_of_weight_scale() {
+        let left = DifficultyVector::from_array([0.0; 5]);
+        let right = DifficultyVector::from_array([1.0, 0.0, 0.0, 0.0, 0.0]);
+        let one = DifficultyWeights::from_array([1.0; 5]);
+        let ten = DifficultyWeights::from_array([10.0; 5]);
+        assert!(
+            (difficulty_distance(left, right, one) - difficulty_distance(left, right, ten)).abs()
+                < 1e-6
+        );
+    }
+
+    #[test]
+    fn slider_outlier_receives_the_largest_dynamic_weight() {
+        let directory = create_dataset();
+        add_dynamic_schema(&directory);
+        let connection =
+            Connection::open(directory.path().join("metadata.sqlite")).expect("metadata");
+        let target = DifficultyVector::from_array([0.2, 0.2, 0.2, 0.9, 0.2]);
+        let profile =
+            dynamic_profile(&connection, 1, 6.1, 60, 62, target).expect("dynamic profile");
+        assert_eq!(profile.weights.slider, 2.0);
+        assert!(profile.weights.slider > profile.weights.aim);
+        assert!(profile.delta.slider > 0.0);
+        assert!(profile.fallback_reason.is_none());
+    }
+
+    #[test]
+    fn sparse_statistics_expand_symmetrically_and_can_fallback() {
+        let directory = create_dataset();
+        add_dynamic_schema(&directory);
+        let connection =
+            Connection::open(directory.path().join("metadata.sqlite")).expect("metadata");
+        connection
+            .execute("UPDATE star_section_stats SET sample_count=1", [])
+            .expect("make sparse");
+        connection
+            .execute(
+                "INSERT INTO star_section_stats VALUES
+                 (59,?1,1,200,40,40,40,40,40,10,10,10,10,10)",
+                [ANALYZER_VERSION],
+            )
+            .expect("outer stats");
+        let profile = dynamic_profile(
+            &connection,
+            1,
+            6.1,
+            61,
+            61,
+            DifficultyVector::from_array([0.2; 5]),
+        )
+        .expect("expanded profile");
+        assert_eq!(
+            (profile.stats_min_section, profile.stats_max_section),
+            (59, 62)
+        );
+        assert_eq!(profile.sample_count, 203);
+
+        connection
+            .execute("DELETE FROM star_section_stats", [])
+            .expect("clear stats");
+        let fallback = dynamic_profile(&connection, 1, 6.1, 61, 61, DifficultyVector::default())
+            .expect("fallback profile");
+        assert_eq!(fallback.weights, DifficultyWeights::default());
+        assert!(fallback.fallback_reason.is_some());
+    }
+
+    #[test]
+    fn probes_across_dimensions_excluded_from_scoring() {
+        let vector = [0.1, 0.2, 0.3, 0.4, 0.5];
+        let vectors = candidate_vectors(
+            vector,
+            DifficultyWeights {
+                slider: 0.0,
+                ..DifficultyWeights::default()
+            },
+        );
+
+        assert_eq!(vectors[0], vector);
+        assert!(vectors.iter().any(|candidate| candidate[3] == 0.0));
+        assert!(vectors.iter().any(|candidate| candidate[3] == 1.0));
+        assert!(
+            vectors
+                .iter()
+                .all(|candidate| { candidate[..3] == vector[..3] && candidate[4] == vector[4] })
+        );
     }
 
     #[test]

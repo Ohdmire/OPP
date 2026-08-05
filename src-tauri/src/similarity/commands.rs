@@ -95,10 +95,10 @@ pub async fn query_similar_beatmaps(
             dataset.analyze_target(bytes.as_deref().unwrap_or_default())
         }
         .map_err(map_runtime_error)?;
-        let results = dataset
-            .query(&target, &options)
+        let response = dataset
+            .query_with_profile(&target, &options)
             .map_err(map_runtime_error)?;
-        Ok(response_from_runtime(target, results, source_label))
+        Ok(response_from_runtime(target, response, source_label))
     })
     .await
     .map_err(|_| CommandError::new("SIMILARITY_RUNTIME_ERROR", "相似谱面查询任务意外停止"))?
@@ -185,19 +185,20 @@ pub async fn recommend_similar_beatmaps(
     }
 
     let kind = request.kind;
+    let final_result_limit = request.result_limit;
     tauri::async_runtime::spawn_blocking(move || {
         let mut batches = Vec::with_capacity(targets.len());
         for target in targets {
-            let results = dataset
-                .query(&target, &options)
+            let response = dataset
+                .query_with_profile(&target, &options)
                 .map_err(map_runtime_error)?;
-            batches.push((target, results));
+            batches.push((target, response));
         }
         Ok(recommendation_response_from_runtime(
             kind,
             batches,
             skipped_seed_count,
-            options.result_limit,
+            final_result_limit,
         ))
     })
     .await

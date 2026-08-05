@@ -14,6 +14,7 @@ import { BeatmapsetCard } from "./BeatmapsetCard";
 import { BeatmapsetDetailDialog } from "./BeatmapsetDetailDialog";
 import { parseOnlineBeatmapDeepLink } from "./deepLink";
 import { createDefaultSearchQuery, normalizePreviewUrl } from "./filters";
+import { resolveDefaultDownloadProvider } from "./downloadProvider";
 import { OnlineBeatmapFilters } from "./OnlineBeatmapFilters";
 import { similarityRouteForBeatmap } from "../similar-beatmaps/navigation";
 import { settingsQueryKey, useSettings } from "../settings/api";
@@ -95,7 +96,7 @@ function OnlineBeatmapsClient({ ruleset }: { ruleset: Ruleset }) {
       }
       const result = await desktopApi.downloadOnlineBeatmapsets({
         destination,
-        provider: "hinai",
+        provider: resolveDefaultDownloadProvider(settings.data),
         overwrite: false,
         items: [{ beatmapset_id: beatmapset.id, artist: beatmapset.artist, title: beatmapset.title }],
       });

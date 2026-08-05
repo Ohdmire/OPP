@@ -1,9 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use osu_difficulty_runtime::{
-    BaseFeatureWeights, DifficultyWeights, QueryFilters, QueryOptions,
-    QueryResult as RuntimeQueryResult, QueryTarget as RuntimeQueryTarget, RuntimeError,
-    RuntimeErrorKind,
+    DifficultyWeights, QueryFilters, QueryOptions, QueryResponse as RuntimeQueryResponse,
+    QueryTarget as RuntimeQueryTarget, RuntimeError, RuntimeErrorKind, WeightingMode,
 };
 
 use crate::{
@@ -12,33 +11,25 @@ use crate::{
         SimilarityBeatmap, SimilarityQueryRequest, SimilarityQueryResponse,
         SimilarityRecommendationKind, SimilarityRecommendationRequest,
         SimilarityRecommendationResponse, SimilarityRecommendationResult, SimilarityResult,
-        SimilarityTarget,
+        SimilaritySeedDynamicProfile, SimilarityTarget,
     },
 };
 
 pub fn options_from_request(request: &SimilarityQueryRequest) -> CommandResult<QueryOptions> {
-    options_from_parts(
-        request.difficulty_weights,
-        request.base_weights,
-        &request.filters,
-        request.result_limit,
-    )
+    options_from_parts(request.weighting, &request.filters, request.result_limit)
 }
 
 pub fn options_from_recommendation_request(
     request: &SimilarityRecommendationRequest,
 ) -> CommandResult<QueryOptions> {
-    options_from_parts(
-        request.difficulty_weights,
-        request.base_weights,
-        &request.filters,
-        request.result_limit,
-    )
+    let mut options =
+        options_from_parts(request.weighting, &request.filters, request.result_limit)?;
+    options.result_limit = request.result_limit.saturating_mul(3).clamp(50, 150);
+    Ok(options)
 }
 
 fn options_from_parts(
-    difficulty_weights: DifficultyWeights,
-    base_weights: BaseFeatureWeights,
+    weighting: WeightingMode,
     filters: &QueryFilters,
     result_limit: usize,
 ) -> CommandResult<QueryOptions> {
@@ -49,6 +40,8 @@ fn options_from_parts(
         ));
     }
     validate_range(filters.min_ar, filters.max_ar, 0.0, 11.0, "AR")?;
+    validate_range(filters.min_cs, filters.max_cs, 0.0, 10.0, "CS")?;
+    validate_range(filters.min_od, filters.max_od, 0.0, 11.0, "OD")?;
     validate_range(filters.min_bpm, filters.max_bpm, 0.0, 1000.0, "BPM")?;
     validate_range(
         filters.min_length_seconds,
@@ -78,7 +71,32 @@ fn options_from_parts(
         1.0,
         "slider ratio",
     )?;
-    let difficulty = difficulty_weights;
+    match weighting {
+        WeightingMode::Manual {
+            difficulty_weights, ..
+        } => {
+            validate_weights(difficulty_weights)?;
+        }
+        WeightingMode::Dynamic {
+            lower_sections,
+            upper_sections,
+        } => {
+            if lower_sections > 20 || upper_sections > 20 {
+                return Err(CommandError::new(
+                    "INVALID_DYNAMIC_SECTION_RANGE",
+                    "动态星数范围必须在 0 到 20 段之间",
+                ));
+            }
+        }
+    }
+    Ok(QueryOptions {
+        weighting,
+        filters: filters.clone(),
+        result_limit,
+    })
+}
+
+fn validate_weights(difficulty: DifficultyWeights) -> CommandResult<()> {
     let weights = [
         difficulty.aim,
         difficulty.speed,
@@ -96,12 +114,7 @@ fn options_from_parts(
             "权重必须在 0 到 2 之间，且不能全部为 0",
         ));
     }
-    Ok(QueryOptions {
-        difficulty_weights,
-        base_weights,
-        filters: filters.clone(),
-        result_limit,
-    })
+    Ok(())
 }
 
 fn validate_range(
@@ -125,7 +138,7 @@ fn validate_range(
 
 pub fn response_from_runtime(
     target: RuntimeQueryTarget,
-    results: Vec<RuntimeQueryResult>,
+    response: RuntimeQueryResponse,
     source: &str,
 ) -> SimilarityQueryResponse {
     SimilarityQueryResponse {
@@ -135,7 +148,8 @@ pub fn response_from_runtime(
             source: source.into(),
             beatmap: beatmap_from_parts(target.metadata, target.record),
         },
-        results: results
+        results: response
+            .results
             .into_iter()
             .map(|result| SimilarityResult {
                 beatmap: beatmap_from_parts(result.metadata, result.record),
@@ -144,12 +158,13 @@ pub fn response_from_runtime(
                 base_distance: result.base_distance,
             })
             .collect(),
+        dynamic_profile: response.weight_profile,
     }
 }
 
 pub fn recommendation_response_from_runtime(
     kind: SimilarityRecommendationKind,
-    batches: Vec<(RuntimeQueryTarget, Vec<RuntimeQueryResult>)>,
+    batches: Vec<(RuntimeQueryTarget, RuntimeQueryResponse)>,
     skipped_seed_count: usize,
     result_limit: usize,
 ) -> SimilarityRecommendationResponse {
@@ -164,10 +179,17 @@ pub fn recommendation_response_from_runtime(
         .filter(|beatmapset_id| *beatmapset_id != 0)
         .collect::<HashSet<_>>();
     let mut nearest_by_set = HashMap::<u64, SimilarityRecommendationResult>::new();
+    let mut dynamic_profiles = Vec::new();
 
-    for (target, results) in batches {
+    for (target, response) in batches {
+        if let Some(profile) = response.weight_profile {
+            dynamic_profiles.push(SimilaritySeedDynamicProfile {
+                seed_beatmap_id: target.record.beatmap_id,
+                profile,
+            });
+        }
         let recommended_by = beatmap_from_parts(target.metadata, target.record);
-        for result in results {
+        for result in response.results {
             if seed_ids.contains(&result.record.beatmap_id)
                 || (result.record.beatmapset_id != 0
                     && seed_sets.contains(&result.record.beatmapset_id))
@@ -223,6 +245,7 @@ pub fn recommendation_response_from_runtime(
         seed_count,
         skipped_seed_count,
         results,
+        dynamic_profiles,
     }
 }
 
@@ -238,6 +261,7 @@ fn beatmap_from_parts(
         version: metadata.version,
         creator: metadata.creator,
         online_url: metadata.online_url,
+        star_rating: metadata.star_rating,
         difficulty: record.difficulty,
         base: record.base,
     }
@@ -264,7 +288,9 @@ pub fn map_runtime_error(error: RuntimeError) -> CommandError {
 #[cfg(test)]
 mod tests {
     use osu_difficulty_runtime::{
-        BaseFeatureWeights, BeatmapFeatureRecord, BeatmapMetadata, DifficultyWeights, QueryFilters,
+        BaseFeatureWeights, BeatmapFeatureRecord, BeatmapMetadata, DifficultyVector,
+        DifficultyWeights, DynamicWeightProfile, QueryFilters,
+        QueryResponse as RuntimeQueryResponse, QueryResult as RuntimeQueryResult, WeightingMode,
     };
 
     use super::*;
@@ -273,8 +299,10 @@ mod tests {
     fn request() -> SimilarityQueryRequest {
         SimilarityQueryRequest {
             source: SimilaritySource::BeatmapId { value: "1".into() },
-            difficulty_weights: DifficultyWeights::default(),
-            base_weights: BaseFeatureWeights::default(),
+            weighting: WeightingMode::Manual {
+                difficulty_weights: DifficultyWeights::default(),
+                base_weights: BaseFeatureWeights::default(),
+            },
             filters: QueryFilters::default(),
             result_limit: 20,
         }
@@ -291,14 +319,50 @@ mod tests {
     #[test]
     fn rejects_zero_difficulty_weights() {
         let mut request = request();
-        request.difficulty_weights = DifficultyWeights {
-            aim: 0.0,
-            speed: 0.0,
-            reading: 0.0,
-            slider: 0.0,
-            overlap: 0.0,
+        request.weighting = WeightingMode::Manual {
+            difficulty_weights: DifficultyWeights {
+                aim: 0.0,
+                speed: 0.0,
+                reading: 0.0,
+                slider: 0.0,
+                overlap: 0.0,
+            },
+            base_weights: BaseFeatureWeights::default(),
         };
         assert!(options_from_request(&request).is_err());
+    }
+
+    #[test]
+    fn recommendation_uses_a_larger_internal_candidate_pool() {
+        let recommendation = SimilarityRecommendationRequest {
+            kind: SimilarityRecommendationKind::Recent,
+            weighting: WeightingMode::default(),
+            filters: QueryFilters::default(),
+            result_limit: 20,
+        };
+        assert_eq!(
+            options_from_recommendation_request(&recommendation)
+                .expect("recommendation options")
+                .result_limit,
+            60
+        );
+    }
+
+    fn dynamic_profile() -> DynamicWeightProfile {
+        DynamicWeightProfile {
+            target_star_rating: 6.1,
+            candidate_min_section: 57,
+            candidate_max_section: 65,
+            stats_min_section: 57,
+            stats_max_section: 65,
+            sample_count: 200,
+            mean: DifficultyVector::default(),
+            stddev: DifficultyVector::default(),
+            delta: DifficultyVector::default(),
+            z_score: DifficultyVector::default(),
+            weights: DifficultyWeights::default(),
+            fallback_reason: None,
+        }
     }
 
     fn target(id: u64, set: u64) -> RuntimeQueryTarget {
@@ -328,6 +392,7 @@ mod tests {
             version: "Insane".into(),
             creator: "Mapper".into(),
             online_url: format!("https://osu.ppy.sh/beatmaps/{id}"),
+            star_rating: Some(6.1),
         }
     }
 
@@ -346,15 +411,21 @@ mod tests {
             vec![
                 (
                     target(1, 10),
-                    vec![
-                        result(100, 100, 0.4),
-                        result(101, 101, 0.2),
-                        result(2, 20, 0.1),
-                    ],
+                    RuntimeQueryResponse {
+                        results: vec![
+                            result(100, 100, 0.4),
+                            result(101, 101, 0.2),
+                            result(2, 20, 0.1),
+                        ],
+                        weight_profile: Some(dynamic_profile()),
+                    },
                 ),
                 (
                     target(2, 20),
-                    vec![result(102, 100, 0.1), result(1, 10, 0.05)],
+                    RuntimeQueryResponse {
+                        results: vec![result(102, 100, 0.1), result(1, 10, 0.05)],
+                        weight_profile: None,
+                    },
                 ),
             ],
             3,
@@ -367,5 +438,7 @@ mod tests {
         assert_eq!(response.results[0].result.beatmap.beatmap_id, 102);
         assert_eq!(response.results[0].recommended_by.beatmap_id, 2);
         assert_eq!(response.results[1].result.beatmap.beatmap_id, 101);
+        assert_eq!(response.dynamic_profiles.len(), 1);
+        assert_eq!(response.dynamic_profiles[0].seed_beatmap_id, 1);
     }
 }

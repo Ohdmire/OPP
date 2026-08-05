@@ -8,10 +8,10 @@ import type {
 
 export const defaultDifficultyWeights: DifficultyFeatureVector = {
   aim: 1,
-  speed: 1,
-  reading: 1,
-  slider: 1,
-  overlap: 1,
+  speed: 2,
+  reading: 2,
+  slider: 0,
+  overlap: 0.25,
 };
 
 export const defaultBaseWeights: SimilarityBaseWeights = {
@@ -21,6 +21,12 @@ export const defaultBaseWeights: SimilarityBaseWeights = {
   object_density: 0,
   circle_ratio: 0,
   slider_ratio: 0,
+};
+
+export const defaultDynamicWeighting = {
+  mode: "dynamic" as const,
+  lower_sections: 4,
+  upper_sections: 4,
 };
 
 export const defaultSimilarityFilters: SimilarityFilters = {
@@ -49,8 +55,7 @@ export function createSimilarityRequest(
 ): SimilarityQueryRequest {
   return {
     source,
-    difficulty_weights: { ...defaultDifficultyWeights },
-    base_weights: { ...defaultBaseWeights },
+    weighting: { ...defaultDynamicWeighting },
     filters: { ...defaultSimilarityFilters },
     result_limit: 20,
   };

@@ -76,7 +76,7 @@ export function SimilarityFilterSliders({ request, onChange }: { request: Simila
   return (
     <Card className="mb-5 overflow-hidden p-0">
       <div className="flex items-start justify-between gap-4 border-b border-white/[0.08] bg-[var(--theme-primary-muted)] px-5 py-4">
-        <div className="flex gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-lg bg-[var(--theme-primary-soft)] text-[var(--theme-primary-light)]"><SlidersHorizontal className="size-4" /></span><div><h2 className="text-sm font-semibold text-white">候选铺面筛选</h2><p className="mt-1 text-xs text-slate-400">每项使用一条双滑块：左侧控制最低值，右侧控制最高值；不会改变五维难度的相似度排序。</p></div></div>
+        <div className="flex gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-lg bg-[var(--theme-primary-soft)] text-[var(--theme-primary-light)]"><SlidersHorizontal className="size-4" /></span><div><h2 className="text-sm font-semibold text-white">候选谱面筛选</h2><p className="mt-1 text-xs text-slate-400">每项使用一条双滑块：左侧控制最低值，右侧控制最高值；不会改变五维难度的相似度排序。</p></div></div>
         <Button disabled={activeCount === 0} onClick={() => onChange({ ...request, filters: { ...defaultSimilarityFilters } })} size="sm" variant="ghost"><RotateCcw className="size-3.5" />清除筛选{activeCount ? ` (${activeCount})` : ""}</Button>
       </div>
       <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-3">{controls.map((control) => <RangeFilter control={control} filters={request.filters} key={control.label} onChange={(filters) => onChange({ ...request, filters })} />)}</div>

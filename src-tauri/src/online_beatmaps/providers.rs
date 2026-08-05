@@ -68,24 +68,66 @@ impl ProviderRegistry {
         .await
     }
 
-    pub async fn catboy_osz(&self, id: u64) -> CommandResult<ProviderBytes> {
-        self.bytes_or_json_get(
-            &format!("{CATBOY_BASE_URL}/d/{id}"),
-            "CATBOY_DOWNLOAD_FAILED",
-            "catboy",
-            format!("{id}.osz"),
-        )
-        .await
-    }
-
-    /// Downloads through Hinamizawa.ai's public cascade endpoint.
-    pub async fn hinai_osz(&self, id: u64) -> CommandResult<ProviderBytes> {
-        self.bytes_get(
-            &format!("{HINAI_BASE_URL}/api/v1/hinai/d/{id}"),
-            "HINAI_DOWNLOAD_FAILED",
-            "hinai",
-        )
-        .await
+    pub async fn osz_with_progress<F>(
+        &self,
+        id: u64,
+        provider: &str,
+        on_progress: &mut F,
+    ) -> CommandResult<ProviderBytes>
+    where
+        F: FnMut(u64, Option<u64>),
+    {
+        let (url, code, fallback_name) = match provider {
+            "hinai" => (
+                format!("{HINAI_BASE_URL}/api/v1/hinai/d/{id}"),
+                "HINAI_DOWNLOAD_FAILED",
+                None,
+            ),
+            "catboy" => (
+                format!("{CATBOY_BASE_URL}/d/{id}"),
+                "CATBOY_DOWNLOAD_FAILED",
+                Some(format!("{id}.osz")),
+            ),
+            "nerinyan" => (
+                format!("{NERINYAN_BASE_URL}/d/{id}"),
+                "NERINYAN_DOWNLOAD_FAILED",
+                None,
+            ),
+            _ => unreachable!("download adapter list only contains registered providers"),
+        };
+        let response = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .map_err(|error| CommandError::network(error.to_string()))?;
+        let suggested_filename = filename(&response).or(fallback_name);
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+        let bytes = parse_bytes_with_progress(response, code, provider, on_progress).await?;
+        let bytes = if content_type.contains("json") {
+            serde_json::from_slice::<Value>(&bytes)
+                .ok()
+                .and_then(|value| value.get("data").and_then(Value::as_array).cloned())
+                .map(|data| {
+                    data.iter()
+                        .filter_map(Value::as_u64)
+                        .map(|value| value as u8)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or(bytes)
+        } else {
+            bytes
+        };
+        Ok(ProviderBytes {
+            bytes,
+            suggested_filename,
+            source: provider.into(),
+        })
     }
 
     pub async fn catboy_osu(&self, id: u64) -> CommandResult<ProviderBytes> {
@@ -345,6 +387,36 @@ async fn parse_bytes(response: Response, code: &str) -> CommandResult<Vec<u8>> {
         .await
         .map(|bytes| bytes.to_vec())
         .map_err(|error| CommandError::network(error.to_string()))
+}
+
+async fn parse_bytes_with_progress<F>(
+    mut response: Response,
+    code: &str,
+    source: &str,
+    on_progress: &mut F,
+) -> CommandResult<Vec<u8>>
+where
+    F: FnMut(u64, Option<u64>),
+{
+    if !response.status().is_success() {
+        return Err(status_error(
+            &response,
+            code,
+            source,
+            retry_after(&response),
+        ));
+    }
+    let total = response.content_length();
+    let mut bytes = Vec::with_capacity(total.unwrap_or(0).min(usize::MAX as u64) as usize);
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|error| CommandError::network(error.to_string()))?
+    {
+        bytes.extend_from_slice(&chunk);
+        on_progress(bytes.len() as u64, total);
+    }
+    Ok(bytes)
 }
 
 fn retry_after(response: &Response) -> Option<u64> {

@@ -29,6 +29,7 @@ const unconfigured: SimilarityIndexStatus = {
   normalization_version: null,
   algorithm_id: null,
   data_cutoff_at: null,
+  supports_dynamic_weighting: false,
 };
 
 const ready: SimilarityIndexStatus = {
@@ -40,6 +41,7 @@ const ready: SimilarityIndexStatus = {
   normalization_version: 1,
   algorithm_id: "five-dimension-slider-v3",
   data_cutoff_at: 1_785_140_308,
+  supports_dynamic_weighting: true,
 };
 
 const feature = {
@@ -74,6 +76,7 @@ const response: SimilarityQueryResponse = {
     version: "Insane",
     creator: "Mapper",
     online_url: "https://osu.ppy.sh/b/10",
+    star_rating: 6.1,
     difficulty: feature,
     base,
     source: "index",
@@ -89,6 +92,7 @@ const response: SimilarityQueryResponse = {
       version: "Another",
       creator: "Other Mapper",
       online_url: "https://osu.ppy.sh/b/20",
+      star_rating: 6.2,
       difficulty: { ...feature, reading: 0.75 },
       base: { ...base, bpm: 182 },
       final_distance: 0.04,
@@ -96,6 +100,20 @@ const response: SimilarityQueryResponse = {
       base_distance: 0.08,
     },
   ],
+  dynamic_profile: {
+    target_star_rating: 6.1,
+    candidate_min_section: 57,
+    candidate_max_section: 65,
+    stats_min_section: 57,
+    stats_max_section: 65,
+    sample_count: 240,
+    mean: { ...feature, slider: 0.1 },
+    stddev: { aim: 0.1, speed: 0.1, reading: 0.1, slider: 0.05, overlap: 0.1 },
+    delta: { aim: 0, speed: 0, reading: 0, slider: 0.1, overlap: 0 },
+    z_score: { aim: 0, speed: 0, reading: 0, slider: 2, overlap: 0 },
+    weights: { aim: 0.25, speed: 0.25, reading: 0.25, slider: 1.75, overlap: 0.25 },
+    fallback_reason: null,
+  },
 };
 
 const recommendationResponse: SimilarityRecommendationResponse = {
@@ -108,6 +126,7 @@ const recommendationResponse: SimilarityRecommendationResponse = {
       recommended_by: response.target,
     },
   ],
+  dynamic_profiles: [{ ...response.dynamic_profile!, seed_beatmap_id: 10 }],
 };
 
 function LocationProbe() {
@@ -182,6 +201,9 @@ describe("SimilarBeatmapsPage", () => {
     await user.type(input, "https://osu.ppy.sh/beatmaps/10");
     await user.click(screen.getByRole("button", { name: "展开高级参数" }));
     expect(screen.getByLabelText("结果数量")).toHaveValue("20");
+    expect(screen.getByRole("tab", { name: "动态" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByLabelText("向下范围")).toHaveValue("4");
+    expect(screen.getByLabelText("向上范围")).toHaveValue("4");
     await user.click(screen.getByRole("button", { name: "查找相似谱面" }));
 
     expect(await screen.findByText("Signal - Candidate")).toBeInTheDocument();
@@ -191,15 +213,18 @@ describe("SimilarBeatmapsPage", () => {
           kind: "beatmap_id",
           value: "https://osu.ppy.sh/beatmaps/10",
         },
+        weighting: { mode: "dynamic", lower_sections: 4, upper_sections: 4 },
         result_limit: 20,
       }),
     );
+    expect(screen.getAllByText("主导特征：")[0]).toHaveTextContent("主导特征：Slider");
+    expect(screen.getAllByText(/候选 5.7～6.5★ 桶/).length).toBeGreaterThan(0);
     expect(screen.getByTestId("comparison-radar")).toBeInTheDocument();
 
     await user.click(screen.getByLabelText(/Candidate/));
     expect(download).toHaveBeenCalledWith({
       destination: "D:/downloads",
-      provider: "catboy",
+      provider: "hinai",
       overwrite: false,
       items: [{ beatmapset_id: 2, artist: "Signal", title: "Candidate" }],
     });
@@ -208,6 +233,21 @@ describe("SimilarBeatmapsPage", () => {
     expect(screen.getByTestId("location")).toHaveTextContent(
       "/online/beatmaps?beatmapset=2&beatmap=20",
     );
+  });
+
+  it("falls back to manual weighting when the index lacks dynamic statistics", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(desktopApi, "getSimilarityIndexStatus").mockResolvedValue({
+      ...ready,
+      supports_dynamic_weighting: false,
+    });
+
+    renderPage();
+    expect(await screen.findByText(/已切换为手动权重/)).toBeInTheDocument();
+    const advancedToggle = screen.queryByRole("button", { name: "展开高级参数" });
+    if (advancedToggle) await user.click(advancedToggle);
+    expect(screen.getByRole("tab", { name: "手动" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "动态" })).toBeDisabled();
   });
 
   it("accepts a local osu file through the desktop picker", async () => {
@@ -251,6 +291,30 @@ describe("SimilarBeatmapsPage", () => {
     expect(recommend).toHaveBeenLastCalledWith(
       expect.objectContaining({ kind: "best", result_limit: 20 }),
     );
+  });
+
+  it("shows five recommended beatmaps at a time and switches batches", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(desktopApi, "getSimilarityIndexStatus").mockResolvedValue(ready);
+    vi.spyOn(desktopApi, "recommendSimilarBeatmaps").mockResolvedValue({
+      ...recommendationResponse,
+      results: Array.from({ length: 6 }, (_, index) => ({
+        ...recommendationResponse.results[0],
+        beatmap_id: 20 + index,
+        beatmapset_id: 200 + index,
+        artist: `Artist ${index + 1}`,
+        title: `Recommendation ${index + 1}`,
+      })),
+    });
+
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "根据最近游玩推荐" }));
+
+    expect(await screen.findByText("Artist 1 - Recommendation 1")).toBeInTheDocument();
+    expect(screen.queryByText("Artist 6 - Recommendation 6")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "换一批" }));
+    expect(screen.queryByText("Artist 1 - Recommendation 1")).not.toBeInTheDocument();
+    expect(screen.getByText("Artist 6 - Recommendation 6")).toBeInTheDocument();
   });
 
   it("applies range sliders to the recalled candidate batch without changing the query", async () => {

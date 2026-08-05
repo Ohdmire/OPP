@@ -3,6 +3,7 @@ export type ScoreCategory = "best" | "pinned";
 export type OsuClient = "stable" | "lazer";
 export type Completeness = "complete" | "partial";
 export type CapabilityLevel = "full" | "partial" | "unavailable";
+export type BeatmapDownloadProvider = "hinai" | "catboy" | "nerinyan";
 
 export interface Cached<T> {
   data: T;
@@ -40,6 +41,7 @@ export interface AppSettings {
   reduce_motion: boolean;
   similarity_index_directory: string | null;
   beatmap_download_directory: string | null;
+  default_beatmap_download_provider: BeatmapDownloadProvider;
   open_downloaded_beatmaps_after_download: boolean;
   replay_export_directory: string | null;
   tosu_executable_path: string | null;
@@ -90,6 +92,7 @@ export interface SimilarityIndexStatus {
   normalization_version: number | null;
   algorithm_id: string | null;
   data_cutoff_at: number | null;
+  supports_dynamic_weighting: boolean;
 }
 
 export interface DifficultyFeatureVector {
@@ -151,10 +154,37 @@ export type SimilaritySource =
 
 export interface SimilarityQueryRequest {
   source: SimilaritySource;
-  difficulty_weights: DifficultyFeatureVector;
-  base_weights: SimilarityBaseWeights;
+  weighting: SimilarityWeighting;
   filters: SimilarityFilters;
   result_limit: number;
+}
+
+export type SimilarityWeighting =
+  | {
+      mode: "dynamic";
+      lower_sections: number;
+      upper_sections: number;
+    }
+  | {
+      mode: "manual";
+      difficulty_weights: DifficultyFeatureVector;
+      base_weights: SimilarityBaseWeights;
+    };
+
+export interface SimilarityDynamicWeightProfile {
+  seed_beatmap_id?: number | null;
+  target_star_rating: number;
+  candidate_min_section: number;
+  candidate_max_section: number;
+  stats_min_section: number;
+  stats_max_section: number;
+  sample_count: number;
+  mean: DifficultyFeatureVector;
+  stddev: DifficultyFeatureVector;
+  delta: DifficultyFeatureVector;
+  z_score: DifficultyFeatureVector;
+  weights: DifficultyFeatureVector;
+  fallback_reason: string | null;
 }
 
 export interface SimilarityBeatmap {
@@ -165,6 +195,7 @@ export interface SimilarityBeatmap {
   version: string;
   creator: string;
   online_url: string;
+  star_rating: number | null;
   difficulty: DifficultyFeatureVector;
   base: SimilarityBaseFeatures;
 }
@@ -184,14 +215,14 @@ export interface SimilarityResult extends SimilarityBeatmap {
 export interface SimilarityQueryResponse {
   target: SimilarityTarget;
   results: SimilarityResult[];
+  dynamic_profile: SimilarityDynamicWeightProfile | null;
 }
 
 export type SimilarityRecommendationKind = "recent" | "best";
 
 export interface SimilarityRecommendationRequest {
   kind: SimilarityRecommendationKind;
-  difficulty_weights: DifficultyFeatureVector;
-  base_weights: SimilarityBaseWeights;
+  weighting: SimilarityWeighting;
   filters: SimilarityFilters;
   result_limit: number;
 }
@@ -205,6 +236,7 @@ export interface SimilarityRecommendationResponse {
   seed_count: number;
   skipped_seed_count: number;
   results: SimilarityRecommendationResult[];
+  dynamic_profiles: SimilarityDynamicWeightProfile[];
 }
 
 export type ThemeColor = "cyan" | "blue" | "violet" | "pink" | "orange" | "green";
@@ -839,7 +871,7 @@ export interface BeatmapDownloadItem {
 export interface BeatmapDownloadRequest {
   destination: string;
   items: BeatmapDownloadItem[];
-  provider: "hinai" | "catboy" | "nerinyan" | "none";
+  provider: BeatmapDownloadProvider | "none";
   overwrite: boolean;
 }
 

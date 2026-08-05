@@ -87,13 +87,13 @@ export function Sidebar({ profile, loading }: { profile?: OwnProfile; loading: b
       <div className="mb-4 border-b border-white/[0.07] px-2 pb-4"><div className="flex items-center gap-3"><img alt="OPP" className="size-10 rounded-lg border border-white/10" src="/opp-icon.png" /><p className="text-sm font-semibold text-white">OSU! Plus Plus</p></div></div>
       <nav aria-label="主导航" className="min-h-0 flex-1 overflow-y-auto pr-1">
         <NavGroup label="核心功能">
-          <NavItem emphasis="beatmaps" icon={Music2} label="在线铺面" to="/online/beatmaps" />
-          <NavItem emphasis="similar" icon={ScanSearch} label="相似铺面" to="/online/similar" />
-          <NavItem emphasis="trainer" icon={WandSparkles} label="铺面练习生成器" to="/trainer" />
+          <NavItem emphasis="beatmaps" icon={Music2} label="在线谱面" to="/online/beatmaps" />
+          <NavItem emphasis="similar" icon={ScanSearch} label="相似谱面" to="/online/similar" />
+          <NavItem emphasis="trainer" icon={WandSparkles} label="谱面练习生成器" to="/trainer" />
         </NavGroup>
         <NavGroup label="资料与资源">
           <NavItem icon={Database} label="数据中心" to="/data" />
-          <NavItem icon={Map} label="本地铺面" to="/local/maps" />
+          <NavItem icon={Map} label="本地谱面" to="/local/maps" />
           <NavItem icon={Palette} label="本地皮肤" to="/local/skins" />
           <NavItem icon={Image} label="截图与回放" to="/local/media" />
         </NavGroup>

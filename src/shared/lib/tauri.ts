@@ -132,6 +132,7 @@ function browserPreviewValue<T>(command: string, args?: Record<string, unknown>)
     normalization_version: null,
     algorithm_id: null,
     data_cutoff_at: null,
+    supports_dynamic_weighting: false,
   } as T;
   if (command === "configure_similarity_index") return {
     state: args?.directory ? "ready" : "unconfigured",
@@ -142,21 +143,23 @@ function browserPreviewValue<T>(command: string, args?: Record<string, unknown>)
     normalization_version: null,
     algorithm_id: null,
     data_cutoff_at: null,
+    supports_dynamic_weighting: Boolean(args?.directory),
   } as T;
   if (command === "query_similar_beatmaps" || command === "recommend_similar_beatmaps") {
     const feature = { aim: 0.72, speed: 0.64, reading: 0.81, slider: 0.28, overlap: 0.57 };
     const base = { bpm: 186, ar: 9.2, od: 8.6, cs: 4, hp: 6, length_seconds: 124, object_count: 612, object_density: 4.94, circle_ratio: 0.58, slider_ratio: 0.4, spinner_ratio: 0.02, max_combo: 902 };
-    const target = { beatmap_id: 1001, beatmapset_id: 501, artist: "Synthetic Artist", title: "Reference Pattern", version: "Insane", creator: "Preview Mapper", online_url: "https://osu.ppy.sh/b/1001", difficulty: feature, base };
+    const target = { beatmap_id: 1001, beatmapset_id: 501, artist: "Synthetic Artist", title: "Reference Pattern", version: "Insane", creator: "Preview Mapper", online_url: "https://osu.ppy.sh/b/1001", star_rating: 6.1, difficulty: feature, base };
+    const dynamicProfile = { target_star_rating: 6.1, candidate_min_section: 57, candidate_max_section: 65, stats_min_section: 57, stats_max_section: 65, sample_count: 842, mean: { aim: 0.5, speed: 0.5, reading: 0.5, slider: 0.5, overlap: 0.5 }, stddev: { aim: 0.12, speed: 0.12, reading: 0.12, slider: 0.12, overlap: 0.12 }, delta: { aim: 0.22, speed: 0.14, reading: 0.31, slider: -0.22, overlap: 0.07 }, z_score: { aim: 1.83, speed: 1.17, reading: 2.58, slider: 1.83, overlap: 0.58 }, weights: { aim: 1.63, speed: 1.13, reading: 2, slider: 1.63, overlap: 0.69 }, fallback_reason: null };
     const results = [
-      { beatmap_id: 2001, beatmapset_id: 601, artist: "Signal Garden", title: "Parallel Motion", version: "Another", creator: "Mapper A", online_url: "https://osu.ppy.sh/b/2001", difficulty: { ...feature, aim: 0.7, reading: 0.78 }, base: { ...base, bpm: 184 }, final_distance: 0.0462, difficulty_distance: 0.041, base_distance: 0.067 },
-      { beatmap_id: 2002, beatmapset_id: 602, artist: "Night Circuit", title: "Crossing Lines", version: "Extra", creator: "Mapper B", online_url: "https://osu.ppy.sh/b/2002", difficulty: { ...feature, speed: 0.69, overlap: 0.61 }, base: { ...base, bpm: 192, ar: 9.4 }, final_distance: 0.0824, difficulty_distance: 0.074, base_distance: 0.116 },
-      { beatmap_id: 2003, beatmapset_id: 603, artist: "Blue Window", title: "Readable Noise", version: "Expert", creator: "Mapper C", online_url: "https://osu.ppy.sh/b/2003", difficulty: { ...feature, slider: 0.34, reading: 0.75 }, base: { ...base, bpm: 178, length_seconds: 138 }, final_distance: 0.1197, difficulty_distance: 0.108, base_distance: 0.166 },
+      { beatmap_id: 2001, beatmapset_id: 601, artist: "Signal Garden", title: "Parallel Motion", version: "Another", creator: "Mapper A", online_url: "https://osu.ppy.sh/b/2001", star_rating: 6.0, difficulty: { ...feature, aim: 0.7, reading: 0.78 }, base: { ...base, bpm: 184 }, final_distance: 0.0462, difficulty_distance: 0.041, base_distance: 0.067 },
+      { beatmap_id: 2002, beatmapset_id: 602, artist: "Night Circuit", title: "Crossing Lines", version: "Extra", creator: "Mapper B", online_url: "https://osu.ppy.sh/b/2002", star_rating: 6.3, difficulty: { ...feature, speed: 0.69, overlap: 0.61 }, base: { ...base, bpm: 192, ar: 9.4 }, final_distance: 0.0824, difficulty_distance: 0.074, base_distance: 0.116 },
+      { beatmap_id: 2003, beatmapset_id: 603, artist: "Blue Window", title: "Readable Noise", version: "Expert", creator: "Mapper C", online_url: "https://osu.ppy.sh/b/2003", star_rating: 5.9, difficulty: { ...feature, slider: 0.34, reading: 0.75 }, base: { ...base, bpm: 178, length_seconds: 138 }, final_distance: 0.1197, difficulty_distance: 0.108, base_distance: 0.166 },
     ];
     if (command === "recommend_similar_beatmaps") {
       const request = args?.request as SimilarityRecommendationRequest | undefined;
-      return { kind: request?.kind ?? "recent", seed_count: 20, skipped_seed_count: 0, results: results.map((result) => ({ ...result, recommended_by: target })) } as T;
+      return { kind: request?.kind ?? "recent", seed_count: 20, skipped_seed_count: 0, results: results.map((result) => ({ ...result, recommended_by: target })), dynamic_profiles: [{ ...dynamicProfile, seed_beatmap_id: target.beatmap_id }] } as T;
     }
-    return { target: { ...target, source: "index", analyzer_version: 3, normalization_version: 1 }, results } as T;
+    return { target: { ...target, source: "index", analyzer_version: 3, normalization_version: 1 }, results, dynamic_profile: dynamicProfile } as T;
   }
   if (command === "update_settings") return args?.settings as T;
   if (["clear_profile_cache", "set_default_file_client", "set_display_gamma", "open_netease_music_search", "set_local_source", "reset_local_source", "start_tosu", "stop_tosu", "set_tosu_executable", "set_tosu_lyrics_executable", "cancel_online_beatmap_download", "exit_app"].includes(command)) return null as T;

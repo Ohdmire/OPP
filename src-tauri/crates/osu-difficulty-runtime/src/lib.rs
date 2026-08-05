@@ -6,7 +6,7 @@ mod dataset;
 mod types;
 
 pub use analyzer::Analyzer;
-pub use dataset::{Dataset, RuntimeError, RuntimeErrorKind};
+pub use dataset::{Dataset, RuntimeError, RuntimeErrorKind, star_section};
 pub use types::*;
 
 pub const ANALYZER_VERSION: u32 = 3;

@@ -75,6 +75,8 @@ impl Analyzer {
             DifficultyAttributes::Osu(value) => value,
             _ => bail!("only osu!standard beatmaps are supported"),
         };
+        let mut metadata = parsed.metadata.clone();
+        metadata.star_rating = Some(attrs.stars as f32);
         let overlap = self.overlap(&parsed.objects, parsed.ar, parsed.cs);
         let duration_ms = parsed
             .objects
@@ -136,7 +138,7 @@ impl Analyzer {
             analyzer_version: ANALYZER_VERSION,
             mod_profile: 0,
         };
-        Ok((parsed.metadata, record))
+        Ok((metadata, record))
     }
 
     fn overlap(&self, objects: &[HitObject], ar: f64, cs: f64) -> OverlapStatistics {
@@ -648,6 +650,7 @@ fn parse_beatmap(bytes: &[u8]) -> Result<ParsedBeatmap> {
             version,
             creator,
             online_url: format!("https://osu.ppy.sh/b/{beatmap_id}"),
+            star_rating: None,
         },
         ar,
         od,

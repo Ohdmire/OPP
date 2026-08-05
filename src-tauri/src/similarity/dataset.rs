@@ -40,6 +40,7 @@ impl SimilarityRuntime {
                 normalization_version: None,
                 algorithm_id: None,
                 data_cutoff_at: None,
+                supports_dynamic_weighting: false,
             };
         }
         match self.dataset(directory) {
@@ -54,6 +55,7 @@ impl SimilarityRuntime {
                     normalization_version: Some(info.normalization_version),
                     algorithm_id: Some(info.algorithm_id.clone()),
                     data_cutoff_at: info.data_cutoff_at,
+                    supports_dynamic_weighting: info.supports_dynamic_weighting,
                 }
             }
             Err(error) => status_from_error(directory, &error),
@@ -90,6 +92,7 @@ fn status_from_error(directory: &str, error: &RuntimeError) -> SimilarityIndexSt
         normalization_version: None,
         algorithm_id: None,
         data_cutoff_at: None,
+        supports_dynamic_weighting: false,
     }
 }
 

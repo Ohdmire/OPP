@@ -23,6 +23,23 @@ function formatTransfer(value: number) {
   return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[index]}`;
 }
 
+function downloadProgressPercent(progress: BeatmapDownloadProgress) {
+  if (!progress.total) return 0;
+  const currentFileProgress = progress.total_bytes
+    ? Math.min(1, (progress.downloaded_bytes ?? 0) / progress.total_bytes)
+    : 0;
+  return Math.min(100, ((progress.processed + currentFileProgress) / progress.total) * 100);
+}
+
+function formatDownloadedBytes(progress: BeatmapDownloadProgress) {
+  const downloaded = progress.downloaded_bytes ?? 0;
+  if (!downloaded) return progress.message ?? "等待连接";
+  const current = `${(downloaded / 1024 / 1024).toFixed(1)} MB`;
+  return progress.total_bytes
+    ? `${current} / ${(progress.total_bytes / 1024 / 1024).toFixed(1)} MB`
+    : current;
+}
+
 function DownloadToast() {
   const [progress, setProgress] = useState<BeatmapDownloadProgress | null>(null);
   useEffect(() => {
@@ -37,8 +54,8 @@ function DownloadToast() {
   }, []);
   if (!progress) return null;
   const completed = progress.phase === "finished" || progress.phase === "cancelled";
-  const percent = progress.total ? Math.min(100, progress.processed / progress.total * 100) : 0;
-  return <div aria-live="polite" className="fixed bottom-6 right-6 z-[180] w-[340px] rounded-2xl border border-cyan-300/20 bg-[#0b101b]/95 p-4 shadow-2xl backdrop-blur"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-sm font-semibold text-white">{completed ? "下载完成" : "正在下载谱面"}</p><p className="mt-1 truncate text-xs text-slate-400">{progress.current_title ?? progress.message ?? "准备下载"}</p></div><span className="shrink-0 font-mono text-xs text-cyan-200">{progress.processed}/{progress.total}</span></div><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.08]"><div className="h-full rounded-full bg-[var(--theme-primary)] transition-[width]" style={{ width: `${percent}%` }} /></div><div className="mt-2 flex justify-between text-xs"><span className="text-slate-500">{progress.downloaded_bytes ? `${(progress.downloaded_bytes / 1024 / 1024).toFixed(1)} MB` : progress.message ?? "等待连接"}</span><strong className="font-mono text-emerald-200">{formatTransfer(progress.bytes_per_second ?? 0)}</strong></div></div>;
+  const percent = downloadProgressPercent(progress);
+  return <div aria-live="polite" className="fixed bottom-6 right-6 z-[180] w-[340px] rounded-2xl border border-cyan-300/20 bg-[#0b101b]/95 p-4 shadow-2xl backdrop-blur"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-sm font-semibold text-white">{completed ? "下载完成" : "正在下载谱面"}</p><p className="mt-1 truncate text-xs text-slate-400">{progress.current_title ?? progress.message ?? "准备下载"}</p></div><span className="shrink-0 font-mono text-xs text-cyan-200">{progress.processed}/{progress.total}</span></div><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.08]"><div className="h-full rounded-full bg-[var(--theme-primary)] transition-[width]" style={{ width: `${percent}%` }} /></div><div className="mt-2 flex justify-between gap-3 text-xs"><span className="truncate text-slate-500">{formatDownloadedBytes(progress)}</span><strong className="shrink-0 font-mono text-emerald-200">{formatTransfer(progress.bytes_per_second ?? 0)}</strong></div></div>;
 }
 
 function GameCompletionOverlay({ session, onClose }: { session: GameSessionSummary; onClose: () => void }) {
@@ -152,7 +169,7 @@ export function AppShell() {
       />
       <GlobalContextBar />
       <main className="ml-[248px] min-h-screen pt-[108px]" id="main-content" tabIndex={-1}>
-        <div className="relative min-h-[calc(100vh-108px)] overflow-hidden">
+        <div className="relative min-h-[calc(100vh-108px)] overflow-x-clip">
           <div className="theme-content-frame relative mx-auto max-w-[1440px] p-7 xl:p-9">
             <Outlet />
           </div>

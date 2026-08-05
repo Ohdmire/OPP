@@ -1,5 +1,5 @@
 use osu_difficulty_runtime::{
-    BaseFeatureWeights, BaseFeatures, DifficultyVector, DifficultyWeights, QueryFilters,
+    BaseFeatures, DifficultyVector, DynamicWeightProfile, QueryFilters, WeightingMode,
 };
 use serde::{Deserialize, Serialize};
 
@@ -23,6 +23,7 @@ pub struct SimilarityIndexStatus {
     pub normalization_version: Option<u32>,
     pub algorithm_id: Option<String>,
     pub data_cutoff_at: Option<i64>,
+    pub supports_dynamic_weighting: bool,
 }
 
 impl SimilarityIndexStatus {
@@ -36,6 +37,7 @@ impl SimilarityIndexStatus {
             normalization_version: None,
             algorithm_id: None,
             data_cutoff_at: None,
+            supports_dynamic_weighting: false,
         }
     }
 }
@@ -50,8 +52,7 @@ pub enum SimilaritySource {
 #[derive(Debug, Clone, Deserialize)]
 pub struct SimilarityQueryRequest {
     pub source: SimilaritySource,
-    pub difficulty_weights: DifficultyWeights,
-    pub base_weights: BaseFeatureWeights,
+    pub weighting: WeightingMode,
     #[serde(default)]
     pub filters: QueryFilters,
     pub result_limit: usize,
@@ -66,6 +67,7 @@ pub struct SimilarityBeatmap {
     pub version: String,
     pub creator: String,
     pub online_url: String,
+    pub star_rating: Option<f32>,
     pub difficulty: DifficultyVector,
     pub base: BaseFeatures,
 }
@@ -92,6 +94,7 @@ pub struct SimilarityResult {
 pub struct SimilarityQueryResponse {
     pub target: SimilarityTarget,
     pub results: Vec<SimilarityResult>,
+    pub dynamic_profile: Option<DynamicWeightProfile>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -104,8 +107,7 @@ pub enum SimilarityRecommendationKind {
 #[derive(Debug, Clone, Deserialize)]
 pub struct SimilarityRecommendationRequest {
     pub kind: SimilarityRecommendationKind,
-    pub difficulty_weights: DifficultyWeights,
-    pub base_weights: BaseFeatureWeights,
+    pub weighting: WeightingMode,
     #[serde(default)]
     pub filters: QueryFilters,
     pub result_limit: usize,
@@ -124,4 +126,12 @@ pub struct SimilarityRecommendationResponse {
     pub seed_count: usize,
     pub skipped_seed_count: usize,
     pub results: Vec<SimilarityRecommendationResult>,
+    pub dynamic_profiles: Vec<SimilaritySeedDynamicProfile>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SimilaritySeedDynamicProfile {
+    pub seed_beatmap_id: u64,
+    #[serde(flatten)]
+    pub profile: DynamicWeightProfile,
 }

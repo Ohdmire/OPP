@@ -146,14 +146,36 @@ pub struct DifficultyWeights {
     pub overlap: f32,
 }
 
+impl DifficultyWeights {
+    pub const fn from_array(value: [f32; 5]) -> Self {
+        Self {
+            aim: value[0],
+            speed: value[1],
+            reading: value[2],
+            slider: value[3],
+            overlap: value[4],
+        }
+    }
+
+    pub const fn as_array(self) -> [f32; 5] {
+        [
+            self.aim,
+            self.speed,
+            self.reading,
+            self.slider,
+            self.overlap,
+        ]
+    }
+}
+
 impl Default for DifficultyWeights {
     fn default() -> Self {
         Self {
             aim: 1.0,
-            speed: 1.0,
-            reading: 1.0,
-            slider: 1.0,
-            overlap: 1.0,
+            speed: 2.0,
+            reading: 2.0,
+            slider: 0.0,
+            overlap: 0.25,
         }
     }
 }
@@ -186,6 +208,10 @@ impl Default for BaseFeatureWeights {
 pub struct QueryFilters {
     pub min_ar: Option<f32>,
     pub max_ar: Option<f32>,
+    pub min_cs: Option<f32>,
+    pub max_cs: Option<f32>,
+    pub min_od: Option<f32>,
+    pub max_od: Option<f32>,
     pub min_bpm: Option<f32>,
     pub max_bpm: Option<f32>,
     pub min_length_seconds: Option<f32>,
@@ -198,10 +224,31 @@ pub struct QueryFilters {
     pub max_slider_ratio: Option<f32>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "mode", rename_all = "snake_case")]
+pub enum WeightingMode {
+    Dynamic {
+        lower_sections: u32,
+        upper_sections: u32,
+    },
+    Manual {
+        difficulty_weights: DifficultyWeights,
+        base_weights: BaseFeatureWeights,
+    },
+}
+
+impl Default for WeightingMode {
+    fn default() -> Self {
+        Self::Dynamic {
+            lower_sections: 4,
+            upper_sections: 4,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct QueryOptions {
-    pub difficulty_weights: DifficultyWeights,
-    pub base_weights: BaseFeatureWeights,
+    pub weighting: WeightingMode,
     pub filters: QueryFilters,
     pub result_limit: usize,
 }
@@ -209,8 +256,7 @@ pub struct QueryOptions {
 impl Default for QueryOptions {
     fn default() -> Self {
         Self {
-            difficulty_weights: DifficultyWeights::default(),
-            base_weights: BaseFeatureWeights::default(),
+            weighting: WeightingMode::default(),
             filters: QueryFilters::default(),
             result_limit: 20,
         }
@@ -227,6 +273,8 @@ pub struct BeatmapMetadata {
     pub version: String,
     pub creator: String,
     pub online_url: String,
+    /// No-mod osu!standard star rating. Missing on legacy datasets.
+    pub star_rating: Option<f32>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -244,6 +292,28 @@ pub struct QueryResult {
     pub base_distance: f32,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DynamicWeightProfile {
+    pub target_star_rating: f32,
+    pub candidate_min_section: i32,
+    pub candidate_max_section: i32,
+    pub stats_min_section: i32,
+    pub stats_max_section: i32,
+    pub sample_count: u64,
+    pub mean: DifficultyVector,
+    pub stddev: DifficultyVector,
+    pub delta: DifficultyVector,
+    pub z_score: DifficultyVector,
+    pub weights: DifficultyWeights,
+    pub fallback_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct QueryResponse {
+    pub results: Vec<QueryResult>,
+    pub weight_profile: Option<DynamicWeightProfile>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DatasetInfo {
     pub record_count: usize,
@@ -252,4 +322,5 @@ pub struct DatasetInfo {
     pub algorithm_id: String,
     /// Unix seconds of the newest beatmap metadata record included in this index.
     pub data_cutoff_at: Option<i64>,
+    pub supports_dynamic_weighting: bool,
 }

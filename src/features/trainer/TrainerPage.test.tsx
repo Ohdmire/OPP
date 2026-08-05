@@ -36,7 +36,7 @@ describe("TrainerPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(screen.getByRole("button", { name: "前往本地铺面" }));
+    await user.click(screen.getByRole("button", { name: "前往本地谱面" }));
 
     expect(screen.getByRole("heading", { name: "本地谱面目标页" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "上一个页面" })).not.toBeInTheDocument();

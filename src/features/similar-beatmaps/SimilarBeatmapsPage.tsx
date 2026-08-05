@@ -24,16 +24,18 @@ import {
   useSimilarityQuery,
   useSimilarityRecommendation,
 } from "./api";
-import { createSimilarityRequest, defaultSimilarityFilters } from "./defaults";
+import { createSimilarityRequest, defaultBaseWeights, defaultDifficultyWeights } from "./defaults";
 import { SimilarityAdvancedPanel } from "./SimilarityAdvancedPanel";
 import { SimilarityFilterSliders } from "./SimilarityFilterSliders";
 import { SimilarityRadar } from "./SimilarityRadar";
 import { SimilarityResultCard } from "./SimilarityResultCard";
+import { DynamicWeightProfileCard } from "./DynamicWeightProfile";
 import {
   onlineBeatmapRouteForSimilarityResult,
   parseSimilarityLaunch,
 } from "./navigation";
 import { normalizePreviewUrl } from "../online-beatmaps/filters";
+import { resolveDefaultDownloadProvider } from "../online-beatmaps/downloadProvider";
 
 const DIFFICULTY_DIMENSIONS = [
   ["aim", "Aim"],
@@ -42,18 +44,24 @@ const DIFFICULTY_DIMENSIONS = [
   ["slider", "Slider"],
   ["overlap", "Overlap"],
 ] as const;
+const RESULTS_PER_BATCH = 5;
+
+function manualWeighting() {
+  return {
+    mode: "manual" as const,
+    difficulty_weights: { ...defaultDifficultyWeights },
+    base_weights: { ...defaultBaseWeights },
+  };
+}
 
 function matchesCandidateFilters(
   base: SimilarityBaseFeatures,
-  difficulty: { aim: number; speed: number },
+  starRating: number | null,
   filters: SimilarityFilters,
 ) {
-  // The private similarity index does not retain an official star field. Use
-  // the existing normalized aim/speed dimensions for a stable local estimate.
-  const star = Math.hypot(difficulty.aim, difficulty.speed) * 5;
   return (
-    (filters.min_star == null || star >= filters.min_star) &&
-    (filters.max_star == null || star <= filters.max_star) &&
+    (filters.min_star == null || (starRating != null && starRating >= filters.min_star)) &&
+    (filters.max_star == null || (starRating != null && starRating <= filters.max_star)) &&
     (filters.min_ar == null || base.ar >= filters.min_ar) &&
     (filters.max_ar == null || base.ar <= filters.max_ar) &&
     (filters.min_cs == null || base.cs >= filters.min_cs) &&
@@ -187,6 +195,7 @@ export function SimilarBeatmapsPage() {
   const [selectedResultId, setSelectedResultId] = useState<number | null>(
     () => similaritySession?.selectedResultId ?? null,
   );
+  const [resultBatch, setResultBatch] = useState(0);
   const handledLaunch = useRef<string | null>(null);
   const restoreScrollY = useRef(similaritySession?.scrollY ?? null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -194,9 +203,18 @@ export function SimilarBeatmapsPage() {
 
   const filteredResults = useMemo(
     () => (recommendationResponse?.results ?? response?.results ?? []).filter(
-      (result) => matchesCandidateFilters(result.base, result.difficulty, request.filters),
+      (result) => matchesCandidateFilters(result.base, result.star_rating, request.filters),
     ),
     [recommendationResponse, request.filters, response],
+  );
+  const resultBatchCount = Math.max(1, Math.ceil(filteredResults.length / RESULTS_PER_BATCH));
+  const activeResultBatch = resultBatch % resultBatchCount;
+  const visibleResults = useMemo(
+    () => filteredResults.slice(
+      activeResultBatch * RESULTS_PER_BATCH,
+      (activeResultBatch + 1) * RESULTS_PER_BATCH,
+    ),
+    [activeResultBatch, filteredResults],
   );
 
   const selected = useMemo(() => {
@@ -214,6 +232,11 @@ export function SimilarBeatmapsPage() {
       )?.recommended_by ?? null
     : null;
   const comparisonTarget = recommendedBy ?? response?.target ?? null;
+  const selectedDynamicProfile = selected
+    ? response?.dynamic_profile ?? recommendationResponse?.dynamic_profiles.find(
+        (profile) => profile.seed_beatmap_id === recommendedBy?.beatmap_id,
+      ) ?? null
+    : null;
 
   const status =
     statusQuery.data ??
@@ -225,8 +248,12 @@ export function SimilarBeatmapsPage() {
       normalization_version: null,
       algorithm_id: null,
       data_cutoff_at: null,
+      supports_dynamic_weighting: false,
       message: statusQuery.error ? errorMessage(statusQuery.error) : "",
     } satisfies SimilarityIndexStatus);
+  const effectiveWeighting = status.supports_dynamic_weighting
+    ? request.weighting
+    : request.weighting.mode === "manual" ? request.weighting : manualWeighting();
 
   useEffect(() => {
     saveSimilaritySession({
@@ -274,11 +301,11 @@ export function SimilarBeatmapsPage() {
       setResponse(null);
       setRecommendationResponse(null);
       setSelectedResultId(null);
-      similarityQuery.mutate(nextRequest, { onSuccess: setResponse });
+      similarityQuery.mutate({ ...nextRequest, weighting: status.supports_dynamic_weighting ? nextRequest.weighting : manualWeighting() }, { onSuccess: setResponse });
       setSearchParams(new URLSearchParams(), { replace: true });
     };
     void run().catch((error) => setConfigurationError(errorMessage(error)));
-  }, [searchParams, setSearchParams, similarityQuery, status.state]);
+  }, [searchParams, setSearchParams, similarityQuery, status.state, status.supports_dynamic_weighting]);
 
   async function chooseIndexDirectory() {
     setConfigurationError(null);
@@ -352,7 +379,7 @@ export function SimilarBeatmapsPage() {
     try {
       const downloaded = await desktopApi.downloadOnlineBeatmapsets({
         destination,
-        provider: "catboy",
+        provider: resolveDefaultDownloadProvider(settings.data),
         overwrite: false,
         items: Array.from(new Map(results.map((result) => [result.beatmapset_id, { beatmapset_id: result.beatmapset_id, artist: result.artist, title: result.title }])).values()),
       });
@@ -423,13 +450,15 @@ export function SimilarBeatmapsPage() {
         ? request.source.value.trim()
         : request.source.path.trim();
     if (!value) return;
+    setResultBatch(0);
     setSelectedResultId(null);
     setResponse(null);
     setRecommendationResponse(null);
     similarityRecommendation.reset();
     similarityQuery.mutate({
       ...request,
-      filters: { ...defaultSimilarityFilters },
+      weighting: effectiveWeighting,
+      filters: { ...request.filters },
       source:
         request.source.kind === "beatmap_id"
           ? { kind: "beatmap_id", value }
@@ -439,6 +468,7 @@ export function SimilarBeatmapsPage() {
 
   function recommend(kind: SimilarityRecommendationKind) {
     setConfigurationError(null);
+    setResultBatch(0);
     setSelectedResultId(null);
     setResponse(null);
     setRecommendationResponse(null);
@@ -446,13 +476,18 @@ export function SimilarBeatmapsPage() {
     similarityRecommendation.mutate(
       {
         kind,
-        difficulty_weights: request.difficulty_weights,
-        base_weights: request.base_weights,
-        filters: { ...defaultSimilarityFilters },
+        weighting: effectiveWeighting,
+        filters: { ...request.filters },
         result_limit: request.result_limit,
       },
       { onSuccess: setRecommendationResponse },
     );
+  }
+
+  function showNextBatch() {
+    const nextBatch = (activeResultBatch + 1) % resultBatchCount;
+    setResultBatch(nextBatch);
+    setSelectedResultId(filteredResults[nextBatch * RESULTS_PER_BATCH]?.beatmap_id ?? null);
   }
 
   if (statusQuery.isLoading) {
@@ -534,6 +569,12 @@ export function SimilarBeatmapsPage() {
               </Button>
             </div>
           </Card>
+
+          {!status.supports_dynamic_weighting ? (
+            <div className="mb-5 rounded-xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">
+              当前索引不包含星数分段统计，已切换为手动权重。下载新版数据集后可使用动态推荐。
+            </div>
+          ) : null}
 
           <Card className="mb-5 p-5">
           <div className="mb-5 border-b border-white/[0.07] pb-5">
@@ -649,7 +690,7 @@ export function SimilarBeatmapsPage() {
             </Button>
 
             {advancedOpen ? (
-              <SimilarityAdvancedPanel request={request} onChange={setRequest} />
+              <SimilarityAdvancedPanel request={{ ...request, weighting: effectiveWeighting }} supportsDynamicWeighting={status.supports_dynamic_weighting} onChange={setRequest} />
             ) : null}
           </form>
           </Card>
@@ -688,6 +729,7 @@ export function SimilarBeatmapsPage() {
                       </p>
                       <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-400">
                         <span>AR {formatMetric(response.target.base.ar, 1)}</span>
+                        <span>星数 {formatMetric(response.target.star_rating, 2)}★</span>
                         <span>BPM {formatMetric(response.target.base.bpm, 0)}</span>
                         <span>长度 {formatMetric(response.target.base.length_seconds, 0)}s</span>
                       </div>
@@ -696,22 +738,28 @@ export function SimilarBeatmapsPage() {
                   </Card>
                 ) : null}
 
-                <div className="mb-3 flex items-end justify-between">
+                {response?.dynamic_profile ? <DynamicWeightProfileCard profile={response.dynamic_profile} /> : null}
+
+                <div className="mb-3 flex items-end justify-between gap-3">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">推荐结果</span>
                     <h2 className="mt-1 text-base font-semibold text-white">{filteredResults.length} 个相似谱面集</h2>
                   </div>
-                  <span className="text-xs text-slate-500">距离越低越相似</span>
-                  <Button disabled={!filteredResults.length || quickDownloadId !== null} loading={quickDownloadId === -1} onClick={() => void downloadResults(filteredResults)} size="sm" variant="primary"><Download className="size-3.5" />批量下载当前结果</Button>
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <span className="text-xs text-slate-500">第 {activeResultBatch + 1} / {resultBatchCount} 批 · 距离越低越相似</span>
+                    {filteredResults.length > RESULTS_PER_BATCH ? <Button disabled={quickDownloadId !== null} onClick={showNextBatch} size="sm"><RefreshCw className="size-3.5" />换一批</Button> : null}
+                    <Button disabled={!visibleResults.length || quickDownloadId !== null} loading={quickDownloadId === -1} onClick={() => void downloadResults(visibleResults)} size="sm" variant="primary"><Download className="size-3.5" />下载本批</Button>
+                  </div>
                 </div>
 
                 {filteredResults.length ? (
                   <div className="space-y-3">
-                    {filteredResults.map((result) => (
+                    {visibleResults.map((result) => (
                       <SimilarityResultCard
                         key={result.beatmap_id}
                         result={result}
                         recommendedBy={recommendationResponse?.results.find((item) => item.beatmap_id === result.beatmap_id)?.recommended_by}
+                        dynamicProfile={recommendationResponse?.dynamic_profiles.find((profile) => profile.seed_beatmap_id === recommendationResponse.results.find((item) => item.beatmap_id === result.beatmap_id)?.recommended_by.beatmap_id) ?? response?.dynamic_profile}
                         selected={selected?.beatmap_id === result.beatmap_id}
                         onSelect={() => setSelectedResultId(result.beatmap_id)}
                         onDownload={() => void downloadResult(result)}
@@ -749,6 +797,7 @@ export function SimilarBeatmapsPage() {
                     target={comparisonTarget.difficulty}
                     comparison={selected.difficulty}
                   />
+                  {selectedDynamicProfile ? <DynamicWeightProfileCard compact profile={selectedDynamicProfile} /> : null}
                   <div className="mb-4 space-y-1.5">
                     {DIFFICULTY_DIMENSIONS.map(([key, label]) => {
                       const difference =

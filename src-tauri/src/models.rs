@@ -149,6 +149,8 @@ pub struct AppSettings {
     #[serde(default)]
     pub beatmap_download_directory: Option<String>,
     #[serde(default)]
+    pub default_beatmap_download_provider: BeatmapDownloadProvider,
+    #[serde(default)]
     pub open_downloaded_beatmaps_after_download: bool,
     #[serde(default)]
     pub replay_export_directory: Option<String>,
@@ -182,6 +184,15 @@ pub struct AppSettings {
     pub game_session_analysis_on_detect: bool,
     #[serde(default = "default_preview_volume")]
     pub preview_volume: u8,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum BeatmapDownloadProvider {
+    #[default]
+    Hinai,
+    Catboy,
+    Nerinyan,
 }
 
 fn default_tosu_api_base_url() -> String {
@@ -218,6 +229,7 @@ impl Default for AppSettings {
             reduce_motion: false,
             similarity_index_directory: None,
             beatmap_download_directory: None,
+            default_beatmap_download_provider: BeatmapDownloadProvider::default(),
             open_downloaded_beatmaps_after_download: false,
             replay_export_directory: None,
             tosu_executable_path: None,
@@ -335,6 +347,23 @@ mod tests {
         assert_eq!(
             profile.extra.get("new_api_field"),
             Some(&serde_json::json!({"kept": true}))
+        );
+    }
+
+    #[test]
+    fn settings_default_to_hinai_downloads() {
+        let settings: AppSettings =
+            serde_json::from_value(serde_json::json!({})).expect("settings should parse");
+
+        assert_eq!(
+            settings.default_beatmap_download_provider,
+            BeatmapDownloadProvider::Hinai
+        );
+        assert_eq!(
+            serde_json::to_value(settings)
+                .expect("settings should serialize")
+                .get("default_beatmap_download_provider"),
+            Some(&serde_json::json!("hinai"))
         );
     }
 }

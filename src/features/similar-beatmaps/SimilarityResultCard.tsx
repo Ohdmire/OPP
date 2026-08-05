@@ -4,7 +4,7 @@ import { ArrowRight, Download, Headphones, Pause } from "lucide-react";
 import { Badge, Button, Card } from "../../shared/components/ui";
 import { DifficultyIcon } from "../../shared/components/DifficultyIcon";
 import { desktopApi, isTauri } from "../../shared/lib/tauri";
-import type { Ruleset, SimilarityBeatmap, SimilarityResult } from "../../shared/types/osu";
+import type { SimilarityBeatmap, SimilarityDynamicWeightProfile, SimilarityResult } from "../../shared/types/osu";
 
 function durationLabel(seconds: number) {
   const rounded = Math.max(0, Math.round(seconds));
@@ -40,18 +40,10 @@ function Metric({
   );
 }
 
-function readDifficulty(value: Record<string, unknown>) {
-  const rating = value.difficulty_rating;
-  const mode = value.mode;
-  return {
-    stars: typeof rating === "number" && Number.isFinite(rating) ? rating : null,
-    mode: mode === "taiko" || mode === "fruits" || mode === "mania" ? mode : "osu",
-  } satisfies { stars: number | null; mode: Ruleset };
-}
-
 export function SimilarityResultCard({
   result,
   recommendedBy,
+  dynamicProfile,
   selected,
   onSelect,
   onOpen,
@@ -64,6 +56,7 @@ export function SimilarityResultCard({
 }: {
   result: SimilarityResult;
   recommendedBy?: SimilarityBeatmap;
+  dynamicProfile?: SimilarityDynamicWeightProfile | null;
   selected: boolean;
   onSelect: () => void;
   onOpen: () => void;
@@ -81,18 +74,10 @@ export function SimilarityResultCard({
     staleTime: Infinity,
     retry: 1,
   });
-  const onlineBeatmap = beatmapset.data?.beatmaps?.find((beatmap) => beatmap.id === result.beatmap_id);
-  const fallbackDifficulty = useQuery({
-    queryKey: ["similarity-result-stars-fallback", result.beatmap_id],
-    queryFn: async () => readDifficulty(await desktopApi.getOnlineBeatmap(result.beatmap_id)),
-    enabled: isTauri() && (beatmapset.isError || Boolean(beatmapset.data && !onlineBeatmap)),
-    staleTime: Infinity,
-    retry: 1,
-  }).data;
-  const difficulty = onlineBeatmap
-    ? { stars: onlineBeatmap.difficulty_rating, mode: onlineBeatmap.mode }
-    : fallbackDifficulty;
   const cover = beatmapset.data?.covers?.card ?? beatmapset.data?.covers?.list ?? beatmapset.data?.covers?.cover;
+  const dominantFeature = dynamicProfile
+    ? Object.entries(dynamicProfile.weights).sort(([, left], [, right]) => right - left)[0]?.[0]
+    : null;
 
   return (
     <Card
@@ -109,8 +94,8 @@ export function SimilarityResultCard({
       <div className="relative flex items-start gap-4">
         <DifficultyIcon
           className="bg-[#0a0f1a]/85 shadow-lg backdrop-blur-sm"
-          mode={difficulty?.mode}
-          stars={difficulty?.stars}
+          mode="osu"
+          stars={result.star_rating}
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -124,6 +109,7 @@ export function SimilarityResultCard({
               由 {recommendedBy.artist} - {recommendedBy.title} [{recommendedBy.version}] 推荐
             </p>
           ) : null}
+          {dominantFeature ? <p className="mt-1 text-xs text-violet-200/90">动态主导特征：{dominantFeature}</p> : null}
 
           <div className="mt-3 grid grid-cols-4 gap-2">
             <Metric label="AR" tone={osuTone(result.base.ar)} value={result.base.ar.toFixed(1)} />
