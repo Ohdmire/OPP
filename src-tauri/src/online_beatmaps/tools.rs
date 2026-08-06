@@ -393,6 +393,8 @@ pub fn progress_for_item(
         downloaded_bytes: 0,
         total_bytes: None,
         bytes_per_second: 0.0,
+        completed_paths: None,
+        destination: None,
     }
 }
 

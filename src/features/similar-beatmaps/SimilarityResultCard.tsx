@@ -4,7 +4,7 @@ import { ArrowRight, Download, Headphones, Pause } from "lucide-react";
 import { Badge, Button, Card } from "../../shared/components/ui";
 import { DifficultyIcon } from "../../shared/components/DifficultyIcon";
 import { desktopApi, isTauri } from "../../shared/lib/tauri";
-import type { SimilarityBeatmap, SimilarityDynamicWeightProfile, SimilarityResult } from "../../shared/types/osu";
+import type { SimilarityBeatmap, SimilarityResult } from "../../shared/types/osu";
 
 function durationLabel(seconds: number) {
   const rounded = Math.max(0, Math.round(seconds));
@@ -33,9 +33,9 @@ function Metric({
   tone: string;
 }) {
   return (
-    <div className="rounded-md border border-white/[0.06] bg-black/[0.12] px-2.5 py-2">
-      <span className="block text-[10px] font-medium uppercase tracking-wide text-slate-500">{label}</span>
-      <strong className={`metric-value ${tone} mt-0.5 block text-sm`}>{value}</strong>
+    <div className="rounded-md border border-white/[0.06] bg-black/[0.12] px-3 py-2.5">
+      <span className="block text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</span>
+      <strong className={`metric-value ${tone} mt-0.5 block text-base`}>{value}</strong>
     </div>
   );
 }
@@ -43,7 +43,6 @@ function Metric({
 export function SimilarityResultCard({
   result,
   recommendedBy,
-  dynamicProfile,
   selected,
   onSelect,
   onOpen,
@@ -56,7 +55,6 @@ export function SimilarityResultCard({
 }: {
   result: SimilarityResult;
   recommendedBy?: SimilarityBeatmap;
-  dynamicProfile?: SimilarityDynamicWeightProfile | null;
   selected: boolean;
   onSelect: () => void;
   onOpen: () => void;
@@ -75,13 +73,10 @@ export function SimilarityResultCard({
     retry: 1,
   });
   const cover = beatmapset.data?.covers?.card ?? beatmapset.data?.covers?.list ?? beatmapset.data?.covers?.cover;
-  const dominantFeature = dynamicProfile
-    ? Object.entries(dynamicProfile.weights).sort(([, left], [, right]) => right - left)[0]?.[0]
-    : null;
 
   return (
     <Card
-      className={`relative cursor-pointer overflow-hidden p-4 transition ${
+      className={`theme-beatmap-card relative cursor-pointer overflow-hidden p-5 transition ${
         selected
           ? "border-[var(--theme-primary-soft)] bg-[var(--theme-primary-muted)]"
           : "hover:border-white/[0.16] hover:bg-white/[0.035]"
@@ -99,17 +94,16 @@ export function SimilarityResultCard({
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="cyan">难度距离 {result.difficulty_distance.toFixed(4)}</Badge>
-            <span className="truncate text-xs text-slate-500">#{result.beatmap_id}</span>
+            <Badge className="normal-case text-xs tracking-normal" tone="cyan">难度 · {result.version}</Badge>
+            <span className="truncate text-sm text-slate-500">#{result.beatmap_id}</span>
           </div>
-          <h3 className="mt-2 truncate text-sm font-semibold text-white">{result.artist} - {result.title}</h3>
-          <p className="mt-1 truncate text-xs text-slate-400">[{result.version}] · mapped by {result.creator}</p>
+          <h3 className="mt-2 truncate text-base font-semibold text-white">{result.artist} - {result.title}</h3>
+          <p className="mt-1 truncate text-sm text-slate-400">[{result.version}] · mapped by {result.creator}</p>
           {recommendedBy ? (
-            <p className="mt-1.5 truncate text-xs text-cyan-200/90">
+            <p className="mt-2 truncate text-sm text-cyan-200/90">
               由 {recommendedBy.artist} - {recommendedBy.title} [{recommendedBy.version}] 推荐
             </p>
           ) : null}
-          {dominantFeature ? <p className="mt-1 text-xs text-violet-200/90">动态主导特征：{dominantFeature}</p> : null}
 
           <div className="mt-3 grid grid-cols-4 gap-2">
             <Metric label="AR" tone={osuTone(result.base.ar)} value={result.base.ar.toFixed(1)} />

@@ -149,7 +149,7 @@ function browserPreviewValue<T>(command: string, args?: Record<string, unknown>)
     const feature = { aim: 0.72, speed: 0.64, reading: 0.81, slider: 0.28, overlap: 0.57 };
     const base = { bpm: 186, ar: 9.2, od: 8.6, cs: 4, hp: 6, length_seconds: 124, object_count: 612, object_density: 4.94, circle_ratio: 0.58, slider_ratio: 0.4, spinner_ratio: 0.02, max_combo: 902 };
     const target = { beatmap_id: 1001, beatmapset_id: 501, artist: "Synthetic Artist", title: "Reference Pattern", version: "Insane", creator: "Preview Mapper", online_url: "https://osu.ppy.sh/b/1001", star_rating: 6.1, difficulty: feature, base };
-    const dynamicProfile = { target_star_rating: 6.1, candidate_min_section: 57, candidate_max_section: 65, stats_min_section: 57, stats_max_section: 65, sample_count: 842, mean: { aim: 0.5, speed: 0.5, reading: 0.5, slider: 0.5, overlap: 0.5 }, stddev: { aim: 0.12, speed: 0.12, reading: 0.12, slider: 0.12, overlap: 0.12 }, delta: { aim: 0.22, speed: 0.14, reading: 0.31, slider: -0.22, overlap: 0.07 }, z_score: { aim: 1.83, speed: 1.17, reading: 2.58, slider: 1.83, overlap: 0.58 }, weights: { aim: 1.63, speed: 1.13, reading: 2, slider: 1.63, overlap: 0.69 }, fallback_reason: null };
+    const dynamicProfile = { target_star_rating: 6.1, candidate_min_section: 57, candidate_max_section: 65, stats_min_section: 57, stats_max_section: 65, sample_count: 842, mean: { aim: 0.5, speed: 0.5, reading: 0.5, slider: 0.5, overlap: 0.5 }, stddev: { aim: 0.12, speed: 0.12, reading: 0.12, slider: 0.12, overlap: 0.12 }, delta: { aim: 0.22, speed: 0.14, reading: 0.31, slider: -0.22, overlap: 0.07 }, z_score: { aim: 1.83, speed: 1.17, reading: 2.58, slider: 1.83, overlap: 0.58 }, weights: { aim: 1.63, speed: 1.13, reading: 2, slider: 1.63, overlap: 0.69 }, parameter_mean: { ar: 9, cs: 4, od: 8.4 }, parameter_stddev: { ar: 0.5, cs: 0.4, od: 0.6 }, parameter_delta: { ar: 0.2, cs: 0, od: 0.2 }, parameter_z_score: { ar: 0.4, cs: 0, od: 0.33 }, parameter_group_z_score: 0.3, parameter_weight: 0.48, fallback_reason: null };
     const results = [
       { beatmap_id: 2001, beatmapset_id: 601, artist: "Signal Garden", title: "Parallel Motion", version: "Another", creator: "Mapper A", online_url: "https://osu.ppy.sh/b/2001", star_rating: 6.0, difficulty: { ...feature, aim: 0.7, reading: 0.78 }, base: { ...base, bpm: 184 }, final_distance: 0.0462, difficulty_distance: 0.041, base_distance: 0.067 },
       { beatmap_id: 2002, beatmapset_id: 602, artist: "Night Circuit", title: "Crossing Lines", version: "Extra", creator: "Mapper B", online_url: "https://osu.ppy.sh/b/2002", star_rating: 6.3, difficulty: { ...feature, speed: 0.69, overlap: 0.61 }, base: { ...base, bpm: 192, ar: 9.4 }, final_distance: 0.0824, difficulty_distance: 0.074, base_distance: 0.116 },
@@ -209,6 +209,7 @@ export const desktopApi = {
     call<BeatmapDownloadResult>("download_online_beatmapsets", { request }),
   cancelOnlineBeatmapDownload: () =>
     call<void>("cancel_online_beatmap_download"),
+  openDownloadedPath: (path: string) => call<void>("open_downloaded_path", { path }),
   exitApp: () => call<void>("exit_app"),
   clearProfileCache: () => call<void>("clear_profile_cache"),
   getSettings: () => call<AppSettings>("get_settings"),

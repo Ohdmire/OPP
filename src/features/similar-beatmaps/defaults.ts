@@ -1,6 +1,6 @@
 import type {
   DifficultyFeatureVector,
-  SimilarityBaseWeights,
+  SimilarityPreferences,
   SimilarityFilters,
   SimilarityQueryRequest,
   SimilaritySource,
@@ -14,20 +14,24 @@ export const defaultDifficultyWeights: DifficultyFeatureVector = {
   overlap: 0.25,
 };
 
-export const defaultBaseWeights: SimilarityBaseWeights = {
-  bpm: 0,
-  ar: 0,
-  length_seconds: 0,
-  object_density: 0,
-  circle_ratio: 0,
-  slider_ratio: 0,
-};
-
 export const defaultDynamicWeighting = {
   mode: "dynamic" as const,
   lower_sections: 4,
   upper_sections: 4,
 };
+
+export const defaultSimilarityPreferences: SimilarityPreferences = {
+  advanced_enabled: false,
+  mode: "dynamic",
+  lower_sections: 4,
+  upper_sections: 4,
+  manual_weights: { ...defaultDifficultyWeights, parameters: 1 },
+};
+
+export function manualWeightingFromPreferences(preferences = defaultSimilarityPreferences) {
+  const { parameters, ...difficulty_weights } = preferences.manual_weights;
+  return { mode: "manual" as const, difficulty_weights, parameter_weight: parameters };
+}
 
 export const defaultSimilarityFilters: SimilarityFilters = {
   min_star: null,

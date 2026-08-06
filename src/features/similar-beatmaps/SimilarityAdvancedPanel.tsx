@@ -1,12 +1,8 @@
 import { RotateCcw } from "lucide-react";
 
 import { Button, Card } from "../../shared/components/ui";
-import type { DifficultyFeatureVector, SimilarityQueryRequest } from "../../shared/types/osu";
-import {
-  defaultBaseWeights,
-  defaultDifficultyWeights,
-  defaultDynamicWeighting,
-} from "./defaults";
+import type { DifficultyFeatureVector, SimilarityPreferences, SimilarityQueryRequest } from "../../shared/types/osu";
+import { defaultDifficultyWeights } from "./defaults";
 
 const difficultyControls: Array<{ key: keyof DifficultyFeatureVector; label: string }> = [
   { key: "aim", label: "Aim" },
@@ -23,7 +19,7 @@ function WeightControl({ label, value, onChange }: { label: string; value: numbe
         <span className="text-slate-300">{label}</span>
         <span className="font-mono text-[var(--theme-primary-light)]">{value.toFixed(2)}</span>
       </span>
-      <input className="mt-2 w-full accent-[var(--theme-primary)]" max="2" min="0" onChange={(event) => onChange(Number(event.target.value))} step="0.05" type="range" value={value} />
+      <input aria-label={`${label} 权重`} className="mt-2 w-full accent-[var(--theme-primary)]" max="2" min="0" onChange={(event) => onChange(Number(event.target.value))} step="0.05" type="range" value={value} />
     </label>
   );
 }
@@ -31,20 +27,36 @@ function WeightControl({ label, value, onChange }: { label: string; value: numbe
 export function SimilarityAdvancedPanel({
   request,
   supportsDynamicWeighting,
+  preferences,
   onChange,
 }: {
   request: SimilarityQueryRequest;
   supportsDynamicWeighting: boolean;
+  preferences: SimilarityPreferences;
   onChange: (request: SimilarityQueryRequest) => void;
 }) {
   const dynamicWeighting = request.weighting.mode === "dynamic" ? request.weighting : null;
   const manualWeighting = request.weighting.mode === "manual" ? request.weighting : null;
+  const updateManual = (difficulty_weights: DifficultyFeatureVector, parameter_weight: number) => {
+    if ([...Object.values(difficulty_weights), parameter_weight].every((value) => value === 0)) return;
+    onChange({ ...request, weighting: { mode: "manual", difficulty_weights, parameter_weight } });
+  };
   const setMode = (mode: "dynamic" | "manual") => {
     onChange({
       ...request,
       weighting: mode === "dynamic"
-        ? { ...defaultDynamicWeighting }
-        : { mode: "manual", difficulty_weights: { ...defaultDifficultyWeights }, base_weights: { ...defaultBaseWeights } },
+        ? { mode: "dynamic", lower_sections: preferences.lower_sections, upper_sections: preferences.upper_sections }
+        : {
+            mode: "manual",
+            difficulty_weights: {
+              aim: preferences.manual_weights.aim,
+              speed: preferences.manual_weights.speed,
+              reading: preferences.manual_weights.reading,
+              slider: preferences.manual_weights.slider,
+              overlap: preferences.manual_weights.overlap,
+            },
+            parameter_weight: preferences.manual_weights.parameters,
+          },
     });
   };
 
@@ -52,8 +64,8 @@ export function SimilarityAdvancedPanel({
     <Card className="mt-4 p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h3 className="text-sm font-semibold text-white">高级相似度参数</h3>
-          <p className="mt-1 text-xs leading-5 text-slate-500">动态模式会根据参考谱面相对同星段平均值的突出特征自动分配五维权重。</p>
+          <h3 className="text-sm font-semibold text-white">相似谱面高级参数</h3>
+          <p className="mt-1 text-xs leading-5 text-slate-500">动态模式按同星段突出特征自动分配六组权重；AR、CS、OD 共同占一组。</p>
         </div>
         <div className="inline-flex rounded-lg border border-white/[0.08] bg-black/15 p-1" role="tablist" aria-label="相似度权重模式">
           <Button aria-selected={request.weighting.mode === "dynamic"} disabled={!supportsDynamicWeighting} onClick={() => setMode("dynamic")} role="tab" size="sm" type="button" variant={request.weighting.mode === "dynamic" ? "primary" : "ghost"}>动态</Button>
@@ -74,19 +86,21 @@ export function SimilarityAdvancedPanel({
               </label>
             ))}
           </div>
-          <p className="mt-3 text-xs text-slate-500">每段固定为 0.1★。例如参考谱面位于 6.1★ 桶、上下各 4 段时，候选范围为 5.7～6.5★ 桶。</p>
+          <p className="mt-3 text-xs text-slate-500">每段固定为 0.1★，上下范围分别计算，不会改变候选筛选条件。</p>
         </section>
       ) : manualWeighting ? (
         <section className="mt-5">
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-600">五维难度权重</p>
-            <Button onClick={() => onChange({ ...request, weighting: { mode: "manual", difficulty_weights: { ...defaultDifficultyWeights }, base_weights: { ...defaultBaseWeights } }, result_limit: 20 })} size="sm" type="button" variant="ghost"><RotateCcw className="size-3.5" />恢复默认</Button>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-600">六组推荐权重</p>
+            <Button onClick={() => onChange({ ...request, weighting: { mode: "manual", difficulty_weights: { ...defaultDifficultyWeights }, parameter_weight: 1 }, result_limit: 20 })} size="sm" type="button" variant="ghost"><RotateCcw className="size-3.5" />恢复默认</Button>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             {difficultyControls.map(({ key, label }) => (
-              <WeightControl key={key} label={label} value={manualWeighting.difficulty_weights[key]} onChange={(value) => onChange({ ...request, weighting: { ...manualWeighting, difficulty_weights: { ...manualWeighting.difficulty_weights, [key]: value } } })} />
+              <WeightControl key={key} label={label} value={manualWeighting.difficulty_weights[key]} onChange={(value) => updateManual({ ...manualWeighting.difficulty_weights, [key]: value }, manualWeighting.parameter_weight)} />
             ))}
+            <WeightControl label="AR / CS / OD" value={manualWeighting.parameter_weight} onChange={(parameter_weight) => updateManual(manualWeighting.difficulty_weights, parameter_weight)} />
           </div>
+          <p className="mt-3 text-xs text-slate-500">至少保留一组非零权重。</p>
         </section>
       ) : null}
 

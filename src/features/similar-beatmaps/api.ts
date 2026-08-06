@@ -7,6 +7,10 @@ import type {
 
 export const similarityIndexStatusKey = ["similarity-index-status"] as const;
 
+export function similarityRecommendationKey(request: SimilarityRecommendationRequest) {
+  return ["similarity-recommendation", request] as const;
+}
+
 export function useSimilarityIndexStatus() {
   return useQuery({
     queryKey: similarityIndexStatusKey,

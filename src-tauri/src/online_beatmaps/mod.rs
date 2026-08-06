@@ -189,6 +189,8 @@ pub async fn download_online_beatmapsets(
             downloaded_bytes: 0,
             total_bytes: None,
             bytes_per_second: 0.0,
+            completed_paths: None,
+            destination: None,
         },
     );
 
@@ -405,6 +407,7 @@ pub async fn download_online_beatmapsets(
         failed: failures.len(),
         cancelled,
         failures,
+        completed_paths: completed_paths.iter().map(|path| path.to_string_lossy().into_owned()).collect(),
     };
     emit_progress(
         &app,
@@ -428,6 +431,8 @@ pub async fn download_online_beatmapsets(
             downloaded_bytes: 0,
             total_bytes: None,
             bytes_per_second: 0.0,
+            completed_paths: Some(completed_paths.iter().map(|path| path.to_string_lossy().into_owned()).collect()),
+            destination: Some(result.destination.clone()),
         },
     );
 
@@ -436,6 +441,7 @@ pub async fn download_online_beatmapsets(
         .snapshot()
         .is_ok_and(|saved| saved.settings.open_downloaded_beatmaps_after_download)
     {
+        tokio::time::sleep(Duration::from_millis(500)).await;
         for path in completed_paths {
             let _ = app.opener().open_path(path.to_string_lossy(), None::<&str>);
         }
@@ -449,6 +455,17 @@ pub async fn download_online_beatmapsets(
         *runtime = None;
     }
     Ok(result)
+}
+
+#[tauri::command]
+pub fn open_downloaded_path(app: AppHandle, path: String) -> CommandResult<()> {
+    let path = PathBuf::from(path);
+    if !path.exists() {
+        return Err(CommandError::new("DOWNLOAD_PATH_MISSING", "Downloaded file is no longer available"));
+    }
+    app.opener()
+        .open_path(path.to_string_lossy(), None::<&str>)
+        .map_err(|error| CommandError::new("OPEN_DOWNLOAD_FAILED", error.to_string()))
 }
 
 #[tauri::command]

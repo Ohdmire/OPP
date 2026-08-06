@@ -59,6 +59,19 @@ export interface AppSettings {
   suppress_tosu_launch_prompt?: boolean;
   game_session_analysis_on_detect?: boolean;
   preview_volume?: number;
+  similarity_preferences: SimilarityPreferences;
+}
+
+export interface SimilarityManualWeights extends DifficultyFeatureVector {
+  parameters: number;
+}
+
+export interface SimilarityPreferences {
+  advanced_enabled: boolean;
+  mode: "dynamic" | "manual";
+  lower_sections: number;
+  upper_sections: number;
+  manual_weights: SimilarityManualWeights;
 }
 
 export interface ObsStatus {
@@ -168,8 +181,14 @@ export type SimilarityWeighting =
   | {
       mode: "manual";
       difficulty_weights: DifficultyFeatureVector;
-      base_weights: SimilarityBaseWeights;
+      parameter_weight: number;
     };
+
+export interface SimilarityParameterVector {
+  ar: number;
+  cs: number;
+  od: number;
+}
 
 export interface SimilarityDynamicWeightProfile {
   seed_beatmap_id?: number | null;
@@ -184,6 +203,12 @@ export interface SimilarityDynamicWeightProfile {
   delta: DifficultyFeatureVector;
   z_score: DifficultyFeatureVector;
   weights: DifficultyFeatureVector;
+  parameter_mean: SimilarityParameterVector;
+  parameter_stddev: SimilarityParameterVector;
+  parameter_delta: SimilarityParameterVector;
+  parameter_z_score: SimilarityParameterVector;
+  parameter_group_z_score: number;
+  parameter_weight: number;
   fallback_reason: string | null;
 }
 
@@ -889,6 +914,7 @@ export interface BeatmapDownloadResult {
   failed: number;
   cancelled: boolean;
   failures: BeatmapDownloadFailure[];
+  completed_paths?: string[];
 }
 
 export interface BeatmapDownloadProgress {
@@ -911,6 +937,8 @@ export interface BeatmapDownloadProgress {
   downloaded_bytes?: number;
   total_bytes?: number | null;
   bytes_per_second?: number;
+  completed_paths?: string[];
+  destination?: string;
 }
 
 export interface TrainerRequest {

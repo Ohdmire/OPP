@@ -1,10 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Download, FolderOpen, History, RefreshCw, Search, Trophy, Upload } from "lucide-react";
+import { Download, FolderOpen, History, Map as MapIcon, RefreshCw, Search, Trophy, Upload } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { PageHeader } from "../../shared/components/PageHeader";
-import { Button, Card, EmptyState } from "../../shared/components/ui";
+import { Button, Card, EmptyState, InfoTip } from "../../shared/components/ui";
 import { errorMessage } from "../../shared/lib/format";
 import { settingsQueryKey, useSettings } from "../settings/api";
 import { desktopApi } from "../../shared/lib/tauri";
@@ -20,11 +20,17 @@ import type {
 } from "../../shared/types/osu";
 import {
   similarityIndexStatusKey,
+  similarityRecommendationKey,
   useSimilarityIndexStatus,
   useSimilarityQuery,
   useSimilarityRecommendation,
 } from "./api";
-import { createSimilarityRequest, defaultBaseWeights, defaultDifficultyWeights } from "./defaults";
+import {
+  createSimilarityRequest,
+  defaultDynamicWeighting,
+  defaultSimilarityPreferences,
+  manualWeightingFromPreferences,
+} from "./defaults";
 import { SimilarityAdvancedPanel } from "./SimilarityAdvancedPanel";
 import { SimilarityFilterSliders } from "./SimilarityFilterSliders";
 import { SimilarityRadar } from "./SimilarityRadar";
@@ -47,11 +53,7 @@ const DIFFICULTY_DIMENSIONS = [
 const RESULTS_PER_BATCH = 5;
 
 function manualWeighting() {
-  return {
-    mode: "manual" as const,
-    difficulty_weights: { ...defaultDifficultyWeights },
-    base_weights: { ...defaultBaseWeights },
-  };
+  return manualWeightingFromPreferences();
 }
 
 function matchesCandidateFilters(
@@ -199,7 +201,16 @@ export function SimilarBeatmapsPage() {
   const handledLaunch = useRef<string | null>(null);
   const restoreScrollY = useRef(similaritySession?.scrollY ?? null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const preferenceSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previewVolume = settings.data?.preview_volume ?? 65;
+  const preferences = useMemo(() => ({
+    ...defaultSimilarityPreferences,
+    ...settings.data?.similarity_preferences,
+    manual_weights: {
+      ...defaultSimilarityPreferences.manual_weights,
+      ...settings.data?.similarity_preferences?.manual_weights,
+    },
+  }), [settings.data?.similarity_preferences]);
 
   const filteredResults = useMemo(
     () => (recommendationResponse?.results ?? response?.results ?? []).filter(
@@ -251,9 +262,60 @@ export function SimilarBeatmapsPage() {
       supports_dynamic_weighting: false,
       message: statusQuery.error ? errorMessage(statusQuery.error) : "",
     } satisfies SimilarityIndexStatus);
-  const effectiveWeighting = status.supports_dynamic_weighting
-    ? request.weighting
-    : request.weighting.mode === "manual" ? request.weighting : manualWeighting();
+  const effectiveWeighting = preferences.advanced_enabled
+    ? status.supports_dynamic_weighting || request.weighting.mode === "manual"
+      ? request.weighting
+      : manualWeightingFromPreferences(preferences)
+    : status.supports_dynamic_weighting
+      ? { ...defaultDynamicWeighting }
+      : manualWeighting();
+  const bestRecommendationRequest = useMemo(() => ({
+    kind: "best" as const,
+    weighting: effectiveWeighting,
+    filters: { ...request.filters },
+    result_limit: request.result_limit,
+  }), [effectiveWeighting, request.filters, request.result_limit]);
+
+  useEffect(() => {
+    if (status.state !== "ready" || settings.isLoading) return;
+    void queryClient.prefetchQuery({
+      queryKey: similarityRecommendationKey(bestRecommendationRequest),
+      queryFn: () => desktopApi.recommendSimilarBeatmaps(bestRecommendationRequest),
+      staleTime: 5 * 60_000,
+    });
+  }, [bestRecommendationRequest, queryClient, settings.isLoading, status.state]);
+
+  useEffect(() => {
+    if (!settings.data || !preferences.advanced_enabled) return;
+    setRequest((current) => ({
+      ...current,
+      weighting: preferences.mode === "dynamic" && status.supports_dynamic_weighting
+        ? { mode: "dynamic", lower_sections: preferences.lower_sections, upper_sections: preferences.upper_sections }
+        : manualWeightingFromPreferences(preferences),
+    }));
+  }, [preferences, settings.data, status.supports_dynamic_weighting]);
+
+  useEffect(() => () => {
+    if (preferenceSaveTimer.current) clearTimeout(preferenceSaveTimer.current);
+  }, []);
+
+  function changeAdvancedRequest(next: SimilarityQueryRequest) {
+    setRequest(next);
+    if (!settings.data || !preferences.advanced_enabled) return;
+    const nextPreferences = next.weighting.mode === "dynamic"
+      ? { ...preferences, mode: "dynamic" as const, lower_sections: next.weighting.lower_sections, upper_sections: next.weighting.upper_sections }
+      : { ...preferences, mode: "manual" as const, manual_weights: { ...next.weighting.difficulty_weights, parameters: next.weighting.parameter_weight } };
+    const nextSettings = { ...settings.data, similarity_preferences: nextPreferences };
+    // Treat the query cache as the local preference draft so a mode switch during
+    // the debounce window restores the newest values instead of stale persisted ones.
+    queryClient.setQueryData(settingsQueryKey, nextSettings);
+    if (preferenceSaveTimer.current) clearTimeout(preferenceSaveTimer.current);
+    preferenceSaveTimer.current = setTimeout(() => {
+      void desktopApi.updateSettings(nextSettings).then((saved) => {
+        queryClient.setQueryData(settingsQueryKey, saved);
+      });
+    }, 400);
+  }
 
   useEffect(() => {
     saveSimilaritySession({
@@ -285,7 +347,12 @@ export function SimilarBeatmapsPage() {
   useEffect(() => {
     const launch = parseSimilarityLaunch(searchParams);
     const launchKey = searchParams.toString();
-    if (!launch || status.state !== "ready" || handledLaunch.current === launchKey) return;
+    if (
+      !launch ||
+      settings.isLoading ||
+      status.state !== "ready" ||
+      handledLaunch.current === launchKey
+    ) return;
     handledLaunch.current = launchKey;
 
     const run = async () => {
@@ -296,16 +363,30 @@ export function SimilarBeatmapsPage() {
               kind: "local_file" as const,
               path: await desktopApi.getLocalBeatmapPath(launch.client, launch.resourceId),
             };
-      const nextRequest = createSimilarityRequest(source);
+      const launchWeighting = preferences.advanced_enabled
+        ? preferences.mode === "dynamic" && status.supports_dynamic_weighting
+          ? {
+              mode: "dynamic" as const,
+              lower_sections: preferences.lower_sections,
+              upper_sections: preferences.upper_sections,
+            }
+          : manualWeightingFromPreferences(preferences)
+        : status.supports_dynamic_weighting
+          ? { ...defaultDynamicWeighting }
+          : manualWeighting();
+      const nextRequest = {
+        ...createSimilarityRequest(source),
+        weighting: launchWeighting,
+      };
       setRequest(nextRequest);
       setResponse(null);
       setRecommendationResponse(null);
       setSelectedResultId(null);
-      similarityQuery.mutate({ ...nextRequest, weighting: status.supports_dynamic_weighting ? nextRequest.weighting : manualWeighting() }, { onSuccess: setResponse });
+      similarityQuery.mutate(nextRequest, { onSuccess: setResponse });
       setSearchParams(new URLSearchParams(), { replace: true });
     };
     void run().catch((error) => setConfigurationError(errorMessage(error)));
-  }, [searchParams, setSearchParams, similarityQuery, status.state, status.supports_dynamic_weighting]);
+  }, [preferences, searchParams, setSearchParams, settings.isLoading, similarityQuery, status.state, status.supports_dynamic_weighting]);
 
   async function chooseIndexDirectory() {
     setConfigurationError(null);
@@ -473,15 +554,24 @@ export function SimilarBeatmapsPage() {
     setResponse(null);
     setRecommendationResponse(null);
     similarityQuery.reset();
-    similarityRecommendation.mutate(
-      {
+    const nextRequest = {
         kind,
         weighting: effectiveWeighting,
         filters: { ...request.filters },
         result_limit: request.result_limit,
+      };
+    const cacheKey = similarityRecommendationKey(nextRequest);
+    const cached = queryClient.getQueryData<SimilarityRecommendationResponse>(cacheKey);
+    if (cached) {
+      setRecommendationResponse(cached);
+      return;
+    }
+    similarityRecommendation.mutate(nextRequest, {
+      onSuccess: (nextResponse) => {
+        queryClient.setQueryData(cacheKey, nextResponse);
+        setRecommendationResponse(nextResponse);
       },
-      { onSuccess: setRecommendationResponse },
-    );
+    });
   }
 
   function showNextBatch() {
@@ -508,6 +598,7 @@ export function SimilarBeatmapsPage() {
       <PageHeader
         title="相似谱面"
         description="以谱面难度特征为参照，从你选择的本地私有索引中寻找相近谱面。索引及查询内容不会上传。"
+        actions={<div className="flex items-center gap-2"><Button onClick={() => navigate("/local/maps")} size="sm" variant="secondary"><MapIcon className="size-3.5" />前往本地谱面</Button><InfoTip text="可在本地谱面中展开任一谱面集，并针对其中每个难度单独选择“查找相似”。" /></div>}
       />
 
       {configurationError ? (
@@ -531,50 +622,43 @@ export function SimilarBeatmapsPage() {
         />
       ) : (
         <>
-          <Card className="mb-5 flex items-center justify-between gap-5 p-5">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">
-                本地索引
-              </span>
-              <h2 className="mt-1 text-base font-semibold text-white">索引已就绪</h2>
-              <p className="mt-1 text-xs text-slate-400">
+          <Card className="mb-4 flex items-center justify-between gap-4 border-white/[0.055] bg-black/[0.06] px-4 py-2.5">
+            <div className="min-w-0 text-xs text-slate-500">
+              <span className="mr-2 inline-flex items-center gap-1.5 text-slate-400"><span className="size-1.5 rounded-full bg-emerald-400/70" />索引已就绪</span>
+              <span>
                 {status.record_count == null
                   ? "已通过本机校验"
                   : `已从本机读取 ${status.record_count.toLocaleString()} 条记录`}
                 {status.analyzer_version == null
                   ? ""
                   : ` · Analyzer v${status.analyzer_version}`}
-              </p>
-              <p className="mt-1 text-xs text-amber-200/90">
-                数据截止：{formatDataCutoff(status.data_cutoff_at)}
+                {` · ${formatDataCutoff(status.data_cutoff_at)}`}
                 {status.data_cutoff_at == null ? "" : "（UTC，非实时数据库）"}
-              </p>
+              </span>
             </div>
             <div className="flex gap-2">
               <Button
                 type="button"
+                size="sm"
+                variant="ghost"
                 onClick={() => void statusQuery.refetch()}
                 disabled={statusQuery.isFetching}
               >
-                <RefreshCw size={16} aria-hidden="true" />
+                <RefreshCw size={14} aria-hidden="true" />
                 重新校验
               </Button>
               <Button
                 type="button"
+                size="sm"
+                variant="ghost"
                 onClick={() => void chooseIndexDirectory()}
                 disabled={configuring}
               >
-                <FolderOpen size={16} aria-hidden="true" />
+                <FolderOpen size={14} aria-hidden="true" />
                 更换目录
               </Button>
             </div>
           </Card>
-
-          {!status.supports_dynamic_weighting ? (
-            <div className="mb-5 rounded-xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">
-              当前索引不包含星数分段统计，已切换为手动权重。下载新版数据集后可使用动态推荐。
-            </div>
-          ) : null}
 
           <Card className="mb-5 p-5">
           <div className="mb-5 border-b border-white/[0.07] pb-5">
@@ -678,7 +762,7 @@ export function SimilarBeatmapsPage() {
               </Button>
             </div>
 
-            <Button
+            {preferences.advanced_enabled ? <Button
               className="mt-3"
               size="sm"
               variant="ghost"
@@ -687,10 +771,10 @@ export function SimilarBeatmapsPage() {
               onClick={() => setAdvancedOpen((open) => !open)}
             >
               {advancedOpen ? "收起高级参数" : "展开高级参数"}
-            </Button>
+            </Button> : null}
 
-            {advancedOpen ? (
-              <SimilarityAdvancedPanel request={{ ...request, weighting: effectiveWeighting }} supportsDynamicWeighting={status.supports_dynamic_weighting} onChange={setRequest} />
+            {preferences.advanced_enabled && advancedOpen ? (
+              <SimilarityAdvancedPanel request={{ ...request, weighting: effectiveWeighting }} preferences={preferences} supportsDynamicWeighting={status.supports_dynamic_weighting} onChange={changeAdvancedRequest} />
             ) : null}
           </form>
           </Card>
@@ -738,15 +822,13 @@ export function SimilarBeatmapsPage() {
                   </Card>
                 ) : null}
 
-                {response?.dynamic_profile ? <DynamicWeightProfileCard profile={response.dynamic_profile} /> : null}
-
                 <div className="mb-3 flex items-end justify-between gap-3">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">推荐结果</span>
                     <h2 className="mt-1 text-base font-semibold text-white">{filteredResults.length} 个相似谱面集</h2>
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-2">
-                    <span className="text-xs text-slate-500">第 {activeResultBatch + 1} / {resultBatchCount} 批 · 距离越低越相似</span>
+                    <span className="text-sm text-slate-500">第 {activeResultBatch + 1} / {resultBatchCount} 批</span>
                     {filteredResults.length > RESULTS_PER_BATCH ? <Button disabled={quickDownloadId !== null} onClick={showNextBatch} size="sm"><RefreshCw className="size-3.5" />换一批</Button> : null}
                     <Button disabled={!visibleResults.length || quickDownloadId !== null} loading={quickDownloadId === -1} onClick={() => void downloadResults(visibleResults)} size="sm" variant="primary"><Download className="size-3.5" />下载本批</Button>
                   </div>
@@ -759,7 +841,6 @@ export function SimilarBeatmapsPage() {
                         key={result.beatmap_id}
                         result={result}
                         recommendedBy={recommendationResponse?.results.find((item) => item.beatmap_id === result.beatmap_id)?.recommended_by}
-                        dynamicProfile={recommendationResponse?.dynamic_profiles.find((profile) => profile.seed_beatmap_id === recommendationResponse.results.find((item) => item.beatmap_id === result.beatmap_id)?.recommended_by.beatmap_id) ?? response?.dynamic_profile}
                         selected={selected?.beatmap_id === result.beatmap_id}
                         onSelect={() => setSelectedResultId(result.beatmap_id)}
                         onDownload={() => void downloadResult(result)}
@@ -782,7 +863,7 @@ export function SimilarBeatmapsPage() {
 
               {selected && comparisonTarget ? (
                 <aside className="sticky top-[120px] self-start">
-                <Card className="max-h-[calc(100vh-140px)] overflow-y-auto p-5">
+                <Card className="similarity-comparison-panel min-h-[520px] resize-y overflow-hidden p-5">
                   <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--theme-primary)]">特征对比</span>
                   <h2 className="mt-2 text-base font-semibold text-white">{selected.version}</h2>
                   <p className="mt-1 truncate text-xs text-slate-400">
@@ -827,7 +908,16 @@ export function SimilarBeatmapsPage() {
                       );
                     })}
                   </div>
-                  <div className="mb-5 grid grid-cols-2 gap-2">
+                  <div className="mb-4 space-y-1.5 border-t border-white/[0.07] pt-3">
+                    {(["ar", "cs", "od"] as const).map((key) => {
+                      const difference = selected.base[key] - comparisonTarget.base[key];
+                      return <div className="flex items-center justify-between border-b border-white/[0.055] py-1.5 text-xs last:border-b-0" key={key}>
+                        <span className="text-slate-400">{key.toUpperCase()}</span>
+                        <span className="font-mono text-slate-200">{comparisonTarget.base[key].toFixed(1)} → {selected.base[key].toFixed(1)} <small className={difference === 0 ? "ml-2 text-slate-500" : difference > 0 ? "ml-2 text-rose-300" : "ml-2 text-emerald-300"}>{difference >= 0 ? "+" : ""}{difference.toFixed(1)}</small></span>
+                      </div>;
+                    })}
+                  </div>
+                  <div className="hidden">
                     <div className="rounded-lg border border-white/[0.07] bg-black/10 p-3">
                       <span className="block text-[10px] text-slate-500">最终距离</span>
                       <strong className="mt-1 block font-mono text-sm text-white">{selected.final_distance.toFixed(4)}</strong>

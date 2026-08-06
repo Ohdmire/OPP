@@ -57,7 +57,7 @@ function ScoreRow({ score, position, pinned, onOpen }: { score: Score; position:
 }
 
 function Metric({ label, value, tone }: { label: string; value: React.ReactNode; tone: string }) {
-  return <div className="rounded-lg border border-white/[0.065] bg-slate-950/35 px-2.5 py-2"><p className="text-[9px] font-bold tracking-[0.12em] text-slate-500">{label}</p><div className={`mt-1 min-h-4 font-mono text-[13px] font-bold ${tone}`}>{value}</div></div>;
+  return <div className="score-metric rounded-lg border border-white/[0.065] bg-slate-950/35 px-2.5 py-2"><p className="text-[9px] font-bold tracking-[0.12em] text-slate-500">{label}</p><div className={`mt-1 min-h-4 font-mono text-[13px] font-bold ${tone}`}>{value}</div></div>;
 }
 
 function ScoreDialog({ score, position, onClose }: { score: Score; position: number; onClose: () => void }) {

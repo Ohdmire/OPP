@@ -41,7 +41,7 @@ use obs::{
 use online_beatmaps::{
     cancel_online_beatmap_download, collect_online_beatmapsets, download_online_beatmapsets,
     get_online_beatmap, get_online_beatmap_provider_status, get_online_beatmapset,
-    search_online_beatmapsets,
+    search_online_beatmapsets, open_downloaded_path,
 };
 use pp_calc::calculate_beatmap_pp;
 use replay_render::submit_replay_render;
@@ -52,6 +52,7 @@ use similarity::{
 use state::AppState;
 use tauri::{
     Manager,
+    menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 use tools::{
@@ -88,9 +89,24 @@ pub fn run() {
                 .default_window_icon()
                 .expect("application bundle must include an icon")
                 .clone();
+            let show_window = MenuItem::with_id(app, "show-window", "显示界面", true, None::<&str>)?;
+            let exit = MenuItem::with_id(app, "exit", "退出", true, None::<&str>)?;
+            let tray_menu = Menu::with_items(app, &[&show_window, &exit])?;
             TrayIconBuilder::with_id("opp-tray")
                 .icon(icon)
                 .tooltip("OPP")
+                .menu(&tray_menu)
+                .on_menu_event(|tray, event| match event.id().as_ref() {
+                    "show-window" => {
+                        if let Some(window) = tray.app_handle().get_webview_window("main") {
+                            let _ = window.unminimize();
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "exit" => tray.app_handle().exit(0),
+                    _ => {}
+                })
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click {
                         button: MouseButton::Left,
@@ -137,6 +153,7 @@ pub fn run() {
             open_media_in_explorer,
             download_online_beatmapsets,
             cancel_online_beatmap_download,
+            open_downloaded_path,
             clear_profile_cache,
             get_settings,
             update_settings,

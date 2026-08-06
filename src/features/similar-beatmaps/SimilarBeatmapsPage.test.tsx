@@ -11,6 +11,8 @@ import type {
   SimilarityRecommendationResponse,
 } from "../../shared/types/osu";
 import { SimilarBeatmapsPage } from "./SimilarBeatmapsPage";
+import { settingsQueryKey } from "../settings/api";
+import { defaultSimilarityPreferences } from "./defaults";
 
 vi.mock("./SimilarityRadar", () => ({
   SimilarityRadar: ({
@@ -112,6 +114,12 @@ const response: SimilarityQueryResponse = {
     delta: { aim: 0, speed: 0, reading: 0, slider: 0.1, overlap: 0 },
     z_score: { aim: 0, speed: 0, reading: 0, slider: 2, overlap: 0 },
     weights: { aim: 0.25, speed: 0.25, reading: 0.25, slider: 1.75, overlap: 0.25 },
+    parameter_mean: { ar: 9, cs: 4, od: 8.5 },
+    parameter_stddev: { ar: 0.5, cs: 0.4, od: 0.6 },
+    parameter_delta: { ar: 0.2, cs: 0, od: 0.1 },
+    parameter_z_score: { ar: 0.4, cs: 0, od: 0.17 },
+    parameter_group_z_score: 0.25,
+    parameter_weight: 0.44,
     fallback_reason: null,
   },
 };
@@ -134,9 +142,15 @@ function LocationProbe() {
   return <output data-testid="location">{location.pathname + location.search}</output>;
 }
 
-function renderPage() {
+function renderPage(advancedEnabled = false) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  client.setQueryData(settingsQueryKey, {
+    similarity_preferences: { ...defaultSimilarityPreferences, advanced_enabled: advancedEnabled },
+    preview_volume: 65,
+    default_beatmap_download_provider: "hinai",
+    beatmap_download_directory: null,
   });
   return render(
     <QueryClientProvider client={client}>
@@ -196,7 +210,7 @@ describe("SimilarBeatmapsPage", () => {
       failures: [],
     });
 
-    renderPage();
+    renderPage(true);
     const input = await screen.findByLabelText("Beatmap ID 或 osu! 链接");
     await user.type(input, "https://osu.ppy.sh/beatmaps/10");
     await user.click(screen.getByRole("button", { name: "展开高级参数" }));
@@ -217,8 +231,9 @@ describe("SimilarBeatmapsPage", () => {
         result_limit: 20,
       }),
     );
-    expect(screen.getAllByText("主导特征：")[0]).toHaveTextContent("主导特征：Slider");
-    expect(screen.getAllByText(/候选 5.7～6.5★ 桶/).length).toBeGreaterThan(0);
+    expect(screen.getByText("动态权重档案")).toBeInTheDocument();
+    expect(screen.getByText(/候选 5.7–6.5★/)).toBeInTheDocument();
+    expect(screen.getByText(/AR、CS、OD/)).toBeInTheDocument();
     expect(screen.getByTestId("comparison-radar")).toBeInTheDocument();
 
     await user.click(screen.getByLabelText(/Candidate/));
@@ -242,7 +257,7 @@ describe("SimilarBeatmapsPage", () => {
       supports_dynamic_weighting: false,
     });
 
-    renderPage();
+    renderPage(true);
     expect(await screen.findByText(/已切换为手动权重/)).toBeInTheDocument();
     const advancedToggle = screen.queryByRole("button", { name: "展开高级参数" });
     if (advancedToggle) await user.click(advancedToggle);
@@ -328,6 +343,7 @@ describe("SimilarBeatmapsPage", () => {
     await user.click(screen.getByRole("button", { name: "查找相似谱面" }));
     expect(await screen.findByText("Signal - Candidate")).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: /候选谱面筛选/ }));
     fireEvent.change(screen.getByLabelText("BPM 最低"), { target: { value: "400" } });
 
     expect(screen.queryByText("Signal - Candidate")).not.toBeInTheDocument();

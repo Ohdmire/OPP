@@ -97,6 +97,7 @@ pub struct BeatmapDownloadResult {
     pub failed: usize,
     pub cancelled: bool,
     pub failures: Vec<BeatmapDownloadFailure>,
+    pub completed_paths: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -113,6 +114,10 @@ pub struct BeatmapDownloadProgress {
     pub downloaded_bytes: u64,
     pub total_bytes: Option<u64>,
     pub bytes_per_second: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_paths: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub destination: Option<String>,
 }
 
 pub struct DownloadProgressCounts {

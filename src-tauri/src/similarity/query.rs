@@ -39,6 +39,7 @@ fn options_from_parts(
             "结果数量必须在 5 到 50 之间",
         ));
     }
+    validate_range(filters.min_star, filters.max_star, 0.0, 20.0, "star rating")?;
     validate_range(filters.min_ar, filters.max_ar, 0.0, 11.0, "AR")?;
     validate_range(filters.min_cs, filters.max_cs, 0.0, 10.0, "CS")?;
     validate_range(filters.min_od, filters.max_od, 0.0, 11.0, "OD")?;
@@ -73,9 +74,10 @@ fn options_from_parts(
     )?;
     match weighting {
         WeightingMode::Manual {
-            difficulty_weights, ..
+            difficulty_weights,
+            parameter_weight,
         } => {
-            validate_weights(difficulty_weights)?;
+            validate_weights(difficulty_weights, parameter_weight)?;
         }
         WeightingMode::Dynamic {
             lower_sections,
@@ -96,7 +98,7 @@ fn options_from_parts(
     })
 }
 
-fn validate_weights(difficulty: DifficultyWeights) -> CommandResult<()> {
+fn validate_weights(difficulty: DifficultyWeights, parameter_weight: f32) -> CommandResult<()> {
     let weights = [
         difficulty.aim,
         difficulty.speed,
@@ -107,7 +109,9 @@ fn validate_weights(difficulty: DifficultyWeights) -> CommandResult<()> {
     if weights
         .iter()
         .any(|weight| !weight.is_finite() || !(0.0..=2.0).contains(weight))
-        || weights.iter().all(|weight| *weight == 0.0)
+        || !parameter_weight.is_finite()
+        || !(0.0..=2.0).contains(&parameter_weight)
+        || (weights.iter().all(|weight| *weight == 0.0) && parameter_weight == 0.0)
     {
         return Err(CommandError::new(
             "INVALID_SIMILARITY_WEIGHTS",
@@ -288,9 +292,9 @@ pub fn map_runtime_error(error: RuntimeError) -> CommandError {
 #[cfg(test)]
 mod tests {
     use osu_difficulty_runtime::{
-        BaseFeatureWeights, BeatmapFeatureRecord, BeatmapMetadata, DifficultyVector,
-        DifficultyWeights, DynamicWeightProfile, QueryFilters,
-        QueryResponse as RuntimeQueryResponse, QueryResult as RuntimeQueryResult, WeightingMode,
+        BeatmapFeatureRecord, BeatmapMetadata, DifficultyVector, DifficultyWeights,
+        DynamicWeightProfile, ParameterVector, QueryFilters, QueryResponse as RuntimeQueryResponse,
+        QueryResult as RuntimeQueryResult, WeightingMode,
     };
 
     use super::*;
@@ -301,7 +305,7 @@ mod tests {
             source: SimilaritySource::BeatmapId { value: "1".into() },
             weighting: WeightingMode::Manual {
                 difficulty_weights: DifficultyWeights::default(),
-                base_weights: BaseFeatureWeights::default(),
+                parameter_weight: 1.0,
             },
             filters: QueryFilters::default(),
             result_limit: 20,
@@ -327,8 +331,26 @@ mod tests {
                 slider: 0.0,
                 overlap: 0.0,
             },
-            base_weights: BaseFeatureWeights::default(),
+            parameter_weight: 0.0,
         };
+        assert!(options_from_request(&request).is_err());
+    }
+
+    #[test]
+    fn accepts_parameter_only_manual_weighting() {
+        let mut request = request();
+        request.weighting = WeightingMode::Manual {
+            difficulty_weights: DifficultyWeights::from_array([0.0; 5]),
+            parameter_weight: 1.0,
+        };
+        assert!(options_from_request(&request).is_ok());
+    }
+
+    #[test]
+    fn rejects_inverted_star_filter() {
+        let mut request = request();
+        request.filters.min_star = Some(6.5);
+        request.filters.max_star = Some(5.7);
         assert!(options_from_request(&request).is_err());
     }
 
@@ -361,6 +383,12 @@ mod tests {
             delta: DifficultyVector::default(),
             z_score: DifficultyVector::default(),
             weights: DifficultyWeights::default(),
+            parameter_mean: ParameterVector::default(),
+            parameter_stddev: ParameterVector::default(),
+            parameter_delta: ParameterVector::default(),
+            parameter_z_score: ParameterVector::default(),
+            parameter_group_z_score: 0.0,
+            parameter_weight: 1.0,
             fallback_reason: None,
         }
     }

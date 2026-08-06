@@ -147,6 +147,8 @@ pub struct AppSettings {
     #[serde(default)]
     pub similarity_index_directory: Option<String>,
     #[serde(default)]
+    pub similarity_preferences: SimilarityPreferences,
+    #[serde(default)]
     pub beatmap_download_directory: Option<String>,
     #[serde(default)]
     pub default_beatmap_download_provider: BeatmapDownloadProvider,
@@ -187,6 +189,65 @@ pub struct AppSettings {
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SimilarityWeightingPreference {
+    #[default]
+    Dynamic,
+    Manual,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct SimilarityManualWeights {
+    pub aim: f32,
+    pub speed: f32,
+    pub reading: f32,
+    pub slider: f32,
+    pub overlap: f32,
+    pub parameters: f32,
+}
+
+impl Default for SimilarityManualWeights {
+    fn default() -> Self {
+        Self {
+            aim: 1.0,
+            speed: 2.0,
+            reading: 2.0,
+            slider: 0.0,
+            overlap: 0.25,
+            parameters: 1.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct SimilarityPreferences {
+    #[serde(default)]
+    pub advanced_enabled: bool,
+    #[serde(default)]
+    pub mode: SimilarityWeightingPreference,
+    #[serde(default = "default_similarity_section_range")]
+    pub lower_sections: u32,
+    #[serde(default = "default_similarity_section_range")]
+    pub upper_sections: u32,
+    #[serde(default)]
+    pub manual_weights: SimilarityManualWeights,
+}
+
+impl Default for SimilarityPreferences {
+    fn default() -> Self {
+        Self {
+            advanced_enabled: false,
+            mode: SimilarityWeightingPreference::Dynamic,
+            lower_sections: default_similarity_section_range(),
+            upper_sections: default_similarity_section_range(),
+            manual_weights: SimilarityManualWeights::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum BeatmapDownloadProvider {
     #[default]
@@ -219,6 +280,10 @@ fn default_preview_volume() -> u8 {
     65
 }
 
+fn default_similarity_section_range() -> u32 {
+    4
+}
+
 fn default_obs_websocket_url() -> String {
     "ws://127.0.0.1:4455".into()
 }
@@ -228,6 +293,7 @@ impl Default for AppSettings {
         Self {
             reduce_motion: false,
             similarity_index_directory: None,
+            similarity_preferences: SimilarityPreferences::default(),
             beatmap_download_directory: None,
             default_beatmap_download_provider: BeatmapDownloadProvider::default(),
             open_downloaded_beatmaps_after_download: false,
@@ -364,6 +430,24 @@ mod tests {
                 .expect("settings should serialize")
                 .get("default_beatmap_download_provider"),
             Some(&serde_json::json!("hinai"))
+        );
+    }
+
+    #[test]
+    fn legacy_settings_default_to_safe_similarity_preferences() {
+        let settings: AppSettings =
+            serde_json::from_value(serde_json::json!({})).expect("settings should parse");
+
+        assert!(!settings.similarity_preferences.advanced_enabled);
+        assert_eq!(
+            settings.similarity_preferences.mode,
+            SimilarityWeightingPreference::Dynamic
+        );
+        assert_eq!(settings.similarity_preferences.lower_sections, 4);
+        assert_eq!(settings.similarity_preferences.upper_sections, 4);
+        assert_eq!(
+            settings.similarity_preferences.manual_weights.parameters,
+            1.0
         );
     }
 }

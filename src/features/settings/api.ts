@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { desktopApi, isTauri } from "../../shared/lib/tauri";
+import { defaultSimilarityPreferences } from "../similar-beatmaps/defaults";
 
 export const settingsQueryKey = ["settings"] as const;
 
@@ -24,6 +25,7 @@ export function useSettings() {
       launch_tosu_on_game_detect: false,
       game_session_analysis_on_detect: true,
       preview_volume: 65,
+      similarity_preferences: defaultSimilarityPreferences,
     }),
     staleTime: Infinity,
     retry: false,

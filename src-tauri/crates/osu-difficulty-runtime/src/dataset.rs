@@ -16,8 +16,9 @@ use thiserror::Error;
 use crate::{
     ANALYZER_ALGORITHM_ID, ANALYZER_VERSION, Analyzer, AnalyzerConfig, BaseFeatures,
     BeatmapFeatureRecord, BeatmapMetadata, DatasetInfo, DifficultyVector, DifficultyWeights,
-    DynamicWeightProfile, OVERLAP_ALGORITHM_VERSION, QueryFilters, QueryOptions, QueryResponse,
-    QueryResult, QueryTarget, READING_ALGORITHM_VERSION, ROSU_PP_VERSION, WeightingMode,
+    DynamicWeightProfile, OVERLAP_ALGORITHM_VERSION, ParameterVector, QueryFilters, QueryOptions,
+    QueryResponse, QueryResult, QueryTarget, READING_ALGORITHM_VERSION, ROSU_PP_VERSION,
+    WeightingMode,
 };
 
 const FEATURE_HEADER_LEN: usize = 32;
@@ -138,6 +139,8 @@ pub struct Dataset {
     normalizer: NormalizerFile,
     analyzer: Analyzer,
     info: DatasetInfo,
+    has_star_metadata: bool,
+    star_ratings: HashMap<u64, f32>,
     supports_dynamic_weighting: bool,
 }
 
@@ -221,7 +224,14 @@ impl Dataset {
             ));
         }
 
-        let supports_dynamic_weighting = supports_dynamic_schema(&connection)?;
+        let has_star_metadata = supports_star_metadata(&connection)?;
+        let star_ratings = if has_star_metadata {
+            read_star_ratings(&connection)?
+        } else {
+            HashMap::new()
+        };
+        let supports_dynamic_weighting =
+            supports_dynamic_schema(&connection, normalization_version)?;
         let info = DatasetInfo {
             record_count: offsets.len(),
             analyzer_version: ANALYZER_VERSION,
@@ -240,6 +250,8 @@ impl Dataset {
             normalizer,
             analyzer: Analyzer::new(AnalyzerConfig::default()),
             info,
+            has_star_metadata,
+            star_ratings,
             supports_dynamic_weighting,
         })
     }
@@ -292,19 +304,25 @@ impl Dataset {
         options: &QueryOptions,
     ) -> Result<QueryResponse, RuntimeError> {
         validate_options(options)?;
-        let (ids, weights, weight_profile) = match options.weighting {
+        let (ids, weights, parameter_weight, weight_profile) = match options.weighting {
             WeightingMode::Manual {
-                difficulty_weights, ..
+                difficulty_weights,
+                parameter_weight,
             } => {
-                let mut ids = HashSet::new();
-                let vectors =
-                    candidate_vectors(target.record.difficulty.as_array(), difficulty_weights);
-                for index in std::iter::once(&self.main_index).chain(self.delta_index.iter()) {
-                    for vector in &vectors {
-                        ids.extend(candidates(index, *vector));
+                let ids = if parameter_weight > 0.0 {
+                    self.offsets.keys().copied().collect()
+                } else {
+                    let mut ids = HashSet::new();
+                    let vectors =
+                        candidate_vectors(target.record.difficulty.as_array(), difficulty_weights);
+                    for index in std::iter::once(&self.main_index).chain(self.delta_index.iter()) {
+                        for vector in &vectors {
+                            ids.extend(candidates(index, *vector));
+                        }
                     }
-                }
-                (ids, difficulty_weights, None)
+                    ids
+                };
+                (ids, difficulty_weights, parameter_weight, None)
             }
             WeightingMode::Dynamic {
                 lower_sections,
@@ -341,9 +359,11 @@ impl Dataset {
                     candidate_min,
                     candidate_max,
                     target.record.difficulty,
+                    parameter_vector(target.record.base),
                 )?;
                 let weights = profile.weights;
-                (ids, weights, Some(profile))
+                let parameter_weight = profile.parameter_weight;
+                (ids, weights, parameter_weight, Some(profile))
             }
         };
 
@@ -361,14 +381,28 @@ impl Dataset {
             if !matches_filters(candidate.base, &options.filters) {
                 continue;
             }
+            if !matches_star_filter(
+                self.star_ratings.get(&beatmap_id).copied(),
+                &options.filters,
+            ) {
+                continue;
+            }
             let difficulty_distance =
                 difficulty_distance(target.record.difficulty, candidate.difficulty, weights);
+            let base_distance = parameter_distance(target.record.base, candidate.base);
+            let final_distance = combined_distance(
+                target.record.difficulty,
+                candidate.difficulty,
+                weights,
+                base_distance,
+                parameter_weight,
+            );
             scored.push((
                 beatmap_id,
                 candidate,
+                final_distance,
                 difficulty_distance,
-                difficulty_distance,
-                0.0,
+                base_distance,
             ));
         }
         scored.sort_by(|left, right| {
@@ -418,7 +452,7 @@ impl Dataset {
 
     fn metadata_for(&self, beatmap_id: u64) -> Result<BeatmapMetadata, RuntimeError> {
         let connection = open_read_only(&self.metadata_path)?;
-        let star_select = if self.supports_dynamic_weighting {
+        let star_select = if self.has_star_metadata {
             ",star_rating"
         } else {
             ",NULL"
@@ -495,13 +529,20 @@ fn table_columns(connection: &Connection, table: &str) -> Result<HashSet<String>
         .map_err(|_| RuntimeError::invalid("metadata schema cannot be read"))
 }
 
-fn supports_dynamic_schema(connection: &Connection) -> Result<bool, RuntimeError> {
+fn supports_star_metadata(connection: &Connection) -> Result<bool, RuntimeError> {
     let beatmaps = table_columns(connection, "beatmaps")?;
-    if !beatmaps.contains("star_rating") || !beatmaps.contains("star_section") {
+    Ok(beatmaps.contains("star_rating") && beatmaps.contains("star_section"))
+}
+
+fn supports_dynamic_schema(
+    connection: &Connection,
+    normalization_version: u32,
+) -> Result<bool, RuntimeError> {
+    if !supports_star_metadata(connection)? {
         return Ok(false);
     }
     let stats = table_columns(connection, "star_section_stats")?;
-    const REQUIRED: [&str; 13] = [
+    const REQUIRED: [&str; 20] = [
         "star_section",
         "analyzer_version",
         "normalization_version",
@@ -515,9 +556,55 @@ fn supports_dynamic_schema(connection: &Connection) -> Result<bool, RuntimeError
         "speed_sum_squares",
         "reading_sum_squares",
         "slider_sum_squares",
+        "overlap_sum_squares",
+        "ar_sum",
+        "cs_sum",
+        "od_sum",
+        "ar_sum_squares",
+        "cs_sum_squares",
+        "od_sum_squares",
     ];
-    Ok(REQUIRED.iter().all(|column| stats.contains(*column))
-        && stats.contains("overlap_sum_squares"))
+    if !REQUIRED.iter().all(|column| stats.contains(*column)) {
+        return Ok(false);
+    }
+    connection
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM star_section_stats
+                WHERE analyzer_version=?1 AND normalization_version=?2
+                  AND sample_count>0
+                  AND aim_sum IS NOT NULL AND speed_sum IS NOT NULL
+                  AND reading_sum IS NOT NULL AND slider_sum IS NOT NULL
+                  AND overlap_sum IS NOT NULL
+                  AND aim_sum_squares IS NOT NULL AND speed_sum_squares IS NOT NULL
+                  AND reading_sum_squares IS NOT NULL AND slider_sum_squares IS NOT NULL
+                  AND overlap_sum_squares IS NOT NULL
+                  AND ar_sum IS NOT NULL AND cs_sum IS NOT NULL AND od_sum IS NOT NULL
+                  AND ar_sum_squares IS NOT NULL AND cs_sum_squares IS NOT NULL
+                  AND od_sum_squares IS NOT NULL
+            )",
+            params![ANALYZER_VERSION as i64, normalization_version as i64],
+            |row| row.get::<_, bool>(0),
+        )
+        .map_err(|_| RuntimeError::invalid("star-section statistics cannot be validated"))
+}
+
+fn read_star_ratings(connection: &Connection) -> Result<HashMap<u64, f32>, RuntimeError> {
+    let mut statement = connection
+        .prepare("SELECT beatmap_id,star_rating FROM beatmaps WHERE star_rating IS NOT NULL")
+        .map_err(|_| RuntimeError::invalid("star-rating metadata cannot be read"))?;
+    let rows = statement
+        .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, f32>(1)?)))
+        .map_err(|_| RuntimeError::invalid("star-rating metadata cannot be read"))?;
+    let mut ratings = HashMap::new();
+    for row in rows {
+        let (id, stars) =
+            row.map_err(|_| RuntimeError::invalid("star-rating metadata is invalid"))?;
+        if id >= 0 && stars.is_finite() && stars >= 0.0 {
+            ratings.insert(id as u64, stars);
+        }
+    }
+    Ok(ratings)
 }
 
 /// Maps a no-mod star rating to its fixed-width 0.1-star bucket.
@@ -579,6 +666,25 @@ struct SectionAggregate {
     count: u64,
     sum: [f64; 5],
     sum_squares: [f64; 5],
+    parameter_sum: [f64; 3],
+    parameter_sum_squares: [f64; 3],
+    invalid_parameter_rows: u64,
+}
+
+#[derive(Debug, Clone, Default)]
+struct ProfileValues {
+    mean: DifficultyVector,
+    stddev: DifficultyVector,
+    delta: DifficultyVector,
+    z_score: DifficultyVector,
+    weights: DifficultyWeights,
+    parameter_mean: ParameterVector,
+    parameter_stddev: ParameterVector,
+    parameter_delta: ParameterVector,
+    parameter_z_score: ParameterVector,
+    parameter_group_z_score: f32,
+    parameter_weight: f32,
+    fallback_reason: Option<String>,
 }
 
 fn aggregate_sections(
@@ -596,7 +702,15 @@ fn aggregate_sections(
                     COALESCE(SUM(speed_sum_squares),0),
                     COALESCE(SUM(reading_sum_squares),0),
                     COALESCE(SUM(slider_sum_squares),0),
-                    COALESCE(SUM(overlap_sum_squares),0)
+                    COALESCE(SUM(overlap_sum_squares),0),
+                    COALESCE(SUM(ar_sum),0), COALESCE(SUM(cs_sum),0),
+                    COALESCE(SUM(od_sum),0), COALESCE(SUM(ar_sum_squares),0),
+                    COALESCE(SUM(cs_sum_squares),0), COALESCE(SUM(od_sum_squares),0),
+                    COALESCE(SUM(CASE WHEN ar_sum IS NOT NULL AND cs_sum IS NOT NULL
+                                      AND od_sum IS NOT NULL AND ar_sum_squares IS NOT NULL
+                                      AND cs_sum_squares IS NOT NULL
+                                      AND od_sum_squares IS NOT NULL
+                                 THEN 0 ELSE 1 END),0)
              FROM star_section_stats
              WHERE analyzer_version=?1 AND normalization_version=?2
                AND star_section BETWEEN ?3 AND ?4",
@@ -614,6 +728,13 @@ fn aggregate_sections(
                     sum_squares: std::array::from_fn(|index| {
                         row.get(index + 6).unwrap_or(f64::NAN)
                     }),
+                    parameter_sum: std::array::from_fn(|index| {
+                        row.get(index + 11).unwrap_or(f64::NAN)
+                    }),
+                    parameter_sum_squares: std::array::from_fn(|index| {
+                        row.get(index + 14).unwrap_or(f64::NAN)
+                    }),
+                    invalid_parameter_rows: row.get::<_, i64>(17).unwrap_or(-1).max(0) as u64,
                 })
             },
         )
@@ -627,6 +748,7 @@ fn dynamic_profile(
     candidate_min: i32,
     candidate_max: i32,
     target: DifficultyVector,
+    target_parameters: ParameterVector,
 ) -> Result<DynamicWeightProfile, RuntimeError> {
     let bounds = connection
         .query_row(
@@ -659,8 +781,17 @@ fn dynamic_profile(
     let target_values = target.as_array();
     let valid = aggregate.count >= 2
         && aggregate.sum.iter().all(|value| value.is_finite())
-        && aggregate.sum_squares.iter().all(|value| value.is_finite());
-    let (mean, stddev, delta, z_score, weights, fallback_reason) = if valid {
+        && aggregate.sum_squares.iter().all(|value| value.is_finite())
+        && aggregate
+            .parameter_sum
+            .iter()
+            .all(|value| value.is_finite())
+        && aggregate
+            .parameter_sum_squares
+            .iter()
+            .all(|value| value.is_finite())
+        && aggregate.invalid_parameter_rows == 0;
+    let values = if valid {
         let count = aggregate.count as f64;
         let means = std::array::from_fn(|index| (aggregate.sum[index] / count) as f32);
         let stddevs = std::array::from_fn(|index| {
@@ -669,22 +800,50 @@ fn dynamic_profile(
                 .max(0.0)
                 .sqrt()) as f32
         });
+        let parameter_means =
+            std::array::from_fn(|index| (aggregate.parameter_sum[index] / count) as f32);
+        let parameter_stddevs = std::array::from_fn(|index| {
+            let mean = aggregate.parameter_sum[index] / count;
+            ((aggregate.parameter_sum_squares[index] / count - mean * mean)
+                .max(0.0)
+                .sqrt()) as f32
+        });
         if means.iter().all(|value| value.is_finite())
             && stddevs.iter().all(|value| value.is_finite())
+            && parameter_means.iter().all(|value| value.is_finite())
+            && parameter_stddevs.iter().all(|value| value.is_finite())
         {
             let deltas = std::array::from_fn(|index| target_values[index] - means[index]);
             let z =
                 std::array::from_fn(|index| deltas[index].abs() / stddevs[index].max(MIN_STDDEV));
             let dynamic_weights =
                 std::array::from_fn(|index| (0.25 + 0.75 * z[index]).clamp(0.25, 2.0));
-            (
-                DifficultyVector::from_array(means),
-                DifficultyVector::from_array(stddevs),
-                DifficultyVector::from_array(deltas),
-                DifficultyVector::from_array(z),
-                DifficultyWeights::from_array(dynamic_weights),
-                None,
-            )
+            let parameter_deltas = std::array::from_fn(|index| {
+                target_parameters.as_array()[index] - parameter_means[index]
+            });
+            let parameter_ranges = [11.0, 10.0, 11.0];
+            let parameter_z = std::array::from_fn(|index| {
+                let normalized_delta = parameter_deltas[index].abs() / parameter_ranges[index];
+                let normalized_stddev = parameter_stddevs[index] / parameter_ranges[index];
+                normalized_delta / normalized_stddev.max(MIN_STDDEV)
+            });
+            let parameter_group_z =
+                (parameter_z.iter().map(|value| value.powi(2)).sum::<f32>() / 3.0).sqrt();
+            let parameter_weight = (0.25 + 0.75 * parameter_group_z).clamp(0.25, 2.0);
+            ProfileValues {
+                mean: DifficultyVector::from_array(means),
+                stddev: DifficultyVector::from_array(stddevs),
+                delta: DifficultyVector::from_array(deltas),
+                z_score: DifficultyVector::from_array(z),
+                weights: DifficultyWeights::from_array(dynamic_weights),
+                parameter_mean: ParameterVector::from_array(parameter_means),
+                parameter_stddev: ParameterVector::from_array(parameter_stddevs),
+                parameter_delta: ParameterVector::from_array(parameter_deltas),
+                parameter_z_score: ParameterVector::from_array(parameter_z),
+                parameter_group_z_score: parameter_group_z,
+                parameter_weight,
+                fallback_reason: None,
+            }
         } else {
             fallback_profile_values("star-section statistics contain invalid values")
         }
@@ -703,33 +862,28 @@ fn dynamic_profile(
         stats_min_section: stats_min,
         stats_max_section: stats_max,
         sample_count: aggregate.count,
-        mean,
-        stddev,
-        delta,
-        z_score,
-        weights,
-        fallback_reason,
+        mean: values.mean,
+        stddev: values.stddev,
+        delta: values.delta,
+        z_score: values.z_score,
+        weights: values.weights,
+        parameter_mean: values.parameter_mean,
+        parameter_stddev: values.parameter_stddev,
+        parameter_delta: values.parameter_delta,
+        parameter_z_score: values.parameter_z_score,
+        parameter_group_z_score: values.parameter_group_z_score,
+        parameter_weight: values.parameter_weight,
+        fallback_reason: values.fallback_reason,
     })
 }
 
-fn fallback_profile_values(
-    reason: &str,
-) -> (
-    DifficultyVector,
-    DifficultyVector,
-    DifficultyVector,
-    DifficultyVector,
-    DifficultyWeights,
-    Option<String>,
-) {
-    (
-        DifficultyVector::default(),
-        DifficultyVector::default(),
-        DifficultyVector::default(),
-        DifficultyVector::default(),
-        DifficultyWeights::default(),
-        Some(reason.into()),
-    )
+fn fallback_profile_values(reason: &str) -> ProfileValues {
+    ProfileValues {
+        weights: DifficultyWeights::default(),
+        parameter_weight: 1.0,
+        fallback_reason: Some(reason.into()),
+        ..ProfileValues::default()
+    }
 }
 
 fn validate_algorithm(connection: &Connection) -> Result<(), RuntimeError> {
@@ -880,10 +1034,11 @@ fn validate_options(options: &QueryOptions) -> Result<(), RuntimeError> {
             "result limit must be between 1 and 150",
         ));
     }
-    let difficulty = match options.weighting {
+    let (difficulty, parameter_weight) = match options.weighting {
         WeightingMode::Manual {
-            difficulty_weights, ..
-        } => difficulty_weights,
+            difficulty_weights,
+            parameter_weight,
+        } => (difficulty_weights, parameter_weight),
         WeightingMode::Dynamic {
             lower_sections,
             upper_sections,
@@ -906,10 +1061,13 @@ fn validate_options(options: &QueryOptions) -> Result<(), RuntimeError> {
     if weights
         .iter()
         .any(|value| !value.is_finite() || *value < 0.0)
-        || weights.iter().all(|value| *value == 0.0)
+        || !parameter_weight.is_finite()
+        || !(0.0..=2.0).contains(&parameter_weight)
+        || weights.iter().any(|value| *value > 2.0)
+        || (weights.iter().all(|value| *value == 0.0) && parameter_weight == 0.0)
     {
         return Err(RuntimeError::analysis(
-            "similarity weights must be finite, non-negative and not all zero",
+            "similarity weights must be finite, between zero and two, and not all zero",
         ));
     }
     Ok(())
@@ -950,28 +1108,73 @@ fn matches_filters(base: BaseFeatures, filters: &QueryFilters) -> bool {
             .is_none_or(|value| base.slider_ratio <= value)
 }
 
-fn difficulty_distance(
+fn matches_star_filter(stars: Option<f32>, filters: &QueryFilters) -> bool {
+    if filters.min_star.is_none() && filters.max_star.is_none() {
+        return true;
+    }
+    stars.is_some_and(|stars| {
+        filters.min_star.is_none_or(|minimum| stars >= minimum)
+            && filters.max_star.is_none_or(|maximum| stars <= maximum)
+    })
+}
+
+fn parameter_vector(base: BaseFeatures) -> ParameterVector {
+    ParameterVector {
+        ar: base.ar,
+        cs: base.cs,
+        od: base.od,
+    }
+}
+
+fn parameter_distance(left: BaseFeatures, right: BaseFeatures) -> f32 {
+    let differences = [
+        (left.ar - right.ar) / 11.0,
+        (left.cs - right.cs) / 10.0,
+        (left.od - right.od) / 11.0,
+    ];
+    (differences.iter().map(|value| value.powi(2)).sum::<f32>() / 3.0).sqrt()
+}
+
+fn difficulty_squared_sum(
     left: DifficultyVector,
     right: DifficultyVector,
     weights: DifficultyWeights,
-) -> f32 {
-    let weights = [
-        weights.aim,
-        weights.speed,
-        weights.reading,
-        weights.slider,
-        weights.overlap,
-    ];
-    let weight_sum = weights.iter().sum::<f32>();
-    (left
+) -> (f32, f32) {
+    let weights = weights.as_array();
+    let sum = left
         .as_array()
         .iter()
         .zip(right.as_array())
         .zip(weights)
         .map(|((left, right), weight)| weight * (left - right).powi(2))
-        .sum::<f32>()
-        / weight_sum)
+        .sum();
+    (sum, weights.iter().sum())
+}
+
+fn combined_distance(
+    left: DifficultyVector,
+    right: DifficultyVector,
+    weights: DifficultyWeights,
+    parameter_distance: f32,
+    parameter_weight: f32,
+) -> f32 {
+    let (difficulty_sum, difficulty_weight_sum) = difficulty_squared_sum(left, right, weights);
+    ((difficulty_sum + parameter_weight * parameter_distance.powi(2))
+        / (difficulty_weight_sum + parameter_weight))
         .sqrt()
+}
+
+fn difficulty_distance(
+    left: DifficultyVector,
+    right: DifficultyVector,
+    weights: DifficultyWeights,
+) -> f32 {
+    let (sum, weight_sum) = difficulty_squared_sum(left, right, weights);
+    if weight_sum == 0.0 {
+        0.0
+    } else {
+        (sum / weight_sum).sqrt()
+    }
 }
 
 #[cfg(test)]
@@ -991,6 +1194,8 @@ mod tests {
             base: BaseFeatures {
                 bpm,
                 ar: 9.0,
+                cs: 4.0,
+                od: 8.0,
                 length_seconds: 120.0,
                 object_density: 4.0,
                 circle_ratio: 0.6,
@@ -1142,6 +1347,9 @@ mod tests {
                     overlap_sum REAL NOT NULL, aim_sum_squares REAL NOT NULL,
                     speed_sum_squares REAL NOT NULL, reading_sum_squares REAL NOT NULL,
                     slider_sum_squares REAL NOT NULL, overlap_sum_squares REAL NOT NULL,
+                    ar_sum REAL NOT NULL, cs_sum REAL NOT NULL, od_sum REAL NOT NULL,
+                    ar_sum_squares REAL NOT NULL, cs_sum_squares REAL NOT NULL,
+                    od_sum_squares REAL NOT NULL,
                     PRIMARY KEY(star_section,analyzer_version,normalization_version)
                  );
                  UPDATE beatmaps SET star_rating=6.1,star_section=61 WHERE beatmap_id=10;
@@ -1155,7 +1363,8 @@ mod tests {
             connection
                 .execute(
                     "INSERT INTO star_section_stats VALUES
-                     (?1,?2,1,100,20,20,20,20,20,5,5,5,5,5)",
+                     (?1,?2,1,100,20,20,20,20,20,5,5,5,5,5,
+                      900,400,800,8100,1600,6400)",
                     params![section, ANALYZER_VERSION],
                 )
                 .expect("section stats");
@@ -1166,7 +1375,7 @@ mod tests {
         QueryOptions {
             weighting: WeightingMode::Manual {
                 difficulty_weights: DifficultyWeights::default(),
-                base_weights: crate::BaseFeatureWeights::default(),
+                parameter_weight: 1.0,
             },
             ..QueryOptions::default()
         }
@@ -1199,7 +1408,7 @@ mod tests {
             vec![20, 30]
         );
         assert!(results.iter().all(|result| {
-            result.final_distance == result.difficulty_distance && result.base_distance == 0.0
+            result.final_distance <= result.difficulty_distance && result.base_distance == 0.0
         }));
         assert!(!directory.path().join("metadata.sqlite-wal").exists());
         assert!(!directory.path().join("metadata.sqlite-shm").exists());
@@ -1263,14 +1472,184 @@ mod tests {
     }
 
     #[test]
+    fn feature_record_binary_layout_remains_unchanged() {
+        assert_eq!(
+            bincode::serialized_size(&BeatmapFeatureRecord::default()).expect("record size"),
+            124
+        );
+    }
+
+    #[test]
+    fn parameter_distance_uses_fixed_ranges_and_one_shared_group() {
+        let left = BaseFeatures::default();
+        let right = BaseFeatures {
+            ar: 11.0,
+            cs: 10.0,
+            od: 11.0,
+            ..BaseFeatures::default()
+        };
+        assert!((parameter_distance(left, right) - 1.0).abs() < 1e-6);
+
+        let final_distance = combined_distance(
+            DifficultyVector::default(),
+            DifficultyVector::default(),
+            DifficultyWeights::from_array([1.0; 5]),
+            (1.0_f32 / 3.0).sqrt(),
+            1.0,
+        );
+        assert!((final_distance - (1.0_f32 / 18.0).sqrt()).abs() < 1e-6);
+    }
+
+    #[test]
+    fn parameter_outlier_uses_normalized_rms_z_score() {
+        let directory = create_dataset();
+        add_dynamic_schema(&directory);
+        let connection =
+            Connection::open(directory.path().join("metadata.sqlite")).expect("metadata");
+        let profile = dynamic_profile(
+            &connection,
+            1,
+            6.1,
+            60,
+            62,
+            DifficultyVector::from_array([0.2; 5]),
+            ParameterVector {
+                ar: 10.1,
+                cs: 4.0,
+                od: 8.0,
+            },
+        )
+        .expect("dynamic profile");
+        // AR differs by 10% of its fixed range, with the normalized stddev floor at 5%.
+        assert!((profile.parameter_z_score.ar - 2.0).abs() < 1e-6);
+        assert!((profile.parameter_group_z_score - (4.0_f32 / 3.0).sqrt()).abs() < 1e-6);
+        assert!((profile.parameter_weight - (0.25 + 0.75 * (4.0_f32 / 3.0).sqrt())).abs() < 1e-6);
+    }
+
+    #[test]
+    fn star_filter_is_applied_during_manual_exact_scan() {
+        let directory = create_dataset();
+        add_dynamic_schema(&directory);
+        let dataset = Dataset::open(directory.path()).expect("open dataset");
+        let target = dataset.target_for_id(10).expect("target");
+        let response = dataset
+            .query(
+                &target,
+                &QueryOptions {
+                    weighting: WeightingMode::Manual {
+                        difficulty_weights: DifficultyWeights::default(),
+                        parameter_weight: 1.0,
+                    },
+                    filters: QueryFilters {
+                        min_star: Some(6.15),
+                        max_star: Some(6.25),
+                        ..QueryFilters::default()
+                    },
+                    result_limit: 20,
+                },
+            )
+            .expect("manual query");
+        assert_eq!(
+            response
+                .iter()
+                .map(|result| result.metadata.beatmap_id)
+                .collect::<Vec<_>>(),
+            vec![21]
+        );
+    }
+
+    #[test]
+    fn migrated_null_parameter_statistics_disable_dynamic_weighting() {
+        let directory = create_dataset();
+        add_dynamic_schema(&directory);
+        let connection =
+            Connection::open(directory.path().join("metadata.sqlite")).expect("metadata");
+        connection
+            .execute_batch(
+                "PRAGMA foreign_keys=OFF;
+                 CREATE TABLE replacement AS
+                    SELECT star_section,analyzer_version,normalization_version,sample_count,
+                           aim_sum,speed_sum,reading_sum,slider_sum,overlap_sum,
+                           aim_sum_squares,speed_sum_squares,reading_sum_squares,
+                           slider_sum_squares,overlap_sum_squares,
+                           NULL AS ar_sum,NULL AS cs_sum,NULL AS od_sum,
+                           NULL AS ar_sum_squares,NULL AS cs_sum_squares,NULL AS od_sum_squares
+                    FROM star_section_stats;
+                 DROP TABLE star_section_stats;
+                 ALTER TABLE replacement RENAME TO star_section_stats;",
+            )
+            .expect("replace migrated stats");
+        drop(connection);
+        let dataset = Dataset::open(directory.path()).expect("open legacy migrated dataset");
+        assert!(!dataset.info().supports_dynamic_weighting);
+        assert!(
+            dataset
+                .query(
+                    &dataset.target_for_id(10).expect("target"),
+                    &manual_options()
+                )
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn legacy_five_dimension_statistics_keep_manual_mode_available() {
+        let directory = create_dataset();
+        let connection =
+            Connection::open(directory.path().join("metadata.sqlite")).expect("metadata");
+        connection
+            .execute_batch(
+                "ALTER TABLE beatmaps ADD COLUMN star_rating REAL;
+                 ALTER TABLE beatmaps ADD COLUMN star_section INTEGER;
+                 CREATE TABLE star_section_stats (
+                    star_section INTEGER NOT NULL, analyzer_version INTEGER NOT NULL,
+                    normalization_version INTEGER NOT NULL, sample_count INTEGER NOT NULL,
+                    aim_sum REAL NOT NULL, speed_sum REAL NOT NULL, reading_sum REAL NOT NULL,
+                    slider_sum REAL NOT NULL, overlap_sum REAL NOT NULL,
+                    aim_sum_squares REAL NOT NULL, speed_sum_squares REAL NOT NULL,
+                    reading_sum_squares REAL NOT NULL, slider_sum_squares REAL NOT NULL,
+                    overlap_sum_squares REAL NOT NULL
+                 );
+                 INSERT INTO star_section_stats VALUES
+                    (61,3,1,2,1,1,1,1,1,1,1,1,1,1);
+                 UPDATE beatmaps SET star_rating=6.1,star_section=61;",
+            )
+            .expect("legacy dynamic schema");
+        drop(connection);
+
+        let dataset = Dataset::open(directory.path()).expect("open legacy dataset");
+        assert!(!dataset.info().supports_dynamic_weighting);
+        assert!(
+            dataset
+                .query(
+                    &dataset.target_for_id(10).expect("target"),
+                    &manual_options()
+                )
+                .is_ok()
+        );
+    }
+
+    #[test]
     fn slider_outlier_receives_the_largest_dynamic_weight() {
         let directory = create_dataset();
         add_dynamic_schema(&directory);
         let connection =
             Connection::open(directory.path().join("metadata.sqlite")).expect("metadata");
         let target = DifficultyVector::from_array([0.2, 0.2, 0.2, 0.9, 0.2]);
-        let profile =
-            dynamic_profile(&connection, 1, 6.1, 60, 62, target).expect("dynamic profile");
+        let profile = dynamic_profile(
+            &connection,
+            1,
+            6.1,
+            60,
+            62,
+            target,
+            ParameterVector {
+                ar: 9.0,
+                cs: 4.0,
+                od: 8.0,
+            },
+        )
+        .expect("dynamic profile");
         assert_eq!(profile.weights.slider, 2.0);
         assert!(profile.weights.slider > profile.weights.aim);
         assert!(profile.delta.slider > 0.0);
@@ -1289,7 +1668,8 @@ mod tests {
         connection
             .execute(
                 "INSERT INTO star_section_stats VALUES
-                 (59,?1,1,200,40,40,40,40,40,10,10,10,10,10)",
+                 (59,?1,1,200,40,40,40,40,40,10,10,10,10,10,
+                  1800,800,1600,16200,3200,12800)",
                 [ANALYZER_VERSION],
             )
             .expect("outer stats");
@@ -1300,6 +1680,11 @@ mod tests {
             61,
             61,
             DifficultyVector::from_array([0.2; 5]),
+            ParameterVector {
+                ar: 9.0,
+                cs: 4.0,
+                od: 8.0,
+            },
         )
         .expect("expanded profile");
         assert_eq!(
@@ -1311,8 +1696,16 @@ mod tests {
         connection
             .execute("DELETE FROM star_section_stats", [])
             .expect("clear stats");
-        let fallback = dynamic_profile(&connection, 1, 6.1, 61, 61, DifficultyVector::default())
-            .expect("fallback profile");
+        let fallback = dynamic_profile(
+            &connection,
+            1,
+            6.1,
+            61,
+            61,
+            DifficultyVector::default(),
+            ParameterVector::default(),
+        )
+        .expect("fallback profile");
         assert_eq!(fallback.weights, DifficultyWeights::default());
         assert!(fallback.fallback_reason.is_some());
     }

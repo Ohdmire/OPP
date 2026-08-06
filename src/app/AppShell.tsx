@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp } from "lucide-react";
+import { ArrowUp, FolderOpen, Play } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Outlet } from "react-router-dom";
 import type { AppSettings, BeatmapDownloadProgress, CommandError, Ruleset } from "../shared/types/osu";
@@ -48,7 +48,7 @@ function DownloadToast() {
     void desktopApi.onBeatmapDownloadProgress((next) => {
       window.clearTimeout(timer);
       setProgress(next);
-      if (next.phase === "finished" || next.phase === "cancelled") timer = window.setTimeout(() => setProgress(null), 4_500);
+      if (next.phase === "finished" || next.phase === "cancelled") timer = window.setTimeout(() => setProgress(null), 5_000);
     }).then((unlisten) => { dispose = unlisten; });
     return () => { window.clearTimeout(timer); dispose?.(); };
   }, []);
@@ -56,6 +56,47 @@ function DownloadToast() {
   const completed = progress.phase === "finished" || progress.phase === "cancelled";
   const percent = downloadProgressPercent(progress);
   return <div aria-live="polite" className="fixed bottom-6 right-6 z-[180] w-[340px] rounded-2xl border border-cyan-300/20 bg-[#0b101b]/95 p-4 shadow-2xl backdrop-blur"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-sm font-semibold text-white">{completed ? "下载完成" : "正在下载谱面"}</p><p className="mt-1 truncate text-xs text-slate-400">{progress.current_title ?? progress.message ?? "准备下载"}</p></div><span className="shrink-0 font-mono text-xs text-cyan-200">{progress.processed}/{progress.total}</span></div><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.08]"><div className="h-full rounded-full bg-[var(--theme-primary)] transition-[width]" style={{ width: `${percent}%` }} /></div><div className="mt-2 flex justify-between gap-3 text-xs"><span className="truncate text-slate-500">{formatDownloadedBytes(progress)}</span><strong className="shrink-0 font-mono text-emerald-200">{formatTransfer(progress.bytes_per_second ?? 0)}</strong></div></div>;
+}
+
+function DownloadCompletedPlaylist() {
+  const [files, setFiles] = useState<string[]>([]);
+  const [destination, setDestination] = useState<string | null>(null);
+  const [noticeVisible, setNoticeVisible] = useState(false);
+
+  useEffect(() => {
+    let dispose: (() => void) | undefined;
+    let timer: number | undefined;
+    void desktopApi.onBeatmapDownloadProgress((next) => {
+      if (next.phase !== "finished" || !next.completed_paths?.length) return;
+      window.clearTimeout(timer);
+      setFiles(next.completed_paths);
+      setDestination(next.destination ?? null);
+      setNoticeVisible(true);
+      timer = window.setTimeout(() => setNoticeVisible(false), 5_000);
+    }).then((unlisten) => { dispose = unlisten; });
+    return () => { window.clearTimeout(timer); dispose?.(); };
+  }, []);
+
+  if (!files.length) return null;
+  const openFirst = () => void desktopApi.openDownloadedPath(files[0]);
+  return <>
+    {noticeVisible ? <button aria-label="打开已下载谱面" className="fixed right-6 top-6 z-[185] w-[320px] rounded-lg border border-emerald-300/25 bg-[var(--surface-panel)] p-4 text-left shadow-xl" onDoubleClick={openFirst} type="button">
+      <p className="text-sm font-semibold text-emerald-300">下载完成</p>
+      <p className="mt-1 truncate text-xs text-slate-400">双击打开第一个已下载文件</p>
+    </button> : null}
+    <section aria-label="已下载文件" className="fixed bottom-6 right-6 z-[181] w-[340px] overflow-hidden rounded-lg border border-white/10 bg-[var(--surface-panel)] shadow-xl">
+      <div className="flex items-center justify-between gap-3 border-b border-white/[0.08] px-4 py-3">
+        <p className="text-sm font-semibold text-white">已下载文件</p>
+        {destination ? <Button aria-label="打开下载位置" onClick={() => void desktopApi.openDownloadedPath(destination)} size="icon" title="打开下载位置" variant="ghost"><FolderOpen className="size-4" /></Button> : null}
+      </div>
+      <div className="max-h-44 overflow-y-auto p-2">
+        {files.map((file) => <button className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs text-slate-300 hover:bg-white/[0.06]" key={file} onDoubleClick={() => void desktopApi.openDownloadedPath(file)} title={file} type="button">
+          <Play className="size-3.5 shrink-0 text-[var(--theme-primary)]" />
+          <span className="truncate">{file.split(/[\\/]/).pop()}</span>
+        </button>)}
+      </div>
+    </section>
+  </>;
 }
 
 function GameCompletionOverlay({ session, onClose }: { session: GameSessionSummary; onClose: () => void }) {
@@ -188,6 +229,7 @@ export function AppShell() {
       {completedSession ? <><GameCompletionOverlay session={completedSession} onClose={() => { setDismissedSession(completedSession.started_at); setCompletedSession(null); }} /><div className="fixed bottom-8 left-1/2 z-[110] -translate-x-1/2 rounded-xl border border-cyan-300/15 bg-[#0b101b]/95 px-4 py-2 text-xs text-slate-400 shadow-xl">Tips：嘛，如果拘泥于数据就会让游戏本来的乐趣消失哦</div></> : null}
       {tosuPromptSettings ? <TosuLaunchPrompt settings={tosuPromptSettings} onClose={() => setTosuPromptSettings(null)} /> : null}
       <DownloadToast />
+      <DownloadCompletedPlaylist />
     </div>
   );
 }

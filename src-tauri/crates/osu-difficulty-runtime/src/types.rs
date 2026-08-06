@@ -49,6 +49,28 @@ pub struct BaseFeatures {
     pub max_combo: f32,
 }
 
+/// The three built-in osu! difficulty settings that share one similarity weight.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct ParameterVector {
+    pub ar: f32,
+    pub cs: f32,
+    pub od: f32,
+}
+
+impl ParameterVector {
+    pub const fn as_array(self) -> [f32; 3] {
+        [self.ar, self.cs, self.od]
+    }
+
+    pub const fn from_array(value: [f32; 3]) -> Self {
+        Self {
+            ar: value[0],
+            cs: value[1],
+            od: value[2],
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 #[repr(C)]
 pub struct OverlapStatistics {
@@ -206,6 +228,8 @@ impl Default for BaseFeatureWeights {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct QueryFilters {
+    pub min_star: Option<f32>,
+    pub max_star: Option<f32>,
     pub min_ar: Option<f32>,
     pub max_ar: Option<f32>,
     pub min_cs: Option<f32>,
@@ -233,7 +257,7 @@ pub enum WeightingMode {
     },
     Manual {
         difficulty_weights: DifficultyWeights,
-        base_weights: BaseFeatureWeights,
+        parameter_weight: f32,
     },
 }
 
@@ -305,6 +329,12 @@ pub struct DynamicWeightProfile {
     pub delta: DifficultyVector,
     pub z_score: DifficultyVector,
     pub weights: DifficultyWeights,
+    pub parameter_mean: ParameterVector,
+    pub parameter_stddev: ParameterVector,
+    pub parameter_delta: ParameterVector,
+    pub parameter_z_score: ParameterVector,
+    pub parameter_group_z_score: f32,
+    pub parameter_weight: f32,
     pub fallback_reason: Option<String>,
 }
 

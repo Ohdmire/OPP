@@ -31,6 +31,7 @@ import type {
 import { useAuthStatus } from "../auth/api";
 import { localSourcesKey, useLocalSources } from "../local-analysis/api";
 import { useSettings, settingsQueryKey } from "./api";
+import { defaultSimilarityPreferences } from "../similar-beatmaps/defaults";
 
 const colors: Array<[ThemeColor, string, string]> = [
   ["cyan", "青色", "#67e8f9"],
@@ -75,6 +76,7 @@ const base: AppSettings = {
   suppress_tosu_launch_prompt: false,
   game_session_analysis_on_detect: true,
   preview_volume: 65,
+  similarity_preferences: defaultSimilarityPreferences,
 };
 
 function Toggle({
@@ -296,20 +298,25 @@ export function SettingsPage() {
           </Card>
 
           <Card className="p-6">
-            <SectionTitle title="直播自动化" description="OBS 启动检测、场景和密码在 tosu 直播集成页面配置。" />
-            <div className="mt-5 space-y-3">
-              <Toggle checked={settings.launch_tosu_on_game_detect ?? false} description="检测到 osu! Stable 或 osu!lazer 已运行时，自动在后台启动已配置的 tosu；tosu 已运行时不会重复启动。" label="检测到 osu! 后启动 tosu" onChange={(value) => void save({ ...settings, launch_tosu_on_game_detect: value })} />
-              <Toggle checked={settings.launch_tosu_on_obs_detect ?? false} description="检测到 OBS 启动时自动启动已配置的 tosu。" label="检测到 OBS 后启动 tosu" onChange={(value) => void save({ ...settings, launch_tosu_on_obs_detect: value })} />
-              <Toggle checked={settings.suppress_tosu_launch_prompt ?? false} description="关闭后，每次 Tosu 启动都会显示自动启动偏好提示。" label="不再显示 Tosu 启动提示" onChange={(value) => void save({ ...settings, suppress_tosu_launch_prompt: value })} />
-            </div>
-          </Card>
-
-          <Card className="p-6">
             <SectionTitle title="工具与缓存" />
-            <div className="mt-5 flex flex-wrap gap-3">
+            <div className="mt-5 space-y-3">
+              <Toggle
+                checked={settings.similarity_preferences.advanced_enabled}
+                description="开启后可在相似谱面页面切换动态或手动模式，并调整星数范围及六组推荐权重。"
+                label="相似谱面高级设置"
+                onChange={(value) => void save({
+                  ...settings,
+                  similarity_preferences: {
+                    ...settings.similarity_preferences,
+                    advanced_enabled: value,
+                  },
+                })}
+              />
+              <div className="flex flex-wrap gap-3">
               <Button disabled={busy} onClick={() => void desktopApi.clearProfileCache()}>
                 <Trash2 className="size-4" />清除缓存
               </Button>
+              </div>
             </div>
           </Card>
 

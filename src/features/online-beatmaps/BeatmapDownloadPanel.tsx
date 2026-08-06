@@ -196,7 +196,7 @@ export function BeatmapDownloadPanel({
   return (
     <>
       <Card className="sticky top-[120px] overflow-hidden">
-        <div className="border-b border-white/[0.08] px-5 py-4"><div className="flex items-center justify-between"><div><h2 className="text-base font-semibold text-white">批量下载队列</h2><p className="mt-1 text-sm text-slate-500">可逐张加入，或按当前筛选结果批量加入并下载</p></div><Badge tone={queue.length ? "pink" : "neutral"}>{queue.length}</Badge></div></div>
+        <div className="border-b border-white/[0.08] px-5 py-4"><div className="flex items-center justify-between"><h2 className="text-base font-semibold text-white">批量下载队列</h2><Badge tone={queue.length ? "pink" : "neutral"}>{queue.length}</Badge></div></div>
         <div className="space-y-5 p-5">
           <button className="flex w-full items-center gap-3 rounded-xl border border-white/[0.09] bg-black/15 px-3 py-3 text-left text-base text-slate-300 transition hover:border-white/20" disabled={busy || collecting} onClick={() => void chooseDirectory()} type="button"><FolderOpen className="size-5 shrink-0 text-cyan-200" /><span className="min-w-0 flex-1 truncate">{effectiveDestination || "选择保存目录"}</span></button>
           <label className="block"><span className="mb-2 block text-sm font-medium text-slate-300">下载适配器</span><select className="w-full rounded-xl border border-white/[0.09] bg-[#0b101b] px-3 py-3 text-sm text-slate-200 outline-none focus:border-cyan-300/45" disabled={busy || collecting} onChange={(event) => setProviderOverride(event.target.value as BeatmapDownloadProvider | "none")} value={provider}><option value="hinai">Hinai Mirror（推荐，多源回退）</option><option value="catboy">Catboy</option><option value="nerinyan">Nerinyan</option><option value="none">不使用镜像</option></select></label>
