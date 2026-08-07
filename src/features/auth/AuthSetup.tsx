@@ -1,27 +1,12 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowRight,
-  Check,
-  Copy,
-  ExternalLink,
-  KeyRound,
-  LoaderCircle,
-  LockKeyhole,
-  ShieldCheck,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowRight, Check, Copy, ExternalLink, ShieldCheck } from "lucide-react";
 import type { AuthStatus, CommandError } from "../../shared/types/osu";
 import { desktopApi } from "../../shared/lib/tauri";
 import { Button, Card } from "../../shared/components/ui";
 import { authQueryKey } from "./api";
 
 const OSU_SETTINGS_URL = "https://osu.ppy.sh/home/account/edit";
-const securityFeatures: Array<{ label: string; icon: LucideIcon }> = [
-  { label: "系统级安全存储", icon: LockKeyhole },
-  { label: "只申请 public / identify", icon: ShieldCheck },
-  { label: "不上传或共享个人数据", icon: KeyRound },
-];
 
 export function AuthSetup({ status }: { status: AuthStatus }) {
   const queryClient = useQueryClient();
@@ -36,7 +21,7 @@ export function AuthSetup({ status }: { status: AuthStatus }) {
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | undefined;
-    desktopApi.onOAuthResult(async (result) => {
+    void desktopApi.onOAuthResult(async (result) => {
       if (disposed) return;
       setAuthorizing(false);
       if (result.ok) {
@@ -88,184 +73,40 @@ export function AuthSetup({ status }: { status: AuthStatus }) {
     }
   };
 
-  const cancel = async () => {
-    await desktopApi.cancelOAuthLogin();
-    setAuthorizing(false);
-  };
-
   return (
-    <main className="relative grid min-h-screen place-items-center overflow-hidden bg-[var(--surface)] px-8 py-16">
-      <div className="pointer-events-none absolute left-[8%] top-11 h-px w-56 bg-[var(--theme-primary-soft)]" />
-      <div className="pointer-events-none absolute bottom-[8%] right-[8%] h-32 w-px bg-white/[0.08]" />
+    <main className="opp-auth-screen grid min-h-screen place-items-center overflow-hidden px-6 py-12">
+      <div className="opp-auth-orbit opp-auth-orbit--one" />
+      <div className="opp-auth-orbit opp-auth-orbit--two" />
+      <Card className="opp-auth-card relative z-10 w-full max-w-md p-7 sm:p-9">
+        <div className="flex items-center gap-3">
+          <span className="grid size-11 place-items-center rounded-xl border border-[var(--theme-primary-soft)] bg-[var(--theme-primary-muted)]">
+            <img alt="OPP" className="size-7 rounded-md" src="/opp-icon.png" />
+          </span>
+          <div><p className="text-lg font-semibold text-white">OPP</p><p className="text-xs text-slate-500">连接 osu! 账户</p></div>
+        </div>
 
-      <div className="relative z-10 grid w-full max-w-5xl grid-cols-[.9fr_1.1fr] overflow-hidden rounded-2xl border border-white/[0.1] bg-[var(--surface-panel)] shadow-[0_24px_80px_rgba(0,0,0,.32)]">
-        <section className="relative overflow-hidden border-r border-white/[0.08] bg-[var(--surface-sidebar)] p-10">
-          <div className="absolute inset-y-0 left-0 w-1 bg-[var(--theme-primary)]" />
-          <div className="relative">
-            <div className="mb-14 flex items-center gap-3">
-              <img alt="" className="size-11 rounded-lg border border-white/10" src="/opp-icon.png" />
-              <div>
-                <p className="text-lg font-semibold text-white">OPP</p>
-                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                  一站式 osu! 工具集合
-                </p>
-              </div>
-            </div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--theme-primary)]">
-              私人数据空间
-            </p>
-            <h1 className="mt-3 text-4xl font-semibold leading-tight tracking-[-0.045em] text-white">
-              让每一段游玩
-              <br />
-              都有迹可循。
-            </h1>
-            <p className="mt-5 max-w-sm text-sm leading-7 text-slate-400">
-              OPP 通过官方 osu! API v2 获取你的档案与最佳成绩。密钥和 Token
-              只会保存在 Windows 凭据管理器中。
-            </p>
-            <div className="mt-10 space-y-4">
-              {securityFeatures.map(({ label, icon: Icon }) => (
-                <div className="flex items-center gap-3 text-sm text-slate-300" key={label}>
-                  <span className="grid size-8 place-items-center rounded-md border border-white/[0.08] bg-white/[0.04] text-[var(--theme-primary)]">
-                    <Icon className="size-4" />
-                  </span>
-                  {label}
-                </div>
-              ))}
-            </div>
+        <div className="mt-9">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--theme-primary)]">{editing ? "应用设置" : "授权登录"}</p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">{editing ? "配置 OAuth 应用" : "准备好开始了吗？"}</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-400">{editing ? "填入你的 osu! OAuth 应用凭据即可继续。" : "点击授权后将在浏览器中完成登录，然后自动返回。"}</p>
+        </div>
+
+        {editing ? <div className="mt-7 space-y-5">
+          <div>
+            <div className="mb-2 flex items-center justify-between"><span className="text-xs font-medium text-slate-300">回调地址</span><button className="opp-action inline-flex items-center gap-1 text-xs text-[var(--theme-primary-light)] hover:text-white" onClick={() => void copyCallback()} type="button">{copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}{copied ? "已复制" : "复制"}</button></div>
+            <div className="select-all rounded-lg border border-[var(--line-subtle)] bg-black/10 px-3 py-2.5 font-mono text-xs text-slate-300">{status.callback_url}</div>
           </div>
-        </section>
+          <label className="block"><span className="mb-2 block text-xs font-medium text-slate-300">Client ID</span><input autoComplete="off" className="opp-input" inputMode="numeric" onChange={(event) => setClientId(event.target.value)} placeholder="例如 12345" value={clientId} /></label>
+          <label className="block"><span className="mb-2 block text-xs font-medium text-slate-300">Client Secret</span><input autoComplete="off" className="opp-input" onChange={(event) => setClientSecret(event.target.value)} placeholder="仅保存在本机凭据管理器" type="password" value={clientSecret} /></label>
+          <div className="flex gap-3"><Button className="flex-1" loading={saving} onClick={() => void saveCredentials()} variant="primary">保存并继续 <ArrowRight className="size-4" /></Button><Button aria-label="打开 osu! 设置" onClick={() => void desktopApi.openExternal(OSU_SETTINGS_URL)} size="icon"><ExternalLink className="size-4" /></Button></div>
+        </div> : <div className="mt-7">
+          <div className="flex items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.025] px-4 py-3"><ShieldCheck className="size-5 text-[var(--theme-primary)]" /><div><p className="text-sm font-medium text-white">应用已配置</p><p className="mt-0.5 text-xs text-slate-500">Client ID · {status.client_id}</p></div></div>
+          <Button className="mt-5 w-full" loading={authorizing} onClick={() => void authorize()} variant="primary">{authorizing ? "等待浏览器授权" : "使用 osu! 授权"}{authorizing ? null : <ExternalLink className="size-4" />}</Button>
+          <button className="opp-action mt-3 w-full py-2 text-xs text-slate-500 hover:text-slate-200" onClick={() => authorizing ? void desktopApi.cancelOAuthLogin().then(() => setAuthorizing(false)) : setEditing(true)} type="button">{authorizing ? "取消授权" : "修改应用凭据"}</button>
+        </div>}
 
-        <section className="p-10">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--theme-primary)]">
-            {editing ? "初始设置" : "连接账号"}
-          </p>
-          <h2 className="mt-2 text-2xl font-semibold text-white">
-            {editing ? "配置个人 OAuth 应用" : "准备连接 osu!"}
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-slate-400">
-            {editing
-              ? "在 osu! 账号设置中创建 OAuth 应用，并确保回调地址完全一致。"
-              : "凭据已安全保存。授权将在系统浏览器中完成。"}
-          </p>
-
-          {editing ? (
-            <div className="mt-7 space-y-5">
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <label className="text-xs font-medium text-slate-300">回调地址</label>
-                  <button
-                    className="inline-flex items-center gap-1 text-xs text-cyan-300 transition hover:text-cyan-100"
-                    onClick={copyCallback}
-                    type="button"
-                  >
-                    {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-                    {copied ? "已复制" : "复制"}
-                  </button>
-                </div>
-                <div className="select-all rounded-xl border border-white/[0.08] bg-black/20 px-3.5 py-3 font-mono text-xs text-slate-300">
-                  {status.callback_url}
-                </div>
-              </div>
-              <label className="block">
-                <span className="mb-2 block text-xs font-medium text-slate-300">Client ID</span>
-                <input
-                  autoComplete="off"
-                  className="opp-input"
-                  inputMode="numeric"
-                  onChange={(event) => setClientId(event.target.value)}
-                  placeholder="例如 12345"
-                  value={clientId}
-                />
-              </label>
-              <label className="block">
-                <span className="mb-2 block text-xs font-medium text-slate-300">
-                  Client Secret
-                </span>
-                <input
-                  autoComplete="off"
-                  className="opp-input"
-                  onChange={(event) => setClientSecret(event.target.value)}
-                  placeholder="只会写入 Windows 凭据管理器"
-                  type="password"
-                  value={clientSecret}
-                />
-              </label>
-              <div className="flex gap-3 pt-1">
-                <Button
-                  className="flex-1"
-                  onClick={saveCredentials}
-                  loading={saving}
-                  variant="primary"
-                >
-                  保存并继续
-                  <ArrowRight className="size-4" />
-                </Button>
-                <Button onClick={() => desktopApi.openExternal(OSU_SETTINGS_URL)}>
-                  <ExternalLink className="size-4" />
-                  打开 osu! 设置
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="mt-7">
-              <Card className="p-5">
-                <div className="flex items-center gap-4">
-                  <span className="grid size-11 place-items-center rounded-xl bg-emerald-400/10 text-emerald-200">
-                    <ShieldCheck className="size-5" />
-                  </span>
-                  <div>
-                    <p className="text-sm font-semibold text-white">OAuth 凭据已配置</p>
-                    <p className="mt-1 font-mono text-xs text-slate-500">
-                      Client ID · {status.client_id}
-                    </p>
-                  </div>
-                </div>
-              </Card>
-              <Button
-                className="mt-5 w-full"
-                loading={authorizing}
-                onClick={authorize}
-                variant="primary"
-              >
-                {authorizing ? "等待浏览器授权" : "使用 osu! 授权"}
-                {!authorizing ? <ExternalLink className="size-4" /> : null}
-              </Button>
-              {authorizing ? (
-                <button
-                  className="mt-3 w-full py-2 text-xs text-slate-500 hover:text-slate-300"
-                  onClick={cancel}
-                  type="button"
-                >
-                  取消授权
-                </button>
-              ) : (
-                <button
-                  className="mt-3 w-full py-2 text-xs text-slate-500 hover:text-slate-300"
-                  onClick={() => setEditing(true)}
-                  type="button"
-                >
-                  重新配置凭据
-                </button>
-              )}
-            </div>
-          )}
-
-          {error ? (
-            <div
-              className="mt-5 flex items-start gap-3 rounded-xl border border-rose-400/15 bg-rose-400/[0.08] p-3.5 text-sm leading-6 text-rose-200"
-              role="alert"
-            >
-              {authorizing ? (
-                <LoaderCircle className="mt-1 size-4 shrink-0 animate-spin" />
-              ) : (
-                <span className="mt-2 size-1.5 shrink-0 rounded-full bg-rose-300" />
-              )}
-              {error}
-            </div>
-          ) : null}
-        </section>
-      </div>
+        {error ? <div className="mt-5 rounded-xl border border-rose-400/15 bg-rose-400/[0.08] px-3.5 py-3 text-sm leading-6 text-rose-200" role="alert">{error}</div> : null}
+      </Card>
     </main>
   );
 }

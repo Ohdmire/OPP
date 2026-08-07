@@ -45,18 +45,16 @@ function NavItem({ to, label, icon: Icon, emphasis }: NavItemProps) {
   return (
     <NavLink
       className={cn(
-        "group relative flex min-h-10 items-center gap-3 rounded-lg border border-transparent px-2.5 text-[13px] font-medium text-slate-400 outline-none transition-colors duration-200 hover:bg-white/[0.045] hover:text-slate-100 focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]",
-        emphasis === "beatmaps" && "min-h-12 border-cyan-300/20 bg-cyan-300/[0.075] px-3 text-cyan-50 hover:bg-cyan-300/[0.13]",
-        emphasis === "similar" && "min-h-12 border-violet-300/20 bg-violet-300/[0.075] px-3 text-violet-50 hover:bg-violet-300/[0.13]",
-        emphasis === "trainer" && "min-h-12 border-pink-300/20 bg-pink-300/[0.075] px-3 text-pink-50 hover:bg-pink-300/[0.13]",
-        active && "selected-mask border-[var(--theme-primary)] text-white before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-[var(--theme-primary)]",
+        "opp-nav-item group flex min-h-10 items-center gap-3 px-3 text-[13px] font-medium text-slate-400 outline-none hover:bg-[var(--surface-interactive)] hover:text-slate-100 focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]",
+        emphasis && "min-h-11",
+        active && "text-white",
       )}
       end
       ref={linkRef}
       to={to}
     >
       {emphasis ? (
-        <span className={cn("grid size-7 shrink-0 place-items-center rounded-md", emphasis === "beatmaps" ? "bg-cyan-300/15 text-cyan-200" : emphasis === "similar" ? "bg-violet-300/15 text-violet-200" : "bg-pink-300/15 text-pink-200")}>
+        <span className={cn("grid size-7 shrink-0 place-items-center", emphasis === "beatmaps" ? "text-cyan-200" : emphasis === "similar" ? "text-violet-200" : "text-pink-200")}>
           <Icon className="size-4" />
         </span>
       ) : <Icon className="size-4 shrink-0" />}
@@ -84,8 +82,8 @@ export function Sidebar({ profile, loading }: { profile?: OwnProfile; loading: b
   };
 
   return (
-    <aside className="fixed bottom-0 left-0 top-11 z-40 flex w-[248px] flex-col overflow-hidden border-r border-white/[0.08] bg-[var(--surface-sidebar)] px-3 pb-3 pt-4">
-      <div className="mb-4 border-b border-white/[0.07] px-2 pb-4"><div className="flex items-center gap-3"><img alt="OPP" className="size-10 rounded-lg border border-white/10" src="/opp-icon.png" /><p className="text-sm font-semibold text-white">OSU! Plus Plus</p></div></div>
+    <aside className="fixed bottom-0 left-0 top-11 z-40 flex w-[248px] flex-col overflow-hidden border-r border-[var(--line-subtle)] bg-[var(--surface-sidebar)] px-3 pb-3 pt-4">
+      <div className="mb-4 border-b border-[var(--line-subtle)] px-2 pb-4"><div className="flex items-center gap-3"><img alt="OPP" className="opp-brand-mark size-10" src="/opp-icon.png" /><p className="text-sm font-semibold tracking-wide text-white">OSU! Plus Plus</p></div></div>
       <nav aria-label="主导航" className="min-h-0 flex-1 overflow-y-auto pr-1">
         <NavGroup label="核心功能">
           <NavItem emphasis="beatmaps" icon={Music2} label="在线谱面" to="/online/beatmaps" />

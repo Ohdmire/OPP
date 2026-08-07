@@ -252,7 +252,7 @@ function BeatmapSetCard({
       </div>
       {neteaseError ? <p className="border-t border-rose-300/15 bg-rose-300/[0.05] px-5 py-2 text-xs text-rose-100" role="alert">{errorMessage(neteaseError)}</p> : null}
     </article>
-    <LocalDifficultyDialog client={client} onClose={() => setDifficultyDialogOpen(false)} onFindSimilar={onFindSimilar} onOpen={onOpen} open={difficultyDialogOpen} set={set} />
+    <LocalDifficultyDialog client={client} onClose={() => setDifficultyDialogOpen(false)} onFindSimilar={onFindSimilar} onOpen={(resourceId) => { setDifficultyDialogOpen(false); onOpen(resourceId); }} open={difficultyDialogOpen} set={set} />
     </>
   );
 }

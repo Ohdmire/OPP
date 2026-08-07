@@ -111,6 +111,8 @@ pub struct SimilarityRecommendationRequest {
     #[serde(default)]
     pub filters: QueryFilters,
     pub result_limit: usize,
+    #[serde(default)]
+    pub seed_limit: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize)]

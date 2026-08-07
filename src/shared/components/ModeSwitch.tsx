@@ -17,14 +17,14 @@ export function ModeSwitch({
   return (
     <div
       aria-label="游戏模式"
-      className="inline-flex rounded-lg border border-white/[0.09] bg-black/15 p-0.5"
+      className="opp-control-track inline-flex gap-1 border-b border-[var(--line-subtle)] p-0"
       role="tablist"
     >
       {modes.map((mode) => (
         <button
           aria-selected={value === mode}
           className={cn(
-            "relative inline-flex min-h-9 items-center gap-2 rounded-md px-3 py-1.5 text-xs font-semibold text-slate-500 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]",
+            "opp-action relative inline-flex min-h-9 items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-500 outline-none hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]",
             compact && "min-h-8 px-2.5 py-1 text-[10px]",
             value === mode &&
               "selected-mask text-[var(--theme-primary)]",

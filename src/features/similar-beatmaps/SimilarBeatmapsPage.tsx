@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Download, FolderOpen, History, Map as MapIcon, RefreshCw, Search, Trophy, Upload } from "lucide-react";
+import { Download, FolderOpen, History, LoaderCircle, Map as MapIcon, RefreshCw, Search, Trophy, Upload } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { PageHeader } from "../../shared/components/PageHeader";
@@ -9,8 +9,6 @@ import { errorMessage } from "../../shared/lib/format";
 import { settingsQueryKey, useSettings } from "../settings/api";
 import { desktopApi } from "../../shared/lib/tauri";
 import type {
-  SimilarityBaseFeatures,
-  SimilarityFilters,
   SimilarityIndexStatus,
   SimilarityQueryRequest,
   SimilarityQueryResponse,
@@ -35,7 +33,7 @@ import { SimilarityAdvancedPanel } from "./SimilarityAdvancedPanel";
 import { SimilarityFilterSliders } from "./SimilarityFilterSliders";
 import { SimilarityRadar } from "./SimilarityRadar";
 import { SimilarityResultCard } from "./SimilarityResultCard";
-import { DynamicWeightProfileCard } from "./DynamicWeightProfile";
+import { SimilarityComparisonPanel } from "./SimilarityComparisonPanel";
 import {
   onlineBeatmapRouteForSimilarityResult,
   parseSimilarityLaunch,
@@ -43,45 +41,18 @@ import {
 import { normalizePreviewUrl } from "../online-beatmaps/filters";
 import { resolveDefaultDownloadProvider } from "../online-beatmaps/downloadProvider";
 import { openCollectionDialog } from "../collections/events";
+import {
+  formatDataCutoff,
+  formatSimilarityMetric,
+  matchesCandidateFilters,
+  resolveSimilarityWeighting,
+  similarityIndexStateCopy,
+} from "./viewModel";
 
-const DIFFICULTY_DIMENSIONS = [
-  ["aim", "Aim"],
-  ["speed", "Speed"],
-  ["reading", "Reading"],
-  ["slider", "Slider"],
-  ["overlap", "Overlap"],
-] as const;
 const RESULTS_PER_BATCH = 5;
 
 function manualWeighting() {
   return manualWeightingFromPreferences();
-}
-
-function matchesCandidateFilters(
-  base: SimilarityBaseFeatures,
-  starRating: number | null,
-  filters: SimilarityFilters,
-) {
-  return (
-    (filters.min_star == null || (starRating != null && starRating >= filters.min_star)) &&
-    (filters.max_star == null || (starRating != null && starRating <= filters.max_star)) &&
-    (filters.min_ar == null || base.ar >= filters.min_ar) &&
-    (filters.max_ar == null || base.ar <= filters.max_ar) &&
-    (filters.min_cs == null || base.cs >= filters.min_cs) &&
-    (filters.max_cs == null || base.cs <= filters.max_cs) &&
-    (filters.min_od == null || base.od >= filters.min_od) &&
-    (filters.max_od == null || base.od <= filters.max_od) &&
-    (filters.min_bpm == null || base.bpm >= filters.min_bpm) &&
-    (filters.max_bpm == null || base.bpm <= filters.max_bpm) &&
-    (filters.min_length_seconds == null || base.length_seconds >= filters.min_length_seconds) &&
-    (filters.max_length_seconds == null || base.length_seconds <= filters.max_length_seconds) &&
-    (filters.min_object_density == null || base.object_density >= filters.min_object_density) &&
-    (filters.max_object_density == null || base.object_density <= filters.max_object_density) &&
-    (filters.min_circle_ratio == null || base.circle_ratio >= filters.min_circle_ratio) &&
-    (filters.max_circle_ratio == null || base.circle_ratio <= filters.max_circle_ratio) &&
-    (filters.min_slider_ratio == null || base.slider_ratio >= filters.min_slider_ratio) &&
-    (filters.max_slider_ratio == null || base.slider_ratio <= filters.max_slider_ratio)
-  );
 }
 
 interface SimilaritySession {
@@ -99,42 +70,6 @@ function saveSimilaritySession(session: SimilaritySession) {
   similaritySession = session;
 }
 
-const STATE_COPY: Record<
-  Exclude<SimilarityIndexStatus["state"], "ready">,
-  { title: string; description: string }
-> = {
-  unconfigured: {
-    title: "本地索引未配置",
-    description:
-      "请选择一个兼容的本地索引目录。相似谱面功能只会在本机以只读方式使用该目录。",
-  },
-  missing: {
-    title: "本地索引目录不可用",
-    description: "此前选择的目录已移动或删除，请重新选择目录或重新校验。",
-  },
-  invalid: {
-    title: "本地索引校验失败",
-    description: "目录中的必要文件缺失、校验值不一致，或索引内容已损坏。",
-  },
-  incompatible: {
-    title: "本地索引版本不兼容",
-    description: "该索引使用的分析器、归一化器或索引格式与当前版本不兼容。",
-  },
-};
-
-function formatMetric(value: number | null, digits = 2) {
-  return value == null ? "—" : value.toFixed(digits);
-}
-
-function formatDataCutoff(value: number | null) {
-  if (value == null) return "索引未声明数据截止时间";
-  return new Intl.DateTimeFormat("zh-CN", {
-    dateStyle: "long",
-    timeStyle: "short",
-    timeZone: "UTC",
-  }).format(new Date(value * 1000));
-}
-
 function IndexUnavailable({
   status,
   busy,
@@ -146,7 +81,7 @@ function IndexUnavailable({
   onChoose: () => void;
   onRetry: () => void;
 }) {
-  const copy = STATE_COPY[status.state as Exclude<SimilarityIndexStatus["state"], "ready">];
+  const copy = similarityIndexStateCopy[status.state as Exclude<SimilarityIndexStatus["state"], "ready">];
 
   return (
     <EmptyState
@@ -195,6 +130,7 @@ export function SimilarBeatmapsPage() {
     useState<SimilarityRecommendationResponse | null>(
       () => similaritySession?.recommendationResponse ?? null,
     );
+  const [recommendationCompleting, setRecommendationCompleting] = useState(false);
   const [selectedResultId, setSelectedResultId] = useState<number | null>(
     () => similaritySession?.selectedResultId ?? null,
   );
@@ -203,6 +139,7 @@ export function SimilarBeatmapsPage() {
   const restoreScrollY = useRef(similaritySession?.scrollY ?? null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const preferenceSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recommendationRun = useRef(0);
   const previewVolume = settings.data?.preview_volume ?? 65;
   const preferences = useMemo(() => ({
     ...defaultSimilarityPreferences,
@@ -263,38 +200,11 @@ export function SimilarBeatmapsPage() {
       supports_dynamic_weighting: false,
       message: statusQuery.error ? errorMessage(statusQuery.error) : "",
     } satisfies SimilarityIndexStatus);
-  const effectiveWeighting = preferences.advanced_enabled
-    ? status.supports_dynamic_weighting || request.weighting.mode === "manual"
-      ? request.weighting
-      : manualWeightingFromPreferences(preferences)
-    : status.supports_dynamic_weighting
-      ? { ...defaultDynamicWeighting }
-      : manualWeighting();
-  const bestRecommendationRequest = useMemo(() => ({
-    kind: "best" as const,
-    weighting: effectiveWeighting,
-    filters: { ...request.filters },
-    result_limit: request.result_limit,
-  }), [effectiveWeighting, request.filters, request.result_limit]);
-
-  useEffect(() => {
-    if (status.state !== "ready" || settings.isLoading) return;
-    void queryClient.prefetchQuery({
-      queryKey: similarityRecommendationKey(bestRecommendationRequest),
-      queryFn: () => desktopApi.recommendSimilarBeatmaps(bestRecommendationRequest),
-      staleTime: 5 * 60_000,
-    });
-  }, [bestRecommendationRequest, queryClient, settings.isLoading, status.state]);
-
-  useEffect(() => {
-    if (!settings.data || !preferences.advanced_enabled) return;
-    setRequest((current) => ({
-      ...current,
-      weighting: preferences.mode === "dynamic" && status.supports_dynamic_weighting
-        ? { mode: "dynamic", lower_sections: preferences.lower_sections, upper_sections: preferences.upper_sections }
-        : manualWeightingFromPreferences(preferences),
-    }));
-  }, [preferences, settings.data, status.supports_dynamic_weighting]);
+  const effectiveWeighting = resolveSimilarityWeighting(
+    request,
+    preferences,
+    status.supports_dynamic_weighting,
+  );
 
   useEffect(() => () => {
     if (preferenceSaveTimer.current) clearTimeout(preferenceSaveTimer.current);
@@ -415,6 +325,8 @@ export function SimilarBeatmapsPage() {
   }
 
   function switchSource(kind: "beatmap_id" | "local_file") {
+    recommendationRun.current += 1;
+    setRecommendationCompleting(false);
     similarityQuery.reset();
     similarityRecommendation.reset();
     setResponse(null);
@@ -536,6 +448,8 @@ export function SimilarBeatmapsPage() {
     setSelectedResultId(null);
     setResponse(null);
     setRecommendationResponse(null);
+    recommendationRun.current += 1;
+    setRecommendationCompleting(false);
     similarityRecommendation.reset();
     similarityQuery.mutate({
       ...request,
@@ -549,28 +463,57 @@ export function SimilarBeatmapsPage() {
   }
 
   function recommend(kind: SimilarityRecommendationKind) {
+    const run = recommendationRun.current + 1;
+    recommendationRun.current = run;
     setConfigurationError(null);
     setResultBatch(0);
     setSelectedResultId(null);
     setResponse(null);
     setRecommendationResponse(null);
+    setRecommendationCompleting(false);
     similarityQuery.reset();
-    const nextRequest = {
-        kind,
-        weighting: effectiveWeighting,
-        filters: { ...request.filters },
-        result_limit: request.result_limit,
-      };
-    const cacheKey = similarityRecommendationKey(nextRequest);
-    const cached = queryClient.getQueryData<SimilarityRecommendationResponse>(cacheKey);
+    const fullRequest = {
+      kind,
+      weighting: effectiveWeighting,
+      filters: { ...request.filters },
+      result_limit: request.result_limit,
+    };
+    const fullCacheKey = similarityRecommendationKey(fullRequest);
+    const complete = (nextResponse: SimilarityRecommendationResponse) => {
+      if (recommendationRun.current !== run) return;
+      queryClient.setQueryData(fullCacheKey, nextResponse);
+      setRecommendationResponse(nextResponse);
+      setRecommendationCompleting(false);
+    };
+    const cached = queryClient.getQueryData<SimilarityRecommendationResponse>(fullCacheKey);
     if (cached) {
-      setRecommendationResponse(cached);
+      complete(cached);
       return;
     }
-    similarityRecommendation.mutate(nextRequest, {
+
+    const quickRequest = { ...fullRequest, result_limit: 5, seed_limit: 5 };
+    const quickCacheKey = similarityRecommendationKey(quickRequest);
+    const finishInBackground = () => {
+      if (fullRequest.result_limit <= 5) return;
+      setRecommendationCompleting(true);
+      void desktopApi.recommendSimilarBeatmaps(fullRequest)
+        .then(complete)
+        .catch(() => {
+          if (recommendationRun.current === run) setRecommendationCompleting(false);
+        });
+    };
+    const quickCached = queryClient.getQueryData<SimilarityRecommendationResponse>(quickCacheKey);
+    if (quickCached) {
+      if (recommendationRun.current === run) setRecommendationResponse(quickCached);
+      finishInBackground();
+      return;
+    }
+    similarityRecommendation.mutate(quickRequest, {
       onSuccess: (nextResponse) => {
-        queryClient.setQueryData(cacheKey, nextResponse);
+        if (recommendationRun.current !== run) return;
+        queryClient.setQueryData(quickCacheKey, nextResponse);
         setRecommendationResponse(nextResponse);
+        finishInBackground();
       },
     });
   }
@@ -803,23 +746,24 @@ export function SimilarBeatmapsPage() {
                         ? `，跳过 ${recommendationResponse.skipped_seed_count} 张无法读取的谱面`
                         : ""}
                     </p>
+                    {recommendationCompleting ? <p className="mt-3 flex items-center gap-2 text-xs text-[var(--theme-primary-light)]"><LoaderCircle className="size-3.5 animate-spin" />已优先展示 5 首推荐，正在后台完善更多结果</p> : null}
                   </Card>
                 ) : response ? (
-                  <Card className="mb-5 grid items-center gap-4 p-5 sm:grid-cols-[minmax(0,1fr)_320px]">
+                  <Card className="similarity-reference-summary mb-4 grid items-center gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_210px]">
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--theme-primary)]">参考谱面</span>
                       <h2 className="mt-2 text-lg font-semibold text-white">{response.target.version || "本地谱面"}</h2>
                       <p className="mt-1 text-sm text-slate-400">
                         {response.target.artist} — {response.target.title}
                       </p>
-                      <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-400">
-                        <span>AR {formatMetric(response.target.base.ar, 1)}</span>
-                        <span>星数 {formatMetric(response.target.star_rating, 2)}★</span>
-                        <span>BPM {formatMetric(response.target.base.bpm, 0)}</span>
-                        <span>长度 {formatMetric(response.target.base.length_seconds, 0)}s</span>
+                      <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-400">
+                        <span>AR {formatSimilarityMetric(response.target.base.ar, 1)}</span>
+                        <span>星数 {formatSimilarityMetric(response.target.star_rating, 2)}★</span>
+                        <span>BPM {formatSimilarityMetric(response.target.base.bpm, 0)}</span>
+                        <span>长度 {formatSimilarityMetric(response.target.base.length_seconds, 0)}s</span>
                       </div>
                     </div>
-                    <SimilarityRadar target={response.target.difficulty} />
+                    <SimilarityRadar compact target={response.target.difficulty} />
                   </Card>
                 ) : null}
 
@@ -864,81 +808,13 @@ export function SimilarBeatmapsPage() {
               </div>
 
               {selected && comparisonTarget ? (
-                <aside className="sticky top-[120px] self-start">
-                <Card className="similarity-comparison-panel min-h-[520px] resize-y overflow-hidden p-5">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--theme-primary)]">特征对比</span>
-                  <h2 className="mt-2 text-base font-semibold text-white">{selected.version}</h2>
-                  <p className="mt-1 truncate text-xs text-slate-400">
-                    {selected.artist} — {selected.title}
-                  </p>
-                  {recommendedBy ? (
-                    <p className="mt-2 text-xs text-cyan-200">
-                      由 {recommendedBy.artist} - {recommendedBy.title} [{recommendedBy.version}] 推荐
-                    </p>
-                  ) : null}
-                  <SimilarityRadar
-                    target={comparisonTarget.difficulty}
-                    comparison={selected.difficulty}
-                  />
-                  {selectedDynamicProfile ? <DynamicWeightProfileCard compact profile={selectedDynamicProfile} /> : null}
-                  <div className="mb-4 space-y-1.5">
-                    {DIFFICULTY_DIMENSIONS.map(([key, label]) => {
-                      const difference =
-                        selected.difficulty[key] - comparisonTarget.difficulty[key];
-                      return (
-                        <div
-                          className="flex items-center justify-between border-b border-white/[0.055] py-1.5 text-xs last:border-b-0"
-                          key={key}
-                        >
-                          <span className="text-slate-400">{label}</span>
-                          <span className="font-mono text-slate-200">
-                            {selected.difficulty[key].toFixed(3)}
-                            <small
-                              className={
-                                difference === 0
-                                  ? "ml-2 text-slate-500"
-                                  : difference > 0
-                                    ? "ml-2 text-rose-300"
-                                    : "ml-2 text-emerald-300"
-                              }
-                            >
-                              {difference >= 0 ? "+" : ""}
-                              {difference.toFixed(3)}
-                            </small>
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="mb-4 space-y-1.5 border-t border-white/[0.07] pt-3">
-                    {(["ar", "cs", "od"] as const).map((key) => {
-                      const difference = selected.base[key] - comparisonTarget.base[key];
-                      return <div className="flex items-center justify-between border-b border-white/[0.055] py-1.5 text-xs last:border-b-0" key={key}>
-                        <span className="text-slate-400">{key.toUpperCase()}</span>
-                        <span className="font-mono text-slate-200">{comparisonTarget.base[key].toFixed(1)} → {selected.base[key].toFixed(1)} <small className={difference === 0 ? "ml-2 text-slate-500" : difference > 0 ? "ml-2 text-rose-300" : "ml-2 text-emerald-300"}>{difference >= 0 ? "+" : ""}{difference.toFixed(1)}</small></span>
-                      </div>;
-                    })}
-                  </div>
-                  <div className="hidden">
-                    <div className="rounded-lg border border-white/[0.07] bg-black/10 p-3">
-                      <span className="block text-[10px] text-slate-500">最终距离</span>
-                      <strong className="mt-1 block font-mono text-sm text-white">{selected.final_distance.toFixed(4)}</strong>
-                    </div>
-                    <div className="rounded-lg border border-white/[0.07] bg-black/10 p-3">
-                      <span className="block text-[10px] text-slate-500">难度距离</span>
-                      <strong className="mt-1 block font-mono text-sm text-white">{selected.difficulty_distance.toFixed(4)}</strong>
-                    </div>
-                  </div>
-                  <Button
-                    className="w-full"
-                    variant="primary"
-                    type="button"
-                    onClick={() => openOnlineBeatmap(selected)}
-                  >
-                    在在线谱面中查看
-                  </Button>
-                </Card>
-                </aside>
+                <SimilarityComparisonPanel
+                  selected={selected}
+                  target={comparisonTarget}
+                  recommendedBy={recommendedBy}
+                  dynamicProfile={selectedDynamicProfile}
+                  onOpen={() => openOnlineBeatmap(selected)}
+                />
               ) : null}
             </section>
           ) : null}

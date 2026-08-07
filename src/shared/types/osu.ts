@@ -251,6 +251,7 @@ export interface SimilarityRecommendationRequest {
   weighting: SimilarityWeighting;
   filters: SimilarityFilters;
   result_limit: number;
+  seed_limit?: number;
 }
 
 export interface SimilarityRecommendationResult extends SimilarityResult {

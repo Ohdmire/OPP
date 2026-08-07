@@ -361,6 +361,7 @@ mod tests {
             weighting: WeightingMode::default(),
             filters: QueryFilters::default(),
             result_limit: 20,
+            seed_limit: None,
         };
         assert_eq!(
             options_from_recommendation_request(&recommendation)

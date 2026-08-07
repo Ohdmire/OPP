@@ -73,6 +73,12 @@ export function SimilarityAdvancedPanel({
         </div>
       </div>
 
+      {!supportsDynamicWeighting && preferences.mode === "dynamic" ? (
+        <p className="mt-4 rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-xs text-amber-100">
+          当前索引不含动态统计，已切换为手动权重。
+        </p>
+      ) : null}
+
       {dynamicWeighting ? (
         <section className="mt-5">
           <div className="grid gap-3 sm:grid-cols-2">

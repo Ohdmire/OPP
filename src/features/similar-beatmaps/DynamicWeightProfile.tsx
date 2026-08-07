@@ -10,7 +10,7 @@ export function DynamicWeightProfileCard({ profile }: { profile: SimilarityDynam
   return (
     <section className="mt-4 border-t border-white/[0.07] pt-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div><span className="text-[10px] font-bold uppercase tracking-[0.18em] text-violet-300">动态权重档案</span><p className="mt-1 text-xs text-slate-500">AR、CS、OD 分别统计，共享一组最终权重。</p></div>
+        <div><span className="text-[10px] font-bold uppercase tracking-[0.18em] text-violet-300">动态权重档案</span><p className="mt-1 text-xs text-slate-500">三个基础参数分别统计，共享一组最终权重。</p></div>
         <div className="text-right text-[11px] text-slate-500"><p>目标 {profile.target_star_rating.toFixed(2)}★ · 候选 {sectionLabel(profile.candidate_min_section)}–{sectionLabel(profile.candidate_max_section)}★</p><p>统计范围 {sectionLabel(profile.stats_min_section)}–{sectionLabel(profile.stats_max_section)}★ · {profile.sample_count.toLocaleString()} 张</p></div>
       </div>
       {profile.fallback_reason ? <p className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-xs text-amber-100">已回退默认权重：{profile.fallback_reason}</p> : null}

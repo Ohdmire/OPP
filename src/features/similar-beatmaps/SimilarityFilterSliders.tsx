@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { ChevronDown, RotateCcw, SlidersHorizontal } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { RotateCcw, SlidersHorizontal, X } from "lucide-react";
 
 import { Button, Card } from "../../shared/components/ui";
 import type { SimilarityFilters, SimilarityQueryRequest } from "../../shared/types/osu";
@@ -34,7 +35,7 @@ function RangeFilter({ control, filters, onChange }: { control: FilterControl; f
     else setMaximum(clamped);
   };
   return (
-    <section className="rounded-xl border border-white/[0.08] bg-black/[0.08] px-3.5 py-3">
+    <section className="border-t border-[var(--line-subtle)] px-3.5 py-3">
       <div className="mb-2 flex items-center justify-between gap-3"><h3 className="text-xs font-semibold text-slate-200">{control.label}</h3><output className="font-mono text-[11px] text-[var(--theme-primary-light)]">{format(currentMin)} — {format(currentMax)}</output></div>
       <div className="flex items-center gap-2">
         <input aria-label={`${control.label} 最低`} className="opp-filter-number" max={currentMax} min={control.floor} onChange={(event) => setTypedValue("min", event.target.value)} step={control.step} type="number" value={filters[control.minKey] ?? ""} />
@@ -52,18 +53,51 @@ function RangeFilter({ control, filters, onChange }: { control: FilterControl; f
 
 export function SimilarityFilterSliders({ request, onChange }: { request: SimilarityQueryRequest; onChange: (request: SimilarityQueryRequest) => void }) {
   const [open, setOpen] = useState(false);
+  const [triggerAnimating, setTriggerAnimating] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const triggerAnimationTimer = useRef<number | undefined>(undefined);
   const activeCount = Object.entries(request.filters).filter(([key, value]) => value !== defaultSimilarityFilters[key as keyof SimilarityFilters]).length;
-  return (
-    <Card className="mb-5 overflow-hidden p-0">
-      <div className={`flex items-center justify-between gap-4 px-5 py-3 ${open ? "border-b border-white/[0.08]" : ""}`}>
-        <button aria-expanded={open} className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => setOpen((value) => !value)} type="button">
-          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-white/[0.04] text-slate-400"><SlidersHorizontal className="size-4" /></span>
-          <span><span className="text-sm font-semibold text-slate-200">候选谱面筛选</span>{activeCount ? <span className="ml-2 rounded-full bg-[var(--theme-primary-soft)] px-2 py-0.5 text-[10px] text-[var(--theme-primary-light)]">已启用 {activeCount} 项</span> : <span className="ml-2 text-xs text-slate-600">未启用</span>}</span>
-          <ChevronDown className={`ml-auto size-4 text-slate-500 transition-transform ${open ? "rotate-180" : ""}`} />
-        </button>
-        {activeCount ? <Button onClick={() => onChange({ ...request, filters: { ...defaultSimilarityFilters } })} size="sm" variant="ghost"><RotateCcw className="size-3.5" />清除</Button> : null}
-      </div>
-      {open ? <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-3">{controls.map((control) => <RangeFilter control={control} filters={request.filters} key={control.label} onChange={(filters) => onChange({ ...request, filters })} />)}</div> : null}
-    </Card>
+
+  const toggle = () => {
+    window.clearTimeout(triggerAnimationTimer.current);
+    setTriggerAnimating(false);
+    requestAnimationFrame(() => setTriggerAnimating(true));
+    triggerAnimationTimer.current = window.setTimeout(() => setTriggerAnimating(false), 240);
+    setOpen((value) => !value);
+  };
+
+  useEffect(() => () => window.clearTimeout(triggerAnimationTimer.current), []);
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  return createPortal(
+    <div ref={popoverRef}>
+      <Card className={`opp-candidate-filter-panel !fixed bottom-20 left-[276px] z-[170] w-[360px] max-w-[calc(100vw-304px)] origin-bottom-left overflow-hidden p-0 shadow-xl transition-[opacity,transform] duration-200 ease-out ${open ? "opp-candidate-filter-panel--open translate-y-0 scale-100 opacity-100" : "pointer-events-none translate-y-3 scale-[0.98] opacity-0"}`}>
+        <div className="flex items-center justify-between gap-4 border-b border-white/[0.08] px-5 py-3">
+          <div><p className="text-sm font-semibold text-slate-200">候选谱面筛选</p><p className="mt-0.5 text-xs text-slate-500">{activeCount ? `已启用 ${activeCount} 项条件` : "未启用条件"}</p></div>
+          <div className="flex items-center gap-1">{activeCount ? <Button aria-label="清除筛选" onClick={() => onChange({ ...request, filters: { ...defaultSimilarityFilters } })} size="icon" variant="ghost"><RotateCcw className="size-3.5" /></Button> : null}<Button aria-label="关闭筛选" onClick={() => setOpen(false)} size="icon" variant="ghost"><X className="size-4" /></Button></div>
+        </div>
+        <div className="opp-filter-body max-h-[calc(100vh-10rem)] overflow-y-auto px-5 pb-4">{controls.map((control) => <RangeFilter control={control} filters={request.filters} key={control.label} onChange={(filters) => onChange({ ...request, filters })} />)}</div>
+      </Card>
+      <button aria-expanded={open} aria-label={open ? "收起候选谱面筛选" : "打开候选谱面筛选"} className={`opp-candidate-filter-trigger fixed bottom-7 left-[276px] z-[171] grid size-11 place-items-center rounded-lg border border-white/10 bg-[var(--surface-panel)] text-[var(--theme-primary)] shadow-xl transition-colors hover:border-[var(--theme-primary-soft)] hover:bg-[var(--theme-primary-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] ${triggerAnimating ? "opp-candidate-filter-trigger--animate" : ""}`} onClick={toggle} type="button">
+        <SlidersHorizontal className={`size-5 transition-transform duration-200 ${open ? "rotate-90" : ""}`} />
+        {activeCount ? <span className="absolute -right-1 -top-1 grid size-4 place-items-center rounded-full bg-[var(--theme-primary)] text-[9px] font-bold text-[var(--on-primary)]">{activeCount > 9 ? "9+" : activeCount}</span> : null}
+      </button>
+    </div>,
+    document.body,
   );
 }

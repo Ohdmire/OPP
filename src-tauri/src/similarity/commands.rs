@@ -1,11 +1,11 @@
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
 use tauri::State;
 
 use crate::{
     account::ensure_access_token,
     error::{CommandError, CommandResult},
-    models::{Ruleset, Score},
+    models::Ruleset,
     similarity::{
         models::{
             SimilarityIndexStatus, SimilarityQueryRequest, SimilarityQueryResponse,
@@ -16,6 +16,7 @@ use crate::{
             map_runtime_error, options_from_recommendation_request, options_from_request,
             recommendation_response_from_runtime, response_from_runtime,
         },
+        recommendation::{requested_seed_limit, seed_ids},
         source::{fetch_online_osu, parse_beatmap_id, read_local_osu},
     },
     state::AppState,
@@ -109,8 +110,6 @@ pub async fn recommend_similar_beatmaps(
     request: SimilarityRecommendationRequest,
     state: State<'_, AppState>,
 ) -> CommandResult<SimilarityRecommendationResponse> {
-    const SEED_LIMIT: usize = 20;
-
     let directory = configured_directory(&state)?.ok_or_else(|| {
         CommandError::new(
             "SIMILARITY_INDEX_NOT_CONFIGURED",
@@ -147,7 +146,7 @@ pub async fn recommend_similar_beatmaps(
                 .await?
         }
     };
-    let seed_ids = recommendation_seed_ids(&scores, SEED_LIMIT);
+    let seed_ids = seed_ids(&scores, requested_seed_limit(request.seed_limit));
     if seed_ids.is_empty() {
         return Err(CommandError::new(
             "NO_RECOMMENDATION_SEEDS",
@@ -205,16 +204,6 @@ pub async fn recommend_similar_beatmaps(
     .map_err(|_| CommandError::new("SIMILARITY_RUNTIME_ERROR", "推荐谱面查询任务意外停止"))?
 }
 
-fn recommendation_seed_ids(scores: &[Score], limit: usize) -> Vec<u64> {
-    let mut seen = HashSet::new();
-    scores
-        .iter()
-        .filter_map(|score| score.beatmap.as_ref()?.get("id")?.as_u64())
-        .filter(|beatmap_id| seen.insert(*beatmap_id))
-        .take(limit)
-        .collect()
-}
-
 async fn inspect(
     runtime: Arc<crate::similarity::dataset::SimilarityRuntime>,
     directory: Option<String>,
@@ -226,27 +215,4 @@ async fn inspect(
 
 fn configured_directory(state: &AppState) -> CommandResult<Option<String>> {
     Ok(state.store.snapshot()?.settings.similarity_index_directory)
-}
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::*;
-
-    fn score(beatmap_id: Option<u64>) -> Score {
-        serde_json::from_value(json!({
-            "user_id": 1,
-            "rank": "A",
-            "statistics": {},
-            "beatmap": beatmap_id.map(|id| json!({ "id": id }))
-        }))
-        .expect("score fixture")
-    }
-
-    #[test]
-    fn recommendation_seeds_are_ordered_deduplicated_and_limited() {
-        let scores = vec![score(Some(8)), score(None), score(Some(8)), score(Some(9))];
-        assert_eq!(recommendation_seed_ids(&scores, 2), vec![8, 9]);
-    }
 }

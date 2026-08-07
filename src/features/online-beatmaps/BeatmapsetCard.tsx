@@ -25,7 +25,7 @@ export function BeatmapsetCard({ beatmapset, downloading, playing, selected, onA
   const maxStars = beatmaps.length ? Math.max(...beatmaps.map((beatmap) => beatmap.difficulty_rating)) : 0;
   const objects = beatmaps.reduce((sum, beatmap) => sum + (beatmap.count_circles ?? 0) + (beatmap.count_sliders ?? 0) + (beatmap.count_spinners ?? 0), 0);
   const disabled = beatmapset.availability?.download_disabled === true;
-  return <Card className={`group cursor-pointer overflow-hidden transition ${selected ? "border-cyan-300/30 bg-cyan-300/[0.045] shadow-[0_14px_44px_rgba(92,225,230,.08)]" : "hover:border-white/[0.13] hover:bg-[#121a28]"}`} onClick={onOpen} role="button" tabIndex={0}>
+  return <Card className={`opp-interactive-surface group cursor-pointer overflow-hidden ${selected ? "selected-mask" : ""}`} onClick={onOpen} role="button" tabIndex={0}>
     <div className="flex min-h-[150px]">
       <button aria-label={selected ? "从下载队列移除" : "加入下载队列"} className="relative w-40 shrink-0 overflow-hidden bg-[#090d17] text-left" disabled={disabled} onClick={(event) => { event.stopPropagation(); onSelect(); }} type="button">
         {beatmapset.covers?.card ? <img alt="" className="absolute inset-0 size-full object-cover opacity-65 transition duration-300 group-hover:scale-[1.03] group-hover:opacity-80" src={beatmapset.covers.card} /> : null}

@@ -85,7 +85,7 @@ function DrawerFrame({
   return (
     <Dialog.Portal>
       <Dialog.Overlay className="fixed inset-0 z-[80] bg-black/65 backdrop-blur-sm" />
-      <Dialog.Content className="fixed bottom-0 right-0 top-0 z-[90] w-[min(820px,78vw)] overflow-y-auto border-l border-white/10 bg-[#0d131f] p-7 shadow-[-30px_0_100px_rgba(0,0,0,.5)] outline-none">
+      <Dialog.Content className="fixed left-1/2 top-1/2 z-[90] w-[min(720px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto p-6 outline-none">
         <Dialog.Title className="pr-14 text-2xl font-semibold text-white">
           {title}
         </Dialog.Title>

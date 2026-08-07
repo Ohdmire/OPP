@@ -5,19 +5,19 @@
 
   **一站式 osu! 工具集合**
 
-  [![Version](https://img.shields.io/badge/version-0.3.5-ff6aa7?style=for-the-badge)](./src-tauri/tauri.conf.json)
+  [![Version](https://img.shields.io/badge/version-0.4.0-ff6aa7?style=for-the-badge)](./src-tauri/tauri.conf.json)
   [![Platform](https://img.shields.io/badge/platform-Windows-5ce1e6?style=for-the-badge&logo=windows11&logoColor=white)](#运行要求)
   [![Tauri](https://img.shields.io/badge/Tauri-2-a673ff?style=for-the-badge&logo=tauri&logoColor=white)](https://tauri.app/)
   [![Vibe Coding](https://img.shields.io/badge/Vibe_Coding-AI_Collaborative-8b5cf6?style=for-the-badge)](#vibe-coding)
 
-  [功能](#功能概览) · [开始使用](#开始使用) · [开发](#本地开发) · [快速入门](./docs/快速入门.md)
+  [功能](#功能概览) · [开始使用](#开始使用) · [开发](#本地开发) · [快速入门](./docs/快速入门.md) · [架构](./docs/架构与开发.md)
 </div>
 
 ---
 
 OPP 是一个使用 Tauri、Rust 与 React 构建的 Windows 桌面应用。它集成了你游玩osu！时可能需要的工具。
 
-开发、模块边界与 AI 协作约定见 [项目快速入门](./docs/快速入门.md)。
+用户操作见 [快速入门](./docs/快速入门.md)，代码模块、数据流与开发约定见 [架构与开发](./docs/架构与开发.md)。
 
 > [!IMPORTANT]
 > OPP 是独立的社区项目，与 ppy Pty Ltd 或 osu! 官方无隶属关系。osu! 是 ppy Pty Ltd 的商标。
@@ -115,52 +115,23 @@ OPP/
 │  ├─ features/                # 在线资料、成绩、本地谱面与 Skin
 │  └─ shared/                  # 公共组件、类型和 Tauri API
 ├─ src-tauri/
+│  ├─ crates/                  # 可独立复用的 Rust 运行时
 │  └─ src/
+│     ├─ account/              # OAuth、凭据和账号缓存
 │     ├─ local_analysis/       # 路径检测、扫描、缓存与资源分析
-│     ├─ oauth.rs              # 本地 OAuth 回调
-│     └─ credentials.rs        # Windows 凭据管理器
-├─ docs/                       # 产品需求与发布文档
+│     ├─ online_beatmaps/      # 在线谱面查询与下载
+│     └─ similarity/           # 相似度数据集、查询和推荐
+├─ docs/                       # 用户指南、数据集、架构与变更记录
 └─ public/                     # 公共静态资源
 ```
 
-## 需求与贡献
+## 贡献与已知限制
 
-任何对OPP有新功能的想法，建议，或者是bug，欢迎在issue处指出！
+欢迎通过 [Issues](https://github.com/osuplusplus/OPP/issues) 提交问题、功能建议和可复现步骤。提交代码前请先阅读 [架构与开发](./docs/架构与开发.md)，并确保前后端质量检查全部通过。
 
-### **现在碰到的几个比较严重的问题**
-
-crate `rosu`使用的pp计算算法是2025年10月快照，这导致我们本地计算的结果和在线结果存在差异，并且基于rosu的铺面推荐算法，以及本体铺面中的难度分布图，都存在问题。
-
-除此之外,由于我不懂TS，前端UI的设计全交给AI，使得现目前前端就是一个黑盒。
-
-
-
-
-### 计划实现功能
-- ~~支持 o!rdr API，从而实现生成回放视频支持~~ v0.2.8已实现
-- ~~tosu支持？~~ v0.3.0 已实现
-- ~~优化搜索功能~~
-- 前端UI重新设计（急需懂前端的朋友帮助QAQ）
-- 设计直播工作流
-- 成绩图片生成器
-- Skin 编辑替换
-- 更为专业的玩家数据分析
-- Mania 工具链
-- Rework Queue
-- 好友功能
-- ...
-
-### 超级大饼
-
-能否实现一个推图功能：
-
-第一步：实现由图推图 
-
-第二步：实现由用户数据推图
-
-第三步：PROJECT SAVE UNRANK 设计一套用户评价为标准的针对宝藏unrank铺面发掘计划
-
-目前有[osu-difficulty-lab](https://github.com/osuplusplus/osu-difficulty-lab)正在尝试建立一套实验难度体系，用来建立铺面索引
+- 本地 pp 计算基于固定的 `rosu-pp` 算法快照，可能与 osu! 在线服务当前版本存在差异。
+- 相似谱面结果取决于本地 Analyzer v3 数据集的覆盖范围与截止时间，不代表实时数据库。
+- o!rdr、谱面镜像、网易云音乐、tosu 与 OBS 等外部服务或应用的可用性不由 OPP 保证。
 
 ### 关联仓库
 

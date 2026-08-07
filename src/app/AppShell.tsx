@@ -198,7 +198,7 @@ export function AppShell() {
   }, [profileQuery.error, queryClient]);
 
   return (
-    <div className="min-h-screen bg-[var(--surface)]">
+    <div className="opp-app-shell min-h-screen">
       <a
         className="fixed left-[264px] top-2 z-[200] -translate-y-20 rounded-lg bg-[var(--theme-primary)] px-4 py-2 text-sm font-semibold text-[var(--on-primary)] transition-transform focus:translate-y-0"
         href="#main-content"
@@ -212,7 +212,7 @@ export function AppShell() {
       <GlobalContextBar />
       <main className="ml-[248px] min-h-screen pt-[108px]" id="main-content" tabIndex={-1}>
         <div className="relative min-h-[calc(100vh-108px)] overflow-x-clip">
-          <div className="theme-content-frame relative mx-auto max-w-[1440px] p-7 xl:p-9">
+        <div className="theme-content-frame relative mx-auto max-w-[1440px] p-7 xl:p-9">
             <Outlet />
           </div>
         </div>

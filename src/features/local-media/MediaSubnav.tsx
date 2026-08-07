@@ -2,10 +2,10 @@ import { FileVideo, Image } from "lucide-react";
 import { NavLink } from "react-router-dom";
 
 const itemClass = ({ isActive }: { isActive: boolean }) =>
-  `inline-flex items-center rounded-xl px-4 py-2 text-sm transition ${
+  `opp-action inline-flex items-center px-4 py-2 text-sm ${
     isActive
-      ? "bg-[var(--theme-primary-muted)] text-[var(--theme-primary)] font-semibold shadow-[inset_0_-2px_0_var(--theme-primary)]"
-      : "text-slate-500 hover:bg-white/[0.04] hover:text-slate-200"
+      ? "text-[var(--theme-primary)] font-semibold shadow-[inset_0_-2px_0_var(--theme-primary)]"
+      : "text-slate-500 hover:bg-[var(--surface-interactive)] hover:text-slate-200"
   }`;
 
 export function MediaSubnav() {

@@ -36,7 +36,7 @@ export function SimilarityRadar({
   }));
 
   return (
-    <div className={compact ? "h-56" : "h-72"}>
+    <div className={compact ? "h-40 sm:h-44" : "h-72"}>
       <ResponsiveContainer height="100%" width="100%">
         <RadarChart data={data} outerRadius={compact ? "68%" : "72%"}>
           <PolarGrid gridType="polygon" radialLines stroke="rgba(0,0,0,.72)" strokeWidth={1.35} />

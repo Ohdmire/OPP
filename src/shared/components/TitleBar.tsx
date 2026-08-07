@@ -5,7 +5,7 @@ import { isTauri } from "../lib/tauri";
 async function windowAction(action: "minimize" | "maximize" | "close") {
   if (!isTauri()) return;
   const appWindow = getCurrentWindow();
-  if (action === "minimize") await appWindow.hide();
+  if (action === "minimize") await appWindow.minimize();
   if (action === "maximize") await appWindow.toggleMaximize();
   if (action === "close") window.dispatchEvent(new Event("opp:request-close"));
 }
@@ -20,13 +20,13 @@ export function TitleBar() {
         className="flex items-center gap-2.5 text-xs font-semibold tracking-wide text-slate-200"
         data-tauri-drag-region
       >
-        <img alt="" className="size-5 rounded-md" src="/opp-icon.png" />
+        <img alt="" className="opp-title-mark size-5 rounded-md" src="/opp-icon.png" />
         OPP
       </div>
       <div className="ml-auto flex h-full">
         <button
           aria-label="最小化"
-          className="grid min-w-11 place-items-center text-slate-500 transition-colors hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--theme-primary)]"
+          className="opp-window-control grid min-w-11 place-items-center text-slate-500 hover:bg-[var(--surface-interactive-hover)] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--theme-primary)]"
           onClick={() => windowAction("minimize")}
           type="button"
         >
@@ -34,7 +34,7 @@ export function TitleBar() {
         </button>
         <button
           aria-label="最大化"
-          className="grid min-w-11 place-items-center text-slate-500 transition-colors hover:bg-white/[0.07] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--theme-primary)]"
+          className="opp-window-control grid min-w-11 place-items-center text-slate-500 hover:bg-[var(--surface-interactive-hover)] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--theme-primary)]"
           onClick={() => windowAction("maximize")}
           type="button"
         >
@@ -42,7 +42,7 @@ export function TitleBar() {
         </button>
         <button
           aria-label="关闭"
-          className="grid min-w-11 place-items-center text-slate-500 transition-colors hover:bg-rose-600 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-rose-400"
+          className="opp-window-control grid min-w-11 place-items-center text-slate-500 hover:bg-rose-600 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-rose-400"
           onClick={() => windowAction("close")}
           type="button"
         >

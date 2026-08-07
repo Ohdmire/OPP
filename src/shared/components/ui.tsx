@@ -5,16 +5,16 @@ import { AlertCircle, CircleHelp, LoaderCircle } from "lucide-react";
 import { cn } from "../lib/cn";
 
 const buttonVariants = cva(
-  "inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg font-semibold outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:pointer-events-none disabled:opacity-45",
+  "opp-action inline-flex cursor-pointer items-center justify-center gap-2 font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] disabled:pointer-events-none disabled:opacity-45",
   {
     variants: {
       variant: {
         primary:
           "border border-transparent bg-[var(--theme-primary)] px-4 py-2.5 text-[var(--on-primary)] shadow-[0_8px_20px_var(--theme-primary-glow)] hover:bg-[var(--theme-primary-strong)]",
         secondary:
-          "border border-white/10 bg-white/[0.04] px-4 py-2.5 text-slate-100 hover:border-white/20 hover:bg-white/[0.075]",
+          "border border-[var(--line-subtle)] bg-[var(--surface-interactive)] px-4 py-2.5 text-slate-100 hover:border-[var(--line-strong)] hover:bg-[var(--surface-interactive-hover)]",
         ghost:
-          "px-3 py-2 text-slate-300 hover:bg-white/[0.06] hover:text-white",
+          "px-3 py-2 text-slate-300 hover:bg-[var(--surface-interactive-hover)] hover:text-white",
         danger:
           "border border-rose-400/25 bg-rose-400/10 px-4 py-2.5 text-rose-200 hover:bg-rose-400/18",
       },
@@ -62,7 +62,7 @@ export function Card({
   return (
     <div
       className={cn(
-        "rounded-xl border border-white/[0.09] bg-[var(--surface-panel)] shadow-[0_10px_28px_rgba(0,0,0,.12)]",
+        "opp-section",
         className,
       )}
       {...props}
@@ -103,7 +103,7 @@ export function Skeleton({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "animate-pulse rounded-xl bg-gradient-to-r from-white/[0.04] via-white/[0.09] to-white/[0.04] bg-[length:220%_100%]",
+        "animate-pulse bg-gradient-to-r from-white/[0.04] via-white/[0.09] to-white/[0.04] bg-[length:220%_100%]",
         className,
       )}
     />
@@ -124,7 +124,7 @@ export function EmptyState({
   return (
     <Card className="grid min-h-64 place-items-center p-8 text-center">
       <div className="max-w-md">
-        <div className="mx-auto mb-4 grid size-11 place-items-center rounded-lg border border-white/10 bg-white/[0.04] text-[var(--theme-primary)]">
+        <div className="mx-auto mb-4 grid size-11 place-items-center border-y border-[var(--line-strong)] text-[var(--theme-primary)]">
           {icon ?? <AlertCircle className="size-5" />}
         </div>
         <h3 className="text-base font-semibold text-white">{title}</h3>
@@ -172,11 +172,13 @@ export function SectionTitle({
 
 export function InfoTip({ text }: { text: string }) {
   return (
-    <Tooltip.Root>
-      <Tooltip.Trigger asChild>
-        <button aria-label={text} className="inline-grid size-4 shrink-0 cursor-help place-items-center rounded-full border border-current/35 text-slate-500 hover:text-slate-200" type="button"><CircleHelp className="size-3" /></button>
-      </Tooltip.Trigger>
-      <Tooltip.Portal><Tooltip.Content className="z-[200] max-w-xs rounded-lg border border-white/10 bg-[#111725] px-3 py-2 text-xs leading-5 text-slate-200 shadow-xl" sideOffset={7}>{text}<Tooltip.Arrow className="fill-[#111725]" /></Tooltip.Content></Tooltip.Portal>
-    </Tooltip.Root>
+    <Tooltip.Provider delayDuration={300}>
+      <Tooltip.Root>
+        <Tooltip.Trigger asChild>
+          <button aria-label={text} className="opp-action inline-grid size-4 shrink-0 cursor-help place-items-center rounded-full border border-current/35 text-slate-500 hover:text-slate-200" type="button"><CircleHelp className="size-3" /></button>
+        </Tooltip.Trigger>
+        <Tooltip.Portal><Tooltip.Content className="opp-floating z-[200] max-w-xs px-3 py-2 text-xs leading-5 text-slate-200" sideOffset={7}>{text}<Tooltip.Arrow className="fill-[var(--surface-float)]" /></Tooltip.Content></Tooltip.Portal>
+      </Tooltip.Root>
+    </Tooltip.Provider>
   );
 }

@@ -407,7 +407,10 @@ pub async fn download_online_beatmapsets(
         failed: failures.len(),
         cancelled,
         failures,
-        completed_paths: completed_paths.iter().map(|path| path.to_string_lossy().into_owned()).collect(),
+        completed_paths: completed_paths
+            .iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect(),
     };
     emit_progress(
         &app,
@@ -431,7 +434,12 @@ pub async fn download_online_beatmapsets(
             downloaded_bytes: 0,
             total_bytes: None,
             bytes_per_second: 0.0,
-            completed_paths: Some(completed_paths.iter().map(|path| path.to_string_lossy().into_owned()).collect()),
+            completed_paths: Some(
+                completed_paths
+                    .iter()
+                    .map(|path| path.to_string_lossy().into_owned())
+                    .collect(),
+            ),
             destination: Some(result.destination.clone()),
         },
     );
@@ -461,7 +469,10 @@ pub async fn download_online_beatmapsets(
 pub fn open_downloaded_path(app: AppHandle, path: String) -> CommandResult<()> {
     let path = PathBuf::from(path);
     if !path.exists() {
-        return Err(CommandError::new("DOWNLOAD_PATH_MISSING", "Downloaded file is no longer available"));
+        return Err(CommandError::new(
+            "DOWNLOAD_PATH_MISSING",
+            "Downloaded file is no longer available",
+        ));
     }
     app.opener()
         .open_path(path.to_string_lossy(), None::<&str>)

@@ -51,13 +51,13 @@ export function GlobalContextBar() {
   }, []);
 
   return (
-    <header className="fixed left-[248px] right-0 top-11 z-30 h-16 border-b border-white/[0.08] bg-[var(--surface-chrome)] px-7 xl:px-9">
+    <header className="theme-context-bar fixed left-[248px] right-0 top-11 z-30 h-16 border-b border-[var(--line-subtle)] px-7 xl:px-9">
       <div className="mx-auto flex h-full max-w-[1440px] items-center gap-5">
         <p className="min-w-0 truncate text-[15px] font-semibold text-slate-200">
           {current[1]}
         </p>
         <div
-          className="flex min-h-8 items-center gap-2 rounded-lg border border-white/[0.08] px-3 text-xs font-medium text-slate-400"
+          className="flex min-h-8 items-center gap-2 border-l border-[var(--line-subtle)] px-3 text-xs font-medium text-slate-400"
           title={runningClients.map((item) => item.executable).filter(Boolean).join("\n") || "未检测到运行中的 osu! 客户端"}
         >
           <span

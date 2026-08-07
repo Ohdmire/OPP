@@ -2,6 +2,7 @@ mod commands;
 pub mod dataset;
 mod models;
 mod query;
+mod recommendation;
 mod source;
 
 pub use commands::{

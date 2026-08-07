@@ -168,13 +168,17 @@ impl LocalAnalysisService {
                     (
                         entry.path(),
                         metadata.len(),
-                        metadata.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH),
+                        metadata
+                            .modified()
+                            .unwrap_or(std::time::SystemTime::UNIX_EPOCH),
                     )
                 })
             })
             .collect::<Vec<_>>();
         files.sort_by_key(|(_, _, modified)| *modified);
-        let limit = self.thumbnail_cache_limit_bytes.load(AtomicOrdering::Relaxed) as u64;
+        let limit = self
+            .thumbnail_cache_limit_bytes
+            .load(AtomicOrdering::Relaxed) as u64;
         let mut total = files.iter().map(|(_, size, _)| *size).sum::<u64>();
         for (path, size, _) in files {
             if total <= limit {
@@ -616,14 +620,20 @@ impl LocalAnalysisService {
         }
         let index = self.require_current_index(client)?;
         let found = self.pool.install(|| {
-            index.entries.par_iter().filter_map(|entry| {
-                let IndexedData::Beatmap { summary, .. } = &entry.data else {
-                    return None;
-                };
-                let bytes = fs::read(&entry.physical_path).ok()?;
-                let checksum = format!("{:x}", Md5::digest(bytes));
-                checksums.contains(&checksum).then(|| (checksum, summary.clone()))
-            }).collect::<BTreeMap<_, _>>()
+            index
+                .entries
+                .par_iter()
+                .filter_map(|entry| {
+                    let IndexedData::Beatmap { summary, .. } = &entry.data else {
+                        return None;
+                    };
+                    let bytes = fs::read(&entry.physical_path).ok()?;
+                    let checksum = format!("{:x}", Md5::digest(bytes));
+                    checksums
+                        .contains(&checksum)
+                        .then(|| (checksum, summary.clone()))
+                })
+                .collect::<BTreeMap<_, _>>()
         });
         Ok(found)
     }

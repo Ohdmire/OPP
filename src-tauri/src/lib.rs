@@ -48,7 +48,7 @@ use obs::{
 use online_beatmaps::{
     cancel_online_beatmap_download, collect_online_beatmapsets, download_online_beatmapsets,
     get_online_beatmap, get_online_beatmap_provider_status, get_online_beatmapset,
-    search_online_beatmapsets, open_downloaded_path,
+    open_downloaded_path, search_online_beatmapsets,
 };
 use pp_calc::calculate_beatmap_pp;
 use replay_render::submit_replay_render;
@@ -96,7 +96,8 @@ pub fn run() {
                 .default_window_icon()
                 .expect("application bundle must include an icon")
                 .clone();
-            let show_window = MenuItem::with_id(app, "show-window", "显示界面", true, None::<&str>)?;
+            let show_window =
+                MenuItem::with_id(app, "show-window", "显示界面", true, None::<&str>)?;
             let exit = MenuItem::with_id(app, "exit", "退出", true, None::<&str>)?;
             let tray_menu = Menu::with_items(app, &[&show_window, &exit])?;
             TrayIconBuilder::with_id("opp-tray")

@@ -17,6 +17,15 @@
   --theme-primary-glow: rgba(103, 232, 249, 0.16);
   --theme-secondary: #fb7185;
   --on-primary: #071014;
+  --canvas-grid: rgba(255, 255, 255, 0.022);
+  --line-subtle: rgba(255, 255, 255, 0.075);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --surface-interactive: rgba(255, 255, 255, 0.035);
+  --surface-interactive-hover: rgba(255, 255, 255, 0.07);
+  --surface-float: rgba(19, 21, 28, 0.96);
+  --control-radius: 7px;
+  --motion-fast: 160ms;
+  --motion-base: 220ms;
   color: var(--text);
   background: var(--surface);
   font-family:
@@ -45,6 +54,12 @@
   --theme-primary-glow: rgba(37, 99, 235, 0.12);
   --theme-secondary: #be185d;
   --on-primary: #ffffff;
+  --canvas-grid: rgba(15, 23, 42, 0.035);
+  --line-subtle: rgba(15, 23, 42, 0.105);
+  --line-strong: rgba(15, 23, 42, 0.19);
+  --surface-interactive: rgba(15, 23, 42, 0.035);
+  --surface-interactive-hover: rgba(15, 23, 42, 0.065);
+  --surface-float: rgba(255, 255, 255, 0.96);
   color: var(--text);
   background: var(--surface);
 }
@@ -150,13 +165,15 @@
 }
 
 .selected-mask {
-  background-color: transparent;
-  box-shadow: inset 0 0 0 999px var(--theme-primary-muted);
+  color: var(--theme-primary-light);
+  background: linear-gradient(90deg, var(--theme-primary-muted), transparent 78%);
 }
 
 button[aria-pressed="true"],
 button[aria-selected="true"] {
-  box-shadow: inset 0 0 0 999px var(--theme-primary-muted) !important;
+  color: var(--theme-primary-light);
+  background-image: linear-gradient(90deg, var(--theme-primary-muted), transparent 78%);
+  box-shadow: none !important;
 }
 
 html {
@@ -171,6 +188,10 @@ body {
   margin: 0;
   overflow-x: hidden;
   background: var(--surface);
+  background-image:
+    linear-gradient(var(--canvas-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--canvas-grid) 1px, transparent 1px);
+  background-size: 32px 32px;
 }
 
 button,
@@ -180,6 +201,33 @@ input {
 
 button {
   cursor: pointer;
+}
+
+button,
+a[href],
+[role="button"],
+[role="tab"] {
+  transition:
+    color var(--motion-fast) ease,
+    background-color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    box-shadow var(--motion-fast) ease,
+    transform var(--motion-fast) ease;
+}
+
+@media (hover: hover) {
+  button:not(:disabled):hover,
+  a[href]:hover,
+  [role="button"]:hover,
+  [role="tab"]:hover {
+    transform: translateY(-1px);
+  }
+}
+
+button:not(:disabled):active,
+[role="button"]:active,
+[role="tab"]:active {
+  transform: translateY(0) scale(0.985);
 }
 
 button:focus-visible,
@@ -240,7 +288,7 @@ select option {
 .opp-input {
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.085);
-  border-radius: 8px;
+  border-radius: var(--control-radius);
   outline: none;
   background: var(--surface-panel-strong);
   padding: 11px 13px;
@@ -249,6 +297,359 @@ select option {
   transition:
     border-color 180ms ease,
     box-shadow 180ms ease;
+}
+
+/* The continuous console language. Static information is separated by rhythm
+   and rules; only controls and transient layers are given a raised surface. */
+.opp-section {
+  position: relative;
+  border: 0;
+  border-top: 1px solid transparent;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none;
+}
+
+.opp-section:first-child {
+  border-top-color: transparent;
+}
+
+.opp-section[class*="shadow-"] {
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface-float) !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28) !important;
+}
+
+.opp-action {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: var(--control-radius);
+}
+
+.opp-action::after {
+  position: absolute;
+  inset: 0 auto 0 -35%;
+  z-index: -1;
+  width: 30%;
+  content: "";
+  opacity: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.22), transparent);
+  transform: skewX(-18deg);
+  transition: left var(--motion-base) ease, opacity var(--motion-fast) ease;
+}
+
+@media (hover: hover) {
+  .opp-action:not(:disabled):hover::after {
+    left: 108%;
+    opacity: 1;
+  }
+}
+
+.opp-interactive-surface {
+  position: relative;
+  border-color: transparent !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: inset 2px 0 0 transparent !important;
+}
+
+.opp-interactive-surface::before {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 2px;
+  content: "";
+  background: transparent;
+  transition: background-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
+}
+
+@media (hover: hover) {
+  .opp-interactive-surface:hover {
+    background: linear-gradient(90deg, var(--surface-interactive-hover), transparent 68%) !important;
+  }
+  .opp-interactive-surface:hover::before {
+    background: var(--theme-primary-soft);
+  }
+}
+
+.opp-interactive-surface[aria-selected="true"],
+.opp-interactive-surface.selected-mask {
+  background: linear-gradient(90deg, var(--theme-primary-muted), transparent 72%) !important;
+  box-shadow: inset 2px 0 0 var(--theme-primary) !important;
+}
+
+.opp-floating {
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface-float);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(18px);
+}
+
+.collection-folder {
+  border: 1px solid var(--line-strong) !important;
+  border-radius: 8px !important;
+  background: linear-gradient(90deg, var(--surface-interactive), transparent 70%) !important;
+}
+
+.collection-folder + .collection-folder {
+  margin-top: 0.9rem;
+}
+
+.opp-filter-drawer {
+  border: 1px solid var(--line-strong) !important;
+  border-radius: 10px !important;
+  background: var(--surface-float) !important;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.28) !important;
+  backdrop-filter: blur(18px);
+}
+
+.opp-filter-drawer:not(.is-open) {
+  width: 3rem !important;
+  min-height: 3rem;
+}
+
+.opp-filter-drawer:not(.is-open) > div > button:not([aria-expanded]),
+.opp-filter-drawer:not(.is-open) button[aria-expanded] > span:not(:first-child),
+.opp-filter-drawer:not(.is-open) button[aria-expanded] > svg {
+  display: none;
+}
+
+.opp-filter-drawer:not(.is-open) button[aria-expanded] {
+  justify-content: center;
+  padding: 0.75rem !important;
+}
+
+.opp-filter-drawer:not(.is-open) > div:first-child {
+  padding: 0.5rem !important;
+}
+
+.opp-filter-drawer.is-open > div:first-child {
+  min-height: 3.5rem;
+}
+
+.opp-filter-body {
+  max-height: calc(100vh - 10rem);
+  scrollbar-gutter: stable;
+}
+
+.similarity-reference-summary {
+  min-height: 0;
+}
+
+.similarity-reference-summary .recharts-responsive-container {
+  margin-inline: auto;
+}
+
+.opp-filter-body > section:first-child {
+  border-top: 0;
+}
+
+.opp-filter-drawer .opp-filter-number {
+  width: 4.25rem;
+  min-width: 4.25rem;
+  border-color: var(--line-strong);
+  background: var(--surface-interactive);
+}
+
+/* The similar-beatmap filters are a page-level floating control, matching the
+   back-to-top button while keeping clear of the persistent sidebar. */
+.opp-candidate-filter-panel {
+  transform-origin: bottom left;
+  will-change: opacity, transform;
+}
+
+.opp-candidate-filter-panel--open {
+  animation: opp-candidate-filter-expand 220ms cubic-bezier(.2, .8, .2, 1) both;
+}
+
+.opp-candidate-filter-trigger--animate {
+  animation: opp-candidate-filter-trigger 240ms cubic-bezier(.2, .8, .2, 1);
+}
+
+@keyframes opp-candidate-filter-expand {
+  from { opacity: 0; transform: translateY(12px) scale(.92); }
+  68% { opacity: 1; transform: translateY(-2px) scale(1.012); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes opp-candidate-filter-trigger {
+  0% { transform: scale(1); }
+  38% { transform: scale(.9); }
+  72% { transform: scale(1.055); }
+  100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opp-candidate-filter-panel--open,
+  .opp-candidate-filter-trigger--animate {
+    animation: none;
+  }
+}
+
+main .opp-section.overflow-hidden:not(.opp-interactive-surface) {
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+}
+
+/* Dialogs are always a single, compact foreground layer. Their dimmed and
+   blurred backdrop makes the current task clear without turning the page into
+   another stack of panels. Radix exposes the dialog role on every Content. */
+[role="dialog"] {
+  width: min(720px, calc(100vw - 2rem)) !important;
+  max-height: min(720px, calc(100vh - 2rem)) !important;
+  border: 1px solid var(--line-strong) !important;
+  border-radius: 10px !important;
+  background: var(--surface-float) !important;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.38) !important;
+  backdrop-filter: blur(18px);
+  padding: 1rem !important;
+}
+
+body > [data-radix-portal] > [data-state]:not([role="dialog"]) {
+  background-color: rgba(3, 5, 10, 0.58) !important;
+  backdrop-filter: blur(10px);
+}
+
+:root[data-theme-mode="light"] [role="dialog"] {
+  background: var(--surface-float) !important;
+  box-shadow: 0 24px 80px rgba(24, 32, 54, 0.18) !important;
+}
+
+.opp-control-track {
+  position: relative;
+  border-bottom: 1px solid var(--line-subtle);
+  border-radius: 0;
+  background: transparent;
+}
+
+.opp-control-track [aria-selected="true"],
+.opp-control-track [aria-pressed="true"] {
+  color: var(--theme-primary-light) !important;
+  background: transparent !important;
+  box-shadow: inset 0 -2px 0 var(--theme-primary) !important;
+}
+
+.opp-nav-item {
+  position: relative;
+  border-left: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+}
+
+.opp-nav-item::after {
+  position: absolute;
+  right: 0;
+  bottom: 3px;
+  left: 10px;
+  height: 1px;
+  content: "";
+  opacity: 0;
+  background: linear-gradient(90deg, var(--theme-primary), transparent);
+  transform: scaleX(0.3);
+  transform-origin: left;
+  transition: opacity var(--motion-fast) ease, transform var(--motion-fast) ease;
+}
+
+@media (hover: hover) {
+  .opp-nav-item:hover::after {
+    opacity: 0.75;
+    transform: scaleX(1);
+  }
+}
+
+.opp-nav-item[aria-current="page"] {
+  border-left-color: var(--theme-primary);
+  color: var(--theme-primary-light) !important;
+  background: linear-gradient(90deg, var(--theme-primary-muted), transparent 86%) !important;
+}
+
+.opp-nav-item[aria-current="page"]::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.theme-content-frame > * {
+  animation: opp-content-enter var(--motion-base) ease-out both;
+}
+
+@keyframes opp-content-enter {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+:root[data-theme-mode="light"] .opp-section { border-color: var(--line-subtle); }
+:root[data-theme-mode="light"] .opp-floating { box-shadow: 0 20px 60px rgba(24, 32, 54, 0.14); }
+:root[data-theme-mode="light"] aside .opp-nav-item[aria-current="page"] {
+  background: linear-gradient(90deg, var(--theme-primary-muted), transparent 86%) !important;
+  box-shadow: inset 2px 0 0 var(--theme-primary) !important;
+}
+
+.opp-app-shell,
+.theme-titlebar,
+.theme-context-bar {
+  background-color: var(--surface) !important;
+}
+
+.theme-titlebar,
+.theme-context-bar {
+  border-color: var(--line-subtle) !important;
+}
+
+.opp-window-control {
+  position: relative;
+  overflow: hidden;
+  color: var(--text-muted);
+  transition: color var(--motion-fast) ease, background-color var(--motion-fast) ease, transform var(--motion-fast) ease;
+}
+
+.opp-window-control svg {
+  transition: transform var(--motion-fast) cubic-bezier(.2,.8,.2,1);
+}
+
+@media (hover: hover) {
+  .opp-window-control:hover svg {
+    transform: scale(1.14);
+  }
+  .opp-brand-mark:hover,
+  .opp-title-mark:hover {
+    animation: opp-mark-pop 360ms cubic-bezier(.2,.8,.2,1);
+  }
+  .opp-nav-item:hover > svg,
+  .opp-nav-item:hover > span > svg {
+    transform: translateX(2px) scale(1.08);
+  }
+}
+
+.opp-brand-mark,
+.opp-title-mark,
+.opp-nav-item > svg,
+.opp-nav-item > span > svg {
+  transition: transform var(--motion-fast) cubic-bezier(.2,.8,.2,1), filter var(--motion-fast) ease;
+}
+
+@keyframes opp-mark-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.12) rotate(-3deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+/* Feature pages still contain a large amount of utility-era panel markup.
+   Flatten non-control containers at the content boundary so the new language
+   applies consistently while buttons, inputs and portal-based dialogs remain
+   deliberately surfaced. */
+.theme-content-frame :is(div, section, article, label)[class*="rounded-"]:not(.opp-interactive-surface):not(.opp-floating) {
+  border-radius: 0 !important;
+}
+
+.theme-content-frame :is(div, section, article, label)[class*="rounded-"][class*="border"]:not(.opp-interactive-surface):not(.opp-floating) {
+  border-right-color: transparent !important;
+  border-left-color: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
 }
 
 .opp-input::placeholder {
@@ -291,6 +692,40 @@ select option {
 :root[data-theme-mode="light"] .opp-dual-range__input::-moz-range-thumb { border-color: #64748b; background: var(--theme-primary); }
 :root[data-theme-mode="light"] .score-metric { background: #f8fafc !important; }
 .similarity-comparison-panel { max-height: calc(100vh - 140px); }
+
+.opp-auth-screen {
+  position: relative;
+  background:
+    radial-gradient(circle at 20% 15%, var(--theme-primary-glow), transparent 29rem),
+    var(--surface);
+}
+
+.opp-auth-card {
+  animation: opp-auth-card-in 480ms cubic-bezier(.2,.8,.2,1) both;
+}
+
+.opp-auth-orbit {
+  position: absolute;
+  width: 30rem;
+  height: 30rem;
+  border: 1px solid var(--theme-primary-soft);
+  border-radius: 999px;
+  opacity: .45;
+  animation: opp-auth-orbit 16s ease-in-out infinite alternate;
+}
+
+.opp-auth-orbit--one { top: -19rem; right: -12rem; }
+.opp-auth-orbit--two { bottom: -22rem; left: -15rem; animation-delay: -8s; }
+
+@keyframes opp-auth-card-in {
+  from { opacity: 0; transform: translateY(14px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes opp-auth-orbit {
+  from { transform: translate3d(-12px, -6px, 0) scale(.96); }
+  to { transform: translate3d(14px, 10px, 0) scale(1.05); }
+}
 
 .rank-silver {
   color: #e9f2ff;

@@ -78,10 +78,10 @@ export function SimilarityResultCard({
 
   return (
     <Card
-      className={`theme-beatmap-card relative cursor-pointer overflow-hidden p-5 transition ${
+      className={`opp-interactive-surface theme-beatmap-card relative cursor-pointer overflow-hidden p-5 ${
         selected
-          ? "border-[var(--theme-primary-soft)] bg-[var(--theme-primary-muted)]"
-          : "hover:border-white/[0.16] hover:bg-white/[0.035]"
+          ? "selected-mask"
+          : ""
       }`}
       onClick={onSelect}
       role="button"

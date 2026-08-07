@@ -86,8 +86,8 @@ export function BeatmapsetDetailDialog({
   return (
     <Dialog.Root onOpenChange={(open) => !open && onClose()} open={beatmapsetId !== null}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-[80] bg-[#03050a]/75 backdrop-blur-sm" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-[90] max-h-[calc(100vh-3rem)] w-[min(1120px,calc(100vw-3rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-3xl border border-white/10 bg-[#0d131f] shadow-2xl outline-none">
+        <Dialog.Overlay className="fixed inset-0 z-[80] bg-black/55 backdrop-blur-md" />
+        <Dialog.Content className="beatmap-detail-dialog fixed left-1/2 top-1/2 z-[90] max-h-[min(720px,calc(100vh-2rem))] w-[min(720px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto outline-none">
           {beatmapset ? (
             <>
               <div className="relative h-60 overflow-hidden bg-[#080b14]">
@@ -99,16 +99,17 @@ export function BeatmapsetDetailDialog({
                   />
                 ) : null}
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0b101b] via-[#0b101b]/30 to-black/20" />
-                <Dialog.Close asChild>
+                <div className="absolute right-5 top-5 z-10 flex items-center gap-2">
                   <Button
                     aria-label="关闭详情"
-                    className="absolute right-5 top-5 bg-black/45 backdrop-blur"
+                    className="order-2 bg-black/45 backdrop-blur"
+                    onClick={onClose}
                     size="icon"
                   >
                     <X className="size-4" />
                   </Button>
                   <Button onClick={() => onAddToCollection(beatmapset)} variant="secondary"><Heart className="size-4" />加入收藏夹</Button>
-                </Dialog.Close>
+                </div>
                 <div className="absolute bottom-6 left-7 right-7">
                   <div className="flex gap-2">
                     <Badge tone="success">{beatmapset.status.toUpperCase()}</Badge>
@@ -227,7 +228,7 @@ export function BeatmapsetDetailDialog({
                   </div>
                 </div>
 
-                {showCalculator ? <div className="fixed bottom-0 right-0 top-0 z-[110] w-[min(460px,calc(100vw-2rem))] overflow-y-auto border-l border-white/[0.1] bg-[#0b101b] p-6 shadow-[-30px_0_100px_rgba(0,0,0,.5)]">
+                {showCalculator ? <section className="mt-7 border-t border-[var(--line-subtle)] pt-5">
                 <div className="w-full">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -250,7 +251,7 @@ export function BeatmapsetDetailDialog({
                   {calculation ? <div className="mt-3 grid gap-1 text-left text-[10px] text-slate-500"><span>Star 算法：{calculation.star_algorithm} · {calculation.star_algorithm_date}</span><span>Performance 算法：{calculation.performance_algorithm} · {calculation.performance_algorithm_date}</span></div> : null}
                   {calculationError ? <p className="mt-3 text-xs text-amber-200">{calculationError}</p> : null}
                 </div>
-                </div> : null}
+                </section> : null}
 
                 {beatmapset.tags ? (
                   <div className="mt-7">

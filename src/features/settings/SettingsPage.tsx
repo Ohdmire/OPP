@@ -5,6 +5,7 @@ import {
   ExternalLink,
   FolderOpen,
   Gamepad2,
+  LogOut,
   RotateCcw,
   Trash2,
   Volume2,
@@ -28,7 +29,7 @@ import type {
   Ruleset,
   ThemeColor,
 } from "../../shared/types/osu";
-import { useAuthStatus } from "../auth/api";
+import { authQueryKey, useAuthStatus } from "../auth/api";
 import { localSourcesKey, useLocalSources } from "../local-analysis/api";
 import { useSettings, settingsQueryKey } from "./api";
 import { defaultSimilarityPreferences } from "../similar-beatmaps/defaults";
@@ -115,6 +116,8 @@ export function SettingsPage() {
   const { ruleset, setRuleset } = useMode();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
+  const [accountBusy, setAccountBusy] = useState<"logout" | "reauth" | null>(null);
+  const [accountError, setAccountError] = useState<string | null>(null);
   const [sourceBusy, setSourceBusy] = useState<OsuClient | null>(null);
   const settings: AppSettings = {
     ...base,
@@ -164,6 +167,40 @@ export function SettingsPage() {
     if (selected) await save({ ...settings, beatmap_download_directory: selected });
   };
 
+  const refreshAccount = async () => {
+    await queryClient.invalidateQueries({ queryKey: authQueryKey });
+    await queryClient.invalidateQueries({ queryKey: ["own-profile"] });
+    await queryClient.invalidateQueries({ queryKey: ["scores"] });
+  };
+
+  const logout = async () => {
+    setAccountBusy("logout");
+    setAccountError(null);
+    try {
+      await desktopApi.disconnectOsu(true);
+      await refreshAccount();
+    } catch (error) {
+      setAccountError((error as { message?: string }).message ?? String(error));
+    } finally {
+      setAccountBusy(null);
+    }
+  };
+
+  const reauthenticate = async () => {
+    setAccountBusy("reauth");
+    setAccountError(null);
+    try {
+      await desktopApi.disconnectOsu(false);
+      await refreshAccount();
+      const pending = await desktopApi.beginOAuthLogin();
+      await desktopApi.openExternal(pending.authorization_url);
+    } catch (error) {
+      setAccountError((error as { message?: string }).message ?? String(error));
+    } finally {
+      setAccountBusy(null);
+    }
+  };
+
   const palette = () => (
     <div>
       <p className="mb-3 text-base font-bold text-slate-100">主题色</p>
@@ -210,6 +247,15 @@ export function SettingsPage() {
               <DataLine label="账户" value={auth.data?.username ?? "—"} />
               <DataLine label="用户 ID" value={auth.data?.user_id ?? "—"} />
             </div>
+            <div className="mt-4 flex flex-wrap gap-2 border-t border-[var(--line-subtle)] pt-4">
+              <Button disabled={accountBusy !== null} loading={accountBusy === "reauth"} onClick={() => void reauthenticate()} size="sm" variant="secondary">
+                <RotateCcw className="size-4" />重新认证
+              </Button>
+              <Button disabled={!auth.data?.connected || accountBusy !== null} loading={accountBusy === "logout"} onClick={() => void logout()} size="sm" variant="ghost">
+                <LogOut className="size-4" />退出账号
+              </Button>
+            </div>
+            {accountError ? <p className="mt-3 text-xs text-rose-200">{accountError}</p> : null}
           </Card>
 
           <Card className="p-6">
@@ -401,7 +447,7 @@ export function SettingsPage() {
                 <SectionTitle title="关于" />
                 <p className="mt-3 flex items-center gap-2 text-sm text-slate-300">
                   <Gamepad2 className="size-4 text-[var(--theme-primary)]" />
-                  OPP v0.3.5
+                  OPP v{__APP_VERSION__}
                 </p>
               </div>
               <Button onClick={() => void desktopApi.openExternal("https://github.com/osuplusplus/OPP")} size="sm" variant="secondary">
