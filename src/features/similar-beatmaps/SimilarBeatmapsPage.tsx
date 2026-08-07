@@ -42,6 +42,7 @@ import {
 } from "./navigation";
 import { normalizePreviewUrl } from "../online-beatmaps/filters";
 import { resolveDefaultDownloadProvider } from "../online-beatmaps/downloadProvider";
+import { openCollectionDialog } from "../collections/events";
 
 const DIFFICULTY_DIMENSIONS = [
   ["aim", "Aim"],
@@ -844,6 +845,7 @@ export function SimilarBeatmapsPage() {
                         selected={selected?.beatmap_id === result.beatmap_id}
                         onSelect={() => setSelectedResultId(result.beatmap_id)}
                         onDownload={() => void downloadResult(result)}
+                        onAddToCollection={() => openCollectionDialog([{ beatmap_id: result.beatmap_id, beatmapset_id: result.beatmapset_id, checksum: null, ruleset: "osu", difficulty_name: result.version, title: result.title, artist: result.artist, creator: result.creator }])}
                         downloading={quickDownloadId === result.beatmap_id}
                         downloadDisabled={quickDownloadId !== null}
                         onOpen={() => openOnlineBeatmap(result)}

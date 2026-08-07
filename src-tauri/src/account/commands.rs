@@ -234,9 +234,13 @@ pub fn get_settings(state: State<'_, AppState>) -> CommandResult<AppSettings> {
 
 #[tauri::command]
 pub fn update_settings(
-    settings: AppSettings,
+    mut settings: AppSettings,
     state: State<'_, AppState>,
 ) -> CommandResult<AppSettings> {
+    settings.cache_limit_mb = settings.cache_limit_mb.clamp(64, 10_240);
+    state
+        .local_analysis
+        .set_thumbnail_cache_limit_mb(settings.cache_limit_mb)?;
     state
         .store
         .update(|persisted| persisted.settings = settings.clone())?;

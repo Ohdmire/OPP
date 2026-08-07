@@ -112,6 +112,7 @@ pub struct LocalAnalysisService {
     skin_assets: RwLock<BTreeMap<String, SkinAssetLocation>>,
     scans: Mutex<BTreeMap<LocalClient, Arc<AtomicBool>>>,
     pool: rayon::ThreadPool,
+    thumbnail_cache_limit_bytes: AtomicUsize,
 }
 
 impl LocalAnalysisService {
@@ -144,7 +145,46 @@ impl LocalAnalysisService {
             skin_assets: RwLock::new(BTreeMap::new()),
             scans: Mutex::new(BTreeMap::new()),
             pool,
+            thumbnail_cache_limit_bytes: AtomicUsize::new(512 * 1024 * 1024),
         })
+    }
+
+    pub fn set_thumbnail_cache_limit_mb(&self, limit_mb: u32) -> CommandResult<()> {
+        let limit = usize::try_from(limit_mb.clamp(64, 10_240))
+            .unwrap_or(512)
+            .saturating_mul(1024 * 1024);
+        self.thumbnail_cache_limit_bytes
+            .store(limit, AtomicOrdering::Relaxed);
+        self.trim_thumbnail_cache()
+    }
+
+    fn trim_thumbnail_cache(&self) -> CommandResult<()> {
+        let directory = self.cache_dir.join("thumbnails");
+        let mut files = fs::read_dir(&directory)?
+            .filter_map(Result::ok)
+            .filter_map(|entry| {
+                let metadata = entry.metadata().ok()?;
+                metadata.is_file().then(|| {
+                    (
+                        entry.path(),
+                        metadata.len(),
+                        metadata.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH),
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        files.sort_by_key(|(_, _, modified)| *modified);
+        let limit = self.thumbnail_cache_limit_bytes.load(AtomicOrdering::Relaxed) as u64;
+        let mut total = files.iter().map(|(_, size, _)| *size).sum::<u64>();
+        for (path, size, _) in files {
+            if total <= limit {
+                break;
+            }
+            if fs::remove_file(path).is_ok() {
+                total = total.saturating_sub(size);
+            }
+        }
+        Ok(())
     }
 
     pub fn source_statuses(&self) -> CommandResult<Vec<LocalSourceStatus>> {
@@ -563,6 +603,31 @@ impl LocalAnalysisService {
         Ok(None)
     }
 
+    /// Resolves a collection of stable MD5 hashes in one pass over the local
+    /// index. This avoids the quadratic file scan that results from resolving
+    /// every game-collection entry independently.
+    pub fn find_beatmaps_by_md5(
+        &self,
+        client: LocalClient,
+        checksums: &BTreeSet<String>,
+    ) -> CommandResult<BTreeMap<String, LocalBeatmapSummary>> {
+        if checksums.is_empty() {
+            return Ok(BTreeMap::new());
+        }
+        let index = self.require_current_index(client)?;
+        let found = self.pool.install(|| {
+            index.entries.par_iter().filter_map(|entry| {
+                let IndexedData::Beatmap { summary, .. } = &entry.data else {
+                    return None;
+                };
+                let bytes = fs::read(&entry.physical_path).ok()?;
+                let checksum = format!("{:x}", Md5::digest(bytes));
+                checksums.contains(&checksum).then(|| (checksum, summary.clone()))
+            }).collect::<BTreeMap<_, _>>()
+        });
+        Ok(found)
+    }
+
     pub fn beatmap_background(
         &self,
         client: LocalClient,
@@ -651,6 +716,7 @@ impl LocalAnalysisService {
             let temporary = thumbnail_path.with_extension("jpg.tmp");
             if fs::write(&temporary, &bytes).is_ok() {
                 let _ = fs::rename(temporary, &thumbnail_path);
+                let _ = self.trim_thumbnail_cache();
             }
             bytes
         };

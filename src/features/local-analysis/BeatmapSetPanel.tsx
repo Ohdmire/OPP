@@ -4,15 +4,15 @@ import {
   useState,
 } from "react";
 import {
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronUp,
   CircleDot,
   FolderSearch,
   Gauge,
+  Heart,
   Hash,
   ListFilter,
+  ListMusic,
   Music4,
   RotateCcw,
   ScanSearch,
@@ -21,8 +21,10 @@ import {
   Timer,
   Trophy,
   WandSparkles,
+  X,
   Zap,
 } from "lucide-react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { ErrorPanel } from "../../shared/components/ErrorPanel";
 import {
   Badge,
@@ -37,6 +39,7 @@ import { errorMessage, fullNumber, rulesetLabels } from "../../shared/lib/format
 import { desktopApi } from "../../shared/lib/tauri";
 import { DifficultyIcon, ModeIcon } from "../online-beatmaps/BeatmapVisuals";
 import { similarityRouteForLocalResource } from "../similar-beatmaps/navigation";
+import { openCollectionDialog } from "../collections/events";
 import type {
   BeatmapQuery,
   BeatmapSort,
@@ -141,6 +144,24 @@ function SetBackground({
   );
 }
 
+function LocalDifficultyDialog({
+  client,
+  set,
+  open,
+  onClose,
+  onOpen,
+  onFindSimilar,
+}: {
+  client: OsuClient;
+  set: LocalBeatmapSetSummary;
+  open: boolean;
+  onClose: () => void;
+  onOpen: (resourceId: string) => void;
+  onFindSimilar: (resourceId: string) => void;
+}) {
+  return <Dialog.Root onOpenChange={(next) => !next && onClose()} open={open}><Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-[120] bg-black/65 backdrop-blur-sm" /><Dialog.Content className="fixed left-1/2 top-1/2 z-[130] flex max-h-[min(800px,calc(100vh-32px))] w-[min(1080px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0d131f] shadow-2xl outline-none"><div className="flex items-start justify-between gap-5 border-b border-white/[0.08] p-6"><div className="min-w-0"><Dialog.Title className="truncate text-xl font-semibold text-white">{set.title_unicode || set.title}</Dialog.Title><Dialog.Description className="mt-1 truncate text-sm text-slate-400">{set.artist_unicode || set.artist} · {set.difficulties.length} 个难度</Dialog.Description></div><Dialog.Close aria-label="关闭难度列表" className="grid size-9 shrink-0 place-items-center rounded-xl border border-white/10 text-slate-400 transition hover:bg-white/[0.08] hover:text-white"><X className="size-4" /></Dialog.Close></div><div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6"><div className="space-y-3">{set.difficulties.map((difficulty) => <article className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4 transition hover:border-cyan-300/25 hover:bg-cyan-300/[0.04]" key={difficulty.resource.resource_id}><div className="flex flex-wrap items-start gap-4"><button className="min-w-0 flex-1 text-left" onClick={() => onOpen(difficulty.resource.resource_id)} type="button"><div className="flex items-center gap-2"><ModeIcon mode={difficulty.ruleset} /><DifficultyIcon mode={difficulty.ruleset} stars={difficulty.stars} /><h3 className="truncate text-base font-semibold text-white">[{difficulty.difficulty_name}]</h3></div><p className="mt-2 text-xs text-slate-500">{rulesetLabels[difficulty.ruleset]} · {difficulty.creator}</p></button><div className="grid flex-1 grid-cols-3 gap-x-5 gap-y-3 sm:grid-cols-6"><Metric icon={Gauge} label="AR / OD" value={`${difficulty.ar.toFixed(1)} / ${difficulty.od.toFixed(1)}`} /><Metric icon={CircleDot} label="CS" value={difficulty.cs.toFixed(1)} /><Metric icon={Zap} label="BPM" value={difficulty.bpm.toFixed(0)} /><Metric icon={Trophy} label="Max PP" value={difficulty.max_pp === null ? "—" : difficulty.max_pp.toFixed(1)} /><Metric icon={Timer} label="NPS" value={difficulty.average_nps.toFixed(1)} /><Metric icon={Hash} label="Objects" value={fullNumber(difficulty.object_count)} /></div></div><div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-white/[0.06] pt-3"><Button onClick={() => onOpen(difficulty.resource.resource_id)} size="sm" variant="secondary">查看详情</Button><Button onClick={() => onFindSimilar(difficulty.resource.resource_id)} size="sm" variant="primary"><ScanSearch className="size-3.5" />查找相似</Button><Button onClick={() => openCollectionDialog([{ beatmap_id: difficulty.beatmap_id, beatmapset_id: difficulty.beatmap_set_id, checksum: null, ruleset: difficulty.ruleset, difficulty_name: difficulty.difficulty_name, title: difficulty.title_unicode || difficulty.title, artist: difficulty.artist_unicode || difficulty.artist, creator: difficulty.creator, local_client: client, local_resource_id: difficulty.resource.resource_id }])} size="sm" variant="secondary"><Heart className="size-3.5" />加入收藏夹</Button><Button onClick={() => { const params = new URLSearchParams({ client, resource: difficulty.resource.resource_id }); window.location.hash = `/trainer?${params}`; }} size="sm" variant="primary"><WandSparkles className="size-3.5" />导入 Trainer</Button></div></article>)}</div></div></Dialog.Content></Dialog.Portal></Dialog.Root>;
+}
+
 function BeatmapSetCard({
   client,
   set,
@@ -152,7 +173,7 @@ function BeatmapSetCard({
   onOpen: (resourceId: string) => void;
   onFindSimilar: (resourceId: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [difficultyDialogOpen, setDifficultyDialogOpen] = useState(false);
   const [neteaseError, setNeteaseError] = useState<unknown>(null);
   const starRange =
     set.min_stars === null
@@ -163,6 +184,7 @@ function BeatmapSetCard({
   const peakNps = Math.max(...set.difficulties.map((item) => item.peak_nps), 0);
 
   return (
+    <>
     <article className="overflow-hidden rounded-[22px] border border-white/[0.075] bg-[#0f1522] shadow-[0_16px_45px_rgba(0,0,0,.16)] transition hover:border-white/[0.14]">
       <div className="relative min-h-40 overflow-hidden">
         <SetBackground client={client} resourceId={set.background_resource_id} />
@@ -219,87 +241,19 @@ function BeatmapSetCard({
           在网易云中播放
         </Button>
         <Button
-          aria-expanded={expanded}
-          onClick={() => setExpanded((value) => !value)}
+          aria-haspopup="dialog"
+          onClick={() => setDifficultyDialogOpen(true)}
           className="ml-auto shrink-0"
           size="sm"
         >
-          {expanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
-          {expanded ? "收起难度" : "展开难度"}
+          <ListMusic className="size-3.5" />
+          查看难度
         </Button>
       </div>
       {neteaseError ? <p className="border-t border-rose-300/15 bg-rose-300/[0.05] px-5 py-2 text-xs text-rose-100" role="alert">{errorMessage(neteaseError)}</p> : null}
-
-      {expanded ? (
-        <div className="grid gap-2 border-t border-white/[0.055] p-3">
-          {set.difficulties.map((difficulty) => (
-            <div
-              className="grid grid-cols-[minmax(0,1fr)_84px_70px_70px_78px_70px_78px_auto_auto] items-center gap-3 rounded-xl border border-white/[0.055] bg-white/[0.025] px-4 py-3 text-left transition hover:border-cyan-300/20 hover:bg-cyan-300/[0.045]"
-              key={difficulty.resource.resource_id}
-              onClick={() => onOpen(difficulty.resource.resource_id)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  onOpen(difficulty.resource.resource_id);
-                }
-              }}
-              role="button"
-              tabIndex={0}
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <ModeIcon mode={difficulty.ruleset} />
-                  <DifficultyIcon mode={difficulty.ruleset} stars={difficulty.stars} />
-                  <p className="truncate text-sm font-semibold text-white">
-                    [{difficulty.difficulty_name}]
-                  </p>
-                </div>
-                <p className="mt-1.5 truncate text-[11px] text-slate-600">
-                  {rulesetLabels[difficulty.ruleset]} · {difficulty.creator}
-                </p>
-              </div>
-              <Metric icon={Gauge} label="AR / OD" value={`${difficulty.ar.toFixed(1)} / ${difficulty.od.toFixed(1)}`} />
-              <Metric icon={CircleDot} label="CS" value={difficulty.cs.toFixed(1)} />
-              <Metric icon={Zap} label="BPM" value={difficulty.bpm.toFixed(0)} />
-              <Metric
-                icon={Trophy}
-                label="Max PP"
-                value={
-                  difficulty.max_pp === null
-                    ? "—"
-                    : difficulty.max_pp.toFixed(1)
-                }
-              />
-              <Metric icon={Timer} label="NPS" value={difficulty.average_nps.toFixed(1)} />
-              <Metric icon={Hash} label="Objects" value={fullNumber(difficulty.object_count)} />
-              <Button
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onFindSimilar(difficulty.resource.resource_id);
-                }}
-                size="sm"
-                variant="primary"
-              >
-                <ScanSearch className="size-3.5" />
-                查找相似
-              </Button>
-              <Button
-                onClick={(event) => {
-                  event.stopPropagation();
-                  const params = new URLSearchParams({ client, resource: difficulty.resource.resource_id });
-                  window.location.hash = `/trainer?${params}`;
-                }}
-                size="sm"
-                variant="primary"
-              >
-                <WandSparkles className="size-3.5" />
-                导入 Trainer
-              </Button>
-            </div>
-          ))}
-        </div>
-      ) : null}
     </article>
+    <LocalDifficultyDialog client={client} onClose={() => setDifficultyDialogOpen(false)} onFindSimilar={onFindSimilar} onOpen={onOpen} open={difficultyDialogOpen} set={set} />
+    </>
   );
 }
 

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Download, Headphones, Pause } from "lucide-react";
+import { ArrowRight, Download, Headphones, Heart, Pause } from "lucide-react";
 
 import { Badge, Button, Card } from "../../shared/components/ui";
 import { DifficultyIcon } from "../../shared/components/DifficultyIcon";
@@ -47,6 +47,7 @@ export function SimilarityResultCard({
   onSelect,
   onOpen,
   onDownload,
+  onAddToCollection,
   onPreview,
   previewLoading,
   playing,
@@ -59,6 +60,7 @@ export function SimilarityResultCard({
   onSelect: () => void;
   onOpen: () => void;
   onDownload: () => void;
+  onAddToCollection: () => void;
   onPreview: () => void;
   previewLoading: boolean;
   playing: boolean;
@@ -117,6 +119,7 @@ export function SimilarityResultCard({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          <Button aria-label="加入收藏夹" onClick={(event) => { event.stopPropagation(); onAddToCollection(); }} size="icon" variant="ghost"><Heart className="size-4" /></Button>
           <Button aria-label={playing ? "暂停试听" : "试听"} loading={previewLoading} onClick={(event) => { event.stopPropagation(); onPreview(); }} size="icon" variant={playing ? "primary" : "ghost"}>
             {playing ? <Pause className="size-4" /> : <Headphones className="size-4" />}
           </Button>

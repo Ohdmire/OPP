@@ -25,6 +25,12 @@ export function useSettings() {
       launch_tosu_on_game_detect: false,
       game_session_analysis_on_detect: true,
       preview_volume: 65,
+      cache_limit_mb: 512,
+      key_bindings: {
+        open_local_maps: "Alt+1",
+        open_trainer: "Alt+2",
+        open_settings: "Alt+,",
+      },
       similarity_preferences: defaultSimilarityPreferences,
     }),
     staleTime: Infinity,

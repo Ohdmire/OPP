@@ -1,4 +1,5 @@
 mod account;
+mod collections;
 mod error;
 mod game_session;
 mod local_analysis;
@@ -20,6 +21,12 @@ use account::{
     begin_oauth_login, cancel_oauth_login, clear_profile_cache, disconnect_osu,
     export_replay_video, get_auth_status, get_own_profile, get_scores, get_settings,
     save_oauth_credentials, update_settings,
+};
+use collections::{
+    add_collection_entries, create_collection, delete_collection, export_collection_share,
+    get_collection_download_items, import_collection_share, list_collections,
+    preview_collection_share, refresh_collections, remove_collection_entry, rename_collection,
+    write_stable_collections,
 };
 use game_session::{
     get_game_session_status, get_game_status, inspect_game_replay, list_game_media,
@@ -125,6 +132,18 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_auth_status,
+            list_collections,
+            refresh_collections,
+            create_collection,
+            rename_collection,
+            delete_collection,
+            add_collection_entries,
+            remove_collection_entry,
+            write_stable_collections,
+            export_collection_share,
+            preview_collection_share,
+            import_collection_share,
+            get_collection_download_items,
             save_oauth_credentials,
             begin_oauth_login,
             cancel_oauth_login,

@@ -186,6 +186,21 @@ pub struct AppSettings {
     pub game_session_analysis_on_detect: bool,
     #[serde(default = "default_preview_volume")]
     pub preview_volume: u8,
+    /// Maximum disk space reserved for generated local-analysis thumbnails.
+    #[serde(default = "default_cache_limit_mb")]
+    pub cache_limit_mb: u32,
+    #[serde(default)]
+    pub key_bindings: AppKeyBindings,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppKeyBindings {
+    #[serde(default = "default_open_local_maps_key")]
+    pub open_local_maps: String,
+    #[serde(default = "default_open_trainer_key")]
+    pub open_trainer: String,
+    #[serde(default = "default_open_settings_key")]
+    pub open_settings: String,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -280,6 +295,22 @@ fn default_preview_volume() -> u8 {
     65
 }
 
+fn default_cache_limit_mb() -> u32 {
+    512
+}
+
+fn default_open_local_maps_key() -> String {
+    "Alt+1".into()
+}
+
+fn default_open_trainer_key() -> String {
+    "Alt+2".into()
+}
+
+fn default_open_settings_key() -> String {
+    "Alt+,".into()
+}
+
 fn default_similarity_section_range() -> u32 {
     4
 }
@@ -313,6 +344,18 @@ impl Default for AppSettings {
             suppress_tosu_launch_prompt: false,
             game_session_analysis_on_detect: false,
             preview_volume: default_preview_volume(),
+            cache_limit_mb: default_cache_limit_mb(),
+            key_bindings: AppKeyBindings::default(),
+        }
+    }
+}
+
+impl Default for AppKeyBindings {
+    fn default() -> Self {
+        Self {
+            open_local_maps: default_open_local_maps_key(),
+            open_trainer: default_open_trainer_key(),
+            open_settings: default_open_settings_key(),
         }
     }
 }

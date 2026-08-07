@@ -116,18 +116,22 @@ export function BeatmapDetailDrawer({
   const query = useLocalBeatmapDetail(client, resourceId);
   const detail = query.data;
   const [hoveredStrainTime, setHoveredStrainTime] = useState<number | null>(null);
-  const strainRows =
-    detail?.strains?.series[0]?.values.map((_, index) => {
+  const strainRows = (() => {
+    const strains = detail?.strains;
+    if (!strains) return [];
+    const pointCount = Math.max(0, ...strains.series.map((series) => series.values.length));
+    return Array.from({ length: pointCount }, (_, index) => {
       const row: Record<string, number> = {
         time:
-          (detail.strains?.first_object_time_ms ?? 0) +
-          index * (detail.strains?.section_length_ms ?? 0),
+          strains.first_object_time_ms +
+          (index + 1) * strains.section_length_ms,
       };
-      detail.strains?.series.forEach((series) => {
+      strains.series.forEach((series) => {
         row[series.key] = series.values[index] ?? 0;
       });
       return row;
-    }) ?? [];
+    });
+  })();
 
   return (
     <Dialog.Root onOpenChange={(open) => !open && onClose()} open={Boolean(resourceId)}>
@@ -217,7 +221,8 @@ export function BeatmapDetailDrawer({
                         <CartesianGrid stroke="rgba(255,255,255,.05)" vertical={false} />
                         <XAxis
                           dataKey="time"
-                          domain={[0, "dataMax"]}
+                          domain={["dataMin", "dataMax"]}
+                          minTickGap={56}
                           stroke="#586174"
                           tickFormatter={(value) => editorTimestamp(Number(value))}
                           tickLine={false}

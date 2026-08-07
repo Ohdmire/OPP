@@ -26,18 +26,78 @@ function DisplayGammaCard() {
   return <Card className="p-6"><div className="flex items-start gap-4"><div className="grid size-11 shrink-0 place-items-center rounded-2xl border border-[var(--theme-primary-soft)] bg-[var(--theme-primary-muted)] text-[var(--theme-primary)]"><MonitorCog className="size-5" /></div><SectionTitle title="显示器伽马" description="直接使用 Windows 显示接口调整主显示器的伽马。1.00 为默认值，数值越高会提亮中间调。" /></div><div className="mt-6 flex items-center gap-4"><input aria-label="显示器伽马" className="h-2 w-full cursor-pointer accent-[var(--theme-primary)]" type="range" min="0.5" max="2.5" step="0.01" value={gamma} onChange={(event) => changeGamma(Number(event.target.value))} /><output className="w-12 shrink-0 text-right text-sm font-semibold tabular-nums text-white">{gamma.toFixed(2)}</output><Button disabled={applying || gamma === 1} onClick={() => changeGamma(1)} size="sm"><RotateCcw className="size-3.5" />复原</Button></div><p className="mt-3 text-xs leading-5 text-slate-400">拖动滑块后立即生效；关闭或重启显示驱动后，Windows 可能会恢复系统默认伽马。</p>{error ? <div className="mt-4"><ErrorPanel error={error} /></div> : null}</Card>;
 }
 
-function SpeedTestCard() {
+export function LegacySpeedTestCard() {
   const [active, setActive] = useState(false);
+  const [binding, setBinding] = useState(false);
+  const [testKeys, setTestKeys] = useState<string[]>(["KeyZ", "KeyX"]);
   const [presses, setPresses] = useState(0);
   const [duration, setDuration] = useState(10);
   const [remaining, setRemaining] = useState(10);
   const [result, setResult] = useState<number | null>(null);
   const startedAt = useRef(0);
   const pressesRef = useRef(0);
-  useEffect(() => { if (!active) return; const onKeyDown = (event: KeyboardEvent) => { if (!event.repeat && event.code !== "Escape") { pressesRef.current += 1; setPresses(pressesRef.current); } }; window.addEventListener("keydown", onKeyDown); const interval = window.setInterval(() => { const next = Math.max(0, duration - (performance.now() - startedAt.current) / 1000); setRemaining(next); if (next === 0) { window.clearInterval(interval); setActive(false); setResult(pressesRef.current / duration); } }, 50); return () => { window.removeEventListener("keydown", onKeyDown); window.clearInterval(interval); }; }, [active, duration]);
+  useEffect(() => { if (!active) return; const onKeyDown = (event: KeyboardEvent) => { if (!event.repeat && event.code !== "Escape" && testKeys.includes(event.code)) { event.preventDefault(); pressesRef.current += 1; setPresses(pressesRef.current); } }; window.addEventListener("keydown", onKeyDown); const interval = window.setInterval(() => { const next = Math.max(0, duration - (performance.now() - startedAt.current) / 1000); setRemaining(next); if (next === 0) { window.clearInterval(interval); setActive(false); setResult(pressesRef.current / duration); } }, 50); return () => { window.removeEventListener("keydown", onKeyDown); window.clearInterval(interval); }; }, [active, duration, testKeys]);
+  useEffect(() => { if (!binding) return; const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") { setBinding(false); return; } if (event.repeat || ["Control", "Alt", "Shift", "Meta"].includes(event.key)) return; event.preventDefault(); setTestKeys((current) => current.includes(event.code) ? current.filter((key) => key !== event.code) : [...current, event.code]); }; window.addEventListener("keydown", onKeyDown); return () => window.removeEventListener("keydown", onKeyDown); }, [binding]);
   const start = () => { startedAt.current = performance.now(); pressesRef.current = 0; setPresses(0); setRemaining(duration); setResult(null); setActive(true); };
-  const bpm = result == null ? null : result * 60;
+  const bpm = result == null ? null : result * 15;
   return <Card className="p-6"><div className="flex items-start gap-4"><div className="grid size-11 shrink-0 place-items-center rounded-2xl border border-[var(--theme-primary-soft)] bg-[var(--theme-primary-muted)] text-[var(--theme-primary)]"><Keyboard className="size-5" /></div><SectionTitle title="手速测试" description="连续按任意按键（按住不算），按所选时间计算 KPS，并转换为每分钟 BPM。" /></div><div className="mt-5 flex items-center gap-3"><span className="text-xs text-slate-500">测试时长</span>{[5, 10, 15, 30].map((value) => <button className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${duration === value ? "border-[var(--theme-primary)] bg-[var(--theme-primary-muted)] text-white" : "border-white/[0.08] text-slate-400"}`} disabled={active} key={value} onClick={() => { setDuration(value); setRemaining(value); setResult(null); }} type="button">{value}s</button>)}</div><div className="mt-4 rounded-2xl border border-white/[0.08] bg-black/[0.12] p-5"><div className="flex items-end justify-between gap-5"><div><p className="text-xs uppercase tracking-[0.16em] text-slate-500">{active ? "正在计时" : result == null ? "准备开始" : "本次成绩"}</p><p className="mt-1 text-3xl font-semibold tabular-nums text-white">{active ? presses : result == null ? "—" : `${result.toFixed(1)} KPS`}</p>{bpm != null ? <p className="mt-1 text-sm font-semibold text-pink-200">≈ {bpm.toFixed(0)} BPM</p> : null}</div><div className="text-right"><p className="text-xs text-slate-500">剩余时间</p><p className="mt-1 text-xl font-semibold tabular-nums text-[var(--theme-primary-light)]">{remaining.toFixed(1)}s</p></div></div><div className="mt-4 h-2 overflow-hidden rounded-full bg-white/[0.08]"><div className="h-full rounded-full bg-[var(--theme-primary)] transition-[width]" style={{ width: `${((duration - remaining) / duration) * 100}%` }} /></div><Button className="mt-5" disabled={active} onClick={start} variant="primary">{result == null ? `开始 ${duration} 秒测试` : "再测一次"}</Button></div></Card>;
+}
+
+function SpeedTestCard() {
+  const [active, setActive] = useState(false);
+  const [binding, setBinding] = useState(false);
+  const [testKeys, setTestKeys] = useState<string[]>(["KeyZ", "KeyX"]);
+  const [presses, setPresses] = useState(0);
+  const [duration, setDuration] = useState(10);
+  const [remaining, setRemaining] = useState(10);
+  const [result, setResult] = useState<number | null>(null);
+  const startedAt = useRef(0);
+  const pressesRef = useRef(0);
+
+  useEffect(() => {
+    if (!active) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.repeat && testKeys.includes(event.code)) {
+        event.preventDefault();
+        pressesRef.current += 1;
+        setPresses(pressesRef.current);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    const interval = window.setInterval(() => {
+      const next = Math.max(0, duration - (performance.now() - startedAt.current) / 1000);
+      setRemaining(next);
+      if (next === 0) {
+        window.clearInterval(interval);
+        setActive(false);
+        setResult(pressesRef.current / duration);
+      }
+    }, 50);
+    return () => { window.removeEventListener("keydown", onKeyDown); window.clearInterval(interval); };
+  }, [active, duration, testKeys]);
+
+  useEffect(() => {
+    if (!binding) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setBinding(false); return; }
+      if (event.repeat || ["Control", "Alt", "Shift", "Meta"].includes(event.key)) return;
+      event.preventDefault();
+      setTestKeys((current) => current.includes(event.code) ? current.filter((key) => key !== event.code) : [...current, event.code]);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [binding]);
+
+  const start = () => { startedAt.current = performance.now(); pressesRef.current = 0; setPresses(0); setRemaining(duration); setResult(null); setActive(true); };
+  const bpm = result == null ? null : result * 15;
+
+  return <Card className="p-6">
+    <div className="flex items-start gap-4"><div className="grid size-11 shrink-0 place-items-center rounded-2xl border border-[var(--theme-primary-soft)] bg-[var(--theme-primary-muted)] text-[var(--theme-primary)]"><Keyboard className="size-5" /></div><SectionTitle title="手速测试" description="仅统计绑定的测试按键；BPM 按四分之一拍换算。" /></div>
+    <div className="mt-5 flex flex-wrap items-center gap-3"><span className="text-xs text-slate-500">测试时长</span>{[5, 10, 15, 30].map((value) => <button className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${duration === value ? "border-[var(--theme-primary)] bg-[var(--theme-primary-muted)] text-white" : "border-white/[0.08] text-slate-400"}`} disabled={active} key={value} onClick={() => { setDuration(value); setRemaining(value); setResult(null); }} type="button">{value}s</button>)}</div>
+    <div className="mt-3 flex flex-wrap items-center gap-2"><Button disabled={active} onClick={() => setBinding((current) => !current)} size="sm" variant="secondary">{binding ? "完成绑定" : "绑定测试按键"}</Button><span className="font-mono text-xs text-cyan-200">{testKeys.length ? testKeys.join(" + ").replace(/Key/g, "") : "未绑定"}</span></div>
+    {binding ? <p className="mt-2 text-xs text-amber-200">按一个键以添加或移除；按 Esc 结束绑定。</p> : null}
+    <div className="mt-4 rounded-2xl border border-white/[0.08] bg-black/[0.12] p-5"><div className="flex items-end justify-between gap-5"><div><p className="text-xs uppercase tracking-[0.16em] text-slate-500">{active ? "测试中" : result == null ? "准备开始" : "本次成绩"}</p><p className="mt-1 text-3xl font-semibold tabular-nums text-white">{active ? presses : result == null ? "—" : `${result.toFixed(1)} KPS`}</p>{bpm != null ? <p className="mt-1 text-sm font-semibold text-pink-200">≈ {bpm.toFixed(0)} BPM（四分之一拍）</p> : null}</div><div className="text-right"><p className="text-xs text-slate-500">剩余时间</p><p className="mt-1 text-xl font-semibold tabular-nums text-[var(--theme-primary-light)]">{remaining.toFixed(1)}s</p></div></div><div className="mt-4 h-2 overflow-hidden rounded-full bg-white/[0.08]"><div className="h-full rounded-full bg-[var(--theme-primary)] transition-[width]" style={{ width: `${((duration - remaining) / duration) * 100}%` }} /></div><Button className="mt-5" disabled={active || !testKeys.length} onClick={start} variant="primary">{result == null ? `开始 ${duration} 秒测试` : "再测一次"}</Button></div>
+  </Card>;
 }
 
 function FileAssociationCard({ title, description, value, saving, onSave }: { title: string; description: string; value: OsuClient; saving: boolean; onSave: (client: OsuClient) => void }) {

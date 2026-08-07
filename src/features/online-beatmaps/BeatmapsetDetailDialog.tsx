@@ -4,6 +4,7 @@ import {
   ExternalLink,
   Calculator,
   Headphones,
+  Heart,
   LoaderCircle,
   Pause,
   ScanSearch,
@@ -25,6 +26,7 @@ export function BeatmapsetDetailDialog({
   beatmapsetId,
   fallback,
   initialBeatmapId,
+  onAddToCollection,
   onFindSimilar,
   playing,
   onClose,
@@ -33,6 +35,7 @@ export function BeatmapsetDetailDialog({
   beatmapsetId: number | null;
   fallback: OnlineBeatmapset | null;
   initialBeatmapId?: number | null;
+  onAddToCollection: (beatmapset: OnlineBeatmapset) => void;
   onFindSimilar: (beatmapId: number) => void;
   playing: boolean;
   onClose: () => void;
@@ -104,6 +107,7 @@ export function BeatmapsetDetailDialog({
                   >
                     <X className="size-4" />
                   </Button>
+                  <Button onClick={() => onAddToCollection(beatmapset)} variant="secondary"><Heart className="size-4" />加入收藏夹</Button>
                 </Dialog.Close>
                 <div className="absolute bottom-6 left-7 right-7">
                   <div className="flex gap-2">

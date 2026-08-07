@@ -59,6 +59,7 @@ export interface AppSettings {
   suppress_tosu_launch_prompt?: boolean;
   game_session_analysis_on_detect?: boolean;
   preview_volume?: number;
+  cache_limit_mb?: number;
   similarity_preferences: SimilarityPreferences;
 }
 
@@ -840,6 +841,83 @@ export interface OnlineBeatmap {
   playcount?: number;
   last_updated?: string;
   url?: string;
+  checksum?: string;
+}
+
+export type CollectionSource = "opp" | "stable" | "lazer";
+
+export interface CollectionEntry {
+  id: string;
+  beatmap_id: number | null;
+  beatmapset_id: number | null;
+  checksum: string | null;
+  ruleset: Ruleset | null;
+  difficulty_name: string;
+  title: string;
+  artist: string;
+  creator: string;
+  resolved: boolean;
+}
+
+export interface CollectionFolder {
+  id: string;
+  name: string;
+  creator: string;
+  created_at: string;
+  updated_at: string;
+  source: CollectionSource;
+  read_only: boolean;
+  pending_write: boolean;
+  entries: CollectionEntry[];
+}
+
+export interface CollectionCandidate {
+  beatmap_id: number | null;
+  beatmapset_id: number | null;
+  checksum: string | null;
+  ruleset: Ruleset | null;
+  difficulty_name: string;
+  title: string;
+  artist: string;
+  creator: string;
+  local_client?: OsuClient | null;
+  local_resource_id?: string | null;
+}
+
+export interface CollectionSourceStatus {
+  client: OsuClient;
+  available: boolean;
+  read_only: boolean;
+  message: string;
+  refreshed_at: string | null;
+}
+
+export interface CollectionSnapshot {
+  folders: CollectionFolder[];
+  sources: CollectionSourceStatus[];
+}
+
+export interface CollectionSharePreview {
+  name: string;
+  creator: string;
+  created_at: string;
+  exported_at: string;
+  entries: CollectionEntry[];
+  available_count: number;
+  downloadable_count: number;
+  unresolved_count: number;
+}
+
+export interface CollectionDownloadItem {
+  beatmapset_id: number;
+  artist: string;
+  title: string;
+}
+
+export interface CollectionWriteResult {
+  written_folders: number;
+  skipped_entries: number;
+  backup_path: string | null;
 }
 
 export interface OnlineBeatmapset {

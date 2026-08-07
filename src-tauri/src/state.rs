@@ -7,6 +7,7 @@ use tokio::sync::{Mutex as AsyncMutex, oneshot};
 
 use crate::{
     account::{AvatarCache, CredentialStore},
+    collections::CollectionService,
     error::CommandResult,
     game_session::{GameMonitorRuntime, GameSessionRuntime},
     local_analysis::LocalAnalysisService,
@@ -30,6 +31,7 @@ pub struct AppState {
     pub avatar_cache: AvatarCache,
     pub credentials: CredentialStore,
     pub local_analysis: Arc<LocalAnalysisService>,
+    pub collections: Arc<CollectionService>,
     pub similarity: Arc<SimilarityRuntime>,
     pub store: StateStore,
     pub oauth: Mutex<OAuthRuntime>,
@@ -43,14 +45,19 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(app_data_dir: &Path) -> CommandResult<Self> {
+        let store = StateStore::load(app_data_dir)?;
+        let local_analysis = Arc::new(LocalAnalysisService::new(app_data_dir)?);
+        let collections = Arc::new(CollectionService::new(app_data_dir)?);
+        local_analysis.set_thumbnail_cache_limit_mb(store.snapshot()?.settings.cache_limit_mb)?;
         Ok(Self {
             api: OsuApi::new()?,
             providers: ProviderRegistry::new()?,
             avatar_cache: AvatarCache::new(app_data_dir)?,
             credentials: CredentialStore,
-            local_analysis: Arc::new(LocalAnalysisService::new(app_data_dir)?),
+            local_analysis,
+            collections,
             similarity: Arc::new(SimilarityRuntime::default()),
-            store: StateStore::load(app_data_dir)?,
+            store,
             oauth: Mutex::new(OAuthRuntime::default()),
             beatmap_download: Mutex::new(None),
             token_refresh: AsyncMutex::new(()),

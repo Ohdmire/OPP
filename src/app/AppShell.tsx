@@ -12,6 +12,7 @@ import { desktopApi } from "../shared/lib/tauri";
 import type { GameSessionSummary } from "../shared/types/osu";
 import { dateTime, fullNumber, percent } from "../shared/lib/format";
 import { Badge, Button, Card, DataLine } from "../shared/components/ui";
+import { CollectionAddDialog } from "../features/collections/CollectionAddDialog";
 
 const validRulesets: Ruleset[] = ["osu", "taiko", "fruits", "mania"];
 
@@ -230,6 +231,7 @@ export function AppShell() {
       {tosuPromptSettings ? <TosuLaunchPrompt settings={tosuPromptSettings} onClose={() => setTosuPromptSettings(null)} /> : null}
       <DownloadToast />
       <DownloadCompletedPlaylist />
+      <CollectionAddDialog defaultCreator={profileQuery.data?.data.username ?? ""} />
     </div>
   );
 }

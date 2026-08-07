@@ -3,6 +3,7 @@ import {
   Database,
   ExternalLink,
   Film,
+  Heart,
   Image,
   LayoutDashboard,
   Map,
@@ -88,6 +89,7 @@ export function Sidebar({ profile, loading }: { profile?: OwnProfile; loading: b
       <nav aria-label="主导航" className="min-h-0 flex-1 overflow-y-auto pr-1">
         <NavGroup label="核心功能">
           <NavItem emphasis="beatmaps" icon={Music2} label="在线谱面" to="/online/beatmaps" />
+          <NavItem emphasis="beatmaps" icon={Heart} label="谱面收藏夹" to="/collections" />
           <NavItem emphasis="similar" icon={ScanSearch} label="相似谱面" to="/online/similar" />
           <NavItem emphasis="trainer" icon={WandSparkles} label="谱面练习生成器" to="/trainer" />
         </NavGroup>

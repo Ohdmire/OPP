@@ -76,6 +76,7 @@ const base: AppSettings = {
   suppress_tosu_launch_prompt: false,
   game_session_analysis_on_detect: true,
   preview_volume: 65,
+  cache_limit_mb: 512,
   similarity_preferences: defaultSimilarityPreferences,
 };
 
@@ -115,12 +116,17 @@ export function SettingsPage() {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [sourceBusy, setSourceBusy] = useState<OsuClient | null>(null);
-  const settings = { ...base, ...stored.data };
+  const settings: AppSettings = {
+    ...base,
+    ...stored.data,
+  };
 
   const save = async (next: AppSettings) => {
     setBusy(true);
     try {
-      queryClient.setQueryData(settingsQueryKey, await desktopApi.updateSettings(next));
+      const saved = await desktopApi.updateSettings(next);
+      queryClient.setQueryData(settingsQueryKey, saved);
+      window.dispatchEvent(new CustomEvent("opp:settings-updated", { detail: saved }));
     } finally {
       setBusy(false);
     }
@@ -317,6 +323,24 @@ export function SettingsPage() {
                 <Trash2 className="size-4" />清除缓存
               </Button>
               </div>
+              <label className="block rounded-xl border border-white/[0.1] bg-white/[0.035] p-4">
+                <span className="block text-sm font-semibold text-slate-100">本地缩略图缓存上限</span>
+                <span className="mt-1 block text-xs leading-5 text-slate-500">超过上限时会自动清理最早的谱面背景缩略图；索引和你的谱面文件不会被删除。</span>
+                <div className="mt-3 flex items-center gap-2">
+                  <input
+                    aria-label="本地缩略图缓存上限（MB）"
+                    className="opp-input w-32"
+                    disabled={busy}
+                    max={10240}
+                    min={64}
+                    onChange={(event) => void save({ ...settings, cache_limit_mb: Math.max(64, Math.min(10240, Number(event.target.value) || 64)) })}
+                    step={64}
+                    type="number"
+                    value={settings.cache_limit_mb}
+                  />
+                  <span className="text-sm text-slate-400">MB</span>
+                </div>
+              </label>
             </div>
           </Card>
 
