@@ -29,9 +29,10 @@ interface NavItemProps {
   label: string;
   icon: typeof LayoutDashboard;
   emphasis?: "beatmaps" | "similar" | "trainer";
+  onboarding?: string;
 }
 
-function NavItem({ to, label, icon: Icon, emphasis }: NavItemProps) {
+function NavItem({ to, label, icon: Icon, emphasis, onboarding }: NavItemProps) {
   const location = useLocation();
   const active = location.pathname === to;
   const linkRef = useRef<HTMLAnchorElement>(null);
@@ -50,6 +51,7 @@ function NavItem({ to, label, icon: Icon, emphasis }: NavItemProps) {
         active && "text-white",
       )}
       end
+      data-onboarding={onboarding}
       ref={linkRef}
       to={to}
     >
@@ -86,28 +88,32 @@ export function Sidebar({ profile, loading }: { profile?: OwnProfile; loading: b
       <div className="mb-4 border-b border-[var(--line-subtle)] px-2 pb-4"><div className="flex items-center gap-3"><img alt="OPP" className="opp-brand-mark size-10" src="/opp-icon.png" /><p className="text-sm font-semibold tracking-wide text-white">OSU! Plus Plus</p></div></div>
       <nav aria-label="主导航" className="min-h-0 flex-1 overflow-y-auto pr-1">
         <NavGroup label="核心功能">
-          <NavItem emphasis="beatmaps" icon={Music2} label="在线谱面" to="/online/beatmaps" />
-          <NavItem emphasis="beatmaps" icon={Heart} label="谱面收藏夹" to="/collections" />
-          <NavItem emphasis="similar" icon={ScanSearch} label="相似谱面" to="/online/similar" />
-          <NavItem emphasis="trainer" icon={WandSparkles} label="谱面练习生成器" to="/trainer" />
+          <div data-onboarding="online-and-collections">
+            <NavItem emphasis="beatmaps" icon={Music2} label="在线谱面" to="/online/beatmaps" />
+            <NavItem emphasis="beatmaps" icon={Heart} label="谱面收藏夹" to="/collections" />
+          </div>
+          <NavItem emphasis="similar" icon={ScanSearch} label="相似谱面" onboarding="similar-beatmaps" to="/online/similar" />
+          <NavItem emphasis="trainer" icon={WandSparkles} label="谱面练习生成器" onboarding="trainer" to="/trainer" />
         </NavGroup>
         <NavGroup label="资料与资源">
-          <NavItem icon={Database} label="数据中心" to="/data" />
-          <NavItem icon={Map} label="本地谱面" to="/local/maps" />
-          <NavItem icon={Palette} label="本地皮肤" to="/local/skins" />
-          <NavItem icon={Image} label="截图与回放" to="/local/media" />
+          <NavItem icon={Database} label="数据中心" onboarding="data-center" to="/data" />
+          <div data-onboarding="local-resources">
+            <NavItem icon={Map} label="本地谱面" to="/local/maps" />
+            <NavItem icon={Palette} label="本地皮肤" to="/local/skins" />
+            <NavItem icon={Image} label="截图与回放" to="/local/media" />
+          </div>
         </NavGroup>
         <NavGroup label="创作与直播">
-          <NavItem icon={Film} label="回放渲染" to="/local/media/render" />
-          <NavItem icon={Radio} label="tosu 直播集成" to="/tosu" />
-          <NavItem icon={Wrench} label="工具集合" to="/tools" />
+          <NavItem icon={Film} label="回放渲染" onboarding="replay-render" to="/local/media/render" />
+          <NavItem icon={Radio} label="tosu 直播集成" onboarding="tosu" to="/tosu" />
+          <NavItem icon={Wrench} label="工具集合" onboarding="tools" to="/tools" />
         </NavGroup>
       </nav>
       <div className="relative shrink-0 border-t border-white/[0.07] pt-3">
-        <button aria-expanded={startMenuOpen} aria-label="选择客户端并启动游戏" className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[var(--theme-primary)] px-4 py-2.5 text-sm font-semibold text-[var(--on-primary)] shadow-[0_8px_22px_var(--theme-primary-glow)] transition-colors hover:bg-[var(--theme-primary-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-sidebar)] disabled:opacity-50" disabled={starting} onClick={() => setStartMenuOpen((open) => !open)} type="button"><Play className={`size-4 ${starting ? "animate-pulse" : ""}`} />启动 osu!</button>
+        <button aria-expanded={startMenuOpen} aria-label="选择客户端并启动游戏" className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[var(--theme-primary)] px-4 py-2.5 text-sm font-semibold text-[var(--on-primary)] shadow-[0_8px_22px_var(--theme-primary-glow)] transition-colors hover:bg-[var(--theme-primary-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-sidebar)] disabled:opacity-50" data-onboarding="start-game" disabled={starting} onClick={() => setStartMenuOpen((open) => !open)} type="button"><Play className={`size-4 ${starting ? "animate-pulse" : ""}`} />启动 osu!</button>
         {startMenuOpen ? <div className="absolute bottom-14 left-0 z-50 w-full rounded-lg border border-white/10 bg-[var(--surface-panel-strong)] p-2 shadow-2xl"><button className="min-h-10 w-full rounded-md px-2 py-2 text-left text-xs text-slate-300 transition-colors hover:bg-white/[0.06] hover:text-white" onClick={() => void startGame("stable")} type="button">osu! Stable</button><button className="mt-0.5 min-h-10 w-full rounded-md px-2 py-2 text-left text-xs text-slate-300 transition-colors hover:bg-white/[0.06] hover:text-white" onClick={() => void startGame("lazer")} type="button">osu! Lazer</button></div> : null}
       </div>
-      <div className="mt-2 shrink-0"><NavItem icon={Settings} label="设置" to="/settings" />{loading ? <div className="mt-2 flex items-center gap-3 px-2 py-1"><Skeleton className="size-8 rounded-lg" /><Skeleton className="h-3 w-20" /></div> : profile ? <div className="mt-2 flex items-center gap-3 border-t border-white/[0.06] px-2 pt-3"><Avatar className="size-8 rounded-lg border border-white/10" profile={profile} /><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-white">{profile.username}</p></div><button aria-label="在浏览器中打开个人主页" className="grid size-8 shrink-0 place-items-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]" onClick={() => void desktopApi.openExternal(`https://osu.ppy.sh/users/${profile.id}`)} title="在浏览器中打开个人主页" type="button"><ExternalLink className="size-3.5" /></button></div> : null}</div>
+      <div className="mt-2 shrink-0"><NavItem icon={Settings} label="设置" onboarding="settings" to="/settings" />{loading ? <div className="mt-2 flex items-center gap-3 px-2 py-1"><Skeleton className="size-8 rounded-lg" /><Skeleton className="h-3 w-20" /></div> : profile ? <div className="mt-2 flex items-center gap-3 border-t border-white/[0.06] px-2 pt-3"><Avatar className="size-8 rounded-lg border border-white/10" profile={profile} /><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-white">{profile.username}</p></div><button aria-label="在浏览器中打开个人主页" className="grid size-8 shrink-0 place-items-center rounded-md text-slate-500 transition-colors hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]" onClick={() => void desktopApi.openExternal(`https://osu.ppy.sh/users/${profile.id}`)} title="在浏览器中打开个人主页" type="button"><ExternalLink className="size-3.5" /></button></div> : null}</div>
     </aside>
   );
 }

@@ -143,6 +143,10 @@ pub struct Cached<T> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppSettings {
     #[serde(default)]
+    pub onboarding_version: u32,
+    #[serde(default)]
+    pub page_onboarding_versions: BTreeMap<String, u32>,
+    #[serde(default)]
     pub reduce_motion: bool,
     #[serde(default)]
     pub similarity_index_directory: Option<String>,
@@ -322,6 +326,8 @@ fn default_obs_websocket_url() -> String {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
+            onboarding_version: 0,
+            page_onboarding_versions: BTreeMap::new(),
             reduce_motion: false,
             similarity_index_directory: None,
             similarity_preferences: SimilarityPreferences::default(),
@@ -357,6 +363,33 @@ impl Default for AppKeyBindings {
             open_trainer: default_open_trainer_key(),
             open_settings: default_open_settings_key(),
         }
+    }
+}
+
+#[cfg(test)]
+mod settings_tests {
+    use super::{AppSettings, BTreeMap};
+
+    #[test]
+    fn legacy_settings_default_to_unseen_onboarding() {
+        let settings: AppSettings = serde_json::from_str("{}").expect("deserialize settings");
+        assert_eq!(settings.onboarding_version, 0);
+        assert!(settings.page_onboarding_versions.is_empty());
+    }
+
+    #[test]
+    fn onboarding_version_round_trips() {
+        let mut page_onboarding_versions = BTreeMap::new();
+        page_onboarding_versions.insert("tools".to_string(), 1);
+        let settings = AppSettings {
+            onboarding_version: 1,
+            page_onboarding_versions,
+            ..AppSettings::default()
+        };
+        let json = serde_json::to_string(&settings).expect("serialize settings");
+        let restored: AppSettings = serde_json::from_str(&json).expect("deserialize settings");
+        assert_eq!(restored.onboarding_version, 1);
+        assert_eq!(restored.page_onboarding_versions.get("tools"), Some(&1));
     }
 }
 

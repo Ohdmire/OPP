@@ -8,6 +8,8 @@ export function useSettings() {
   return useQuery({
     queryKey: settingsQueryKey,
     queryFn: () => isTauri() ? desktopApi.getSettings() : Promise.resolve({
+      onboarding_version: 0,
+      page_onboarding_versions: {},
       reduce_motion: false,
       similarity_index_directory: null,
       beatmap_download_directory: null,

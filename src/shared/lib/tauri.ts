@@ -233,6 +233,10 @@ export const desktopApi = {
   getSettings: () => call<AppSettings>("get_settings"),
   updateSettings: (settings: AppSettings) =>
     call<AppSettings>("update_settings", { settings }),
+  markOnboardingSeen: (version: number) =>
+    call<AppSettings>("mark_onboarding_seen", { version }),
+  markPageOnboardingSeen: (pageId: string, version: number) =>
+    call<AppSettings>("mark_page_onboarding_seen", { pageId, version }),
   startGameSession: (ruleset: Ruleset, client: OsuClient, launchTosu?: boolean) =>
     call<GameSessionSummary>("start_game_session", { ruleset, client, launchTosu }),
   startDetectedGameSession: (ruleset: Ruleset, client: OsuClient) =>

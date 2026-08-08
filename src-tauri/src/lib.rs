@@ -20,7 +20,7 @@ mod trainer;
 use account::{
     begin_oauth_login, cancel_oauth_login, clear_profile_cache, disconnect_osu,
     export_replay_video, get_auth_status, get_own_profile, get_scores, get_settings,
-    save_oauth_credentials, update_settings,
+    mark_onboarding_seen, mark_page_onboarding_seen, save_oauth_credentials, update_settings,
 };
 use collections::{
     add_collection_entries, create_collection, delete_collection, export_collection_share,
@@ -176,6 +176,8 @@ pub fn run() {
             open_downloaded_path,
             clear_profile_cache,
             get_settings,
+            mark_onboarding_seen,
+            mark_page_onboarding_seen,
             update_settings,
             export_replay_video,
             get_local_sources,

@@ -69,11 +69,13 @@ export function GlobalContextBar() {
             : "游戏未运行"}
         </div>
         <span className="ml-auto h-6 w-px bg-white/[0.08]" />
-        <div aria-label="游戏模式" className="flex items-center">
-          <ModeSwitch compact onChange={setRuleset} value={ruleset} />
-        </div>
-        <div aria-label="osu! 客户端" className="flex items-center">
-          <ClientSwitch onChange={setClient} value={client} />
+        <div className="flex items-center gap-5" data-onboarding="mode-and-client">
+          <div aria-label="游戏模式" className="flex items-center">
+            <ModeSwitch compact onChange={setRuleset} value={ruleset} />
+          </div>
+          <div aria-label="osu! 客户端" className="flex items-center">
+            <ClientSwitch onChange={setClient} value={client} />
+          </div>
         </div>
       </div>
     </header>

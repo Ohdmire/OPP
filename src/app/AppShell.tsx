@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp, FolderOpen, Play } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import type { AppSettings, BeatmapDownloadProgress, CommandError, Ruleset } from "../shared/types/osu";
 import { authQueryKey } from "../features/auth/api";
 import { useOwnProfile } from "../features/profile/api";
@@ -13,6 +13,18 @@ import type { GameSessionSummary } from "../shared/types/osu";
 import { dateTime, fullNumber, percent } from "../shared/lib/format";
 import { Badge, Button, Card, DataLine } from "../shared/components/ui";
 import { CollectionAddDialog } from "../features/collections/CollectionAddDialog";
+import { settingsQueryKey, useSettings } from "../features/settings/api";
+import { OnboardingTour } from "../features/onboarding/OnboardingTour";
+import {
+  CURRENT_ONBOARDING_VERSION,
+  needsOnboarding,
+} from "../features/onboarding/tourContent";
+import {
+  getPageGuide,
+  needsPageOnboarding,
+  type PageGuide,
+} from "../features/onboarding/pageTourContent";
+import { START_ONBOARDING_EVENT, START_PAGE_ONBOARDING_EVENT } from "../shared/lib/onboardingEvents";
 
 const validRulesets: Ruleset[] = ["osu", "taiko", "fruits", "mania"];
 
@@ -73,7 +85,11 @@ function DownloadCompletedPlaylist() {
       setFiles(next.completed_paths);
       setDestination(next.destination ?? null);
       setNoticeVisible(true);
-      timer = window.setTimeout(() => setNoticeVisible(false), 5_000);
+      timer = window.setTimeout(() => {
+        setNoticeVisible(false);
+        setFiles([]);
+        setDestination(null);
+      }, 5_000);
     }).then((unlisten) => { dispose = unlisten; });
     return () => { window.clearTimeout(timer); dispose?.(); };
   }, []);
@@ -118,13 +134,76 @@ function TosuLaunchPrompt({ settings, onClose }: { settings: AppSettings; onClos
 export function AppShell() {
   const { ruleset, setRuleset, hasRulesetPreference } = useMode();
   const profileQuery = useOwnProfile(ruleset);
+  const settingsQuery = useSettings();
+  const location = useLocation();
   const initializedMode = useRef(hasRulesetPreference);
+  const onboardingChecked = useRef(false);
+  const checkedPageGuides = useRef(new Set<string>());
   const queryClient = useQueryClient();
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [completedSession, setCompletedSession] = useState<GameSessionSummary | null>(null);
   const [dismissedSession, setDismissedSession] = useState<string | null>(null);
   const [tosuPromptSettings, setTosuPromptSettings] = useState<AppSettings | null>(null);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [overallOnboardingReady, setOverallOnboardingReady] = useState(false);
+  const [pageGuide, setPageGuide] = useState<PageGuide | null>(null);
   const analysisEnabled = true;
+
+  useEffect(() => {
+    const settings = settingsQuery.data;
+    if (!settings || onboardingChecked.current) return;
+    onboardingChecked.current = true;
+    if (!needsOnboarding(settings.onboarding_version)) {
+      const readyTimer = window.setTimeout(() => setOverallOnboardingReady(true), 0);
+      return () => window.clearTimeout(readyTimer);
+    }
+
+    const openTimer = window.setTimeout(() => {
+      setOnboardingOpen(true);
+      void desktopApi.markOnboardingSeen(CURRENT_ONBOARDING_VERSION).then((saved) => {
+        queryClient.setQueryData(settingsQueryKey, saved);
+      }).catch(() => undefined);
+    }, 0);
+    return () => window.clearTimeout(openTimer);
+  }, [queryClient, settingsQuery.data]);
+
+  useEffect(() => {
+    const startOnboarding = () => {
+      setPageGuide(null);
+      setOverallOnboardingReady(false);
+      setOnboardingOpen(true);
+    };
+    window.addEventListener(START_ONBOARDING_EVENT, startOnboarding);
+    return () => window.removeEventListener(START_ONBOARDING_EVENT, startOnboarding);
+  }, []);
+
+  useEffect(() => {
+    if (!overallOnboardingReady || onboardingOpen || pageGuide) return;
+    const guide = getPageGuide(location.pathname);
+    const settings = settingsQuery.data;
+    if (!guide || !settings || checkedPageGuides.current.has(guide.id)) return;
+    checkedPageGuides.current.add(guide.id);
+    if (!needsPageOnboarding(settings.page_onboarding_versions?.[guide.id], guide)) return;
+
+    const openTimer = window.setTimeout(() => {
+      setPageGuide(guide);
+      void desktopApi.markPageOnboardingSeen(guide.id, guide.version).then((saved) => {
+        queryClient.setQueryData(settingsQueryKey, saved);
+      }).catch(() => undefined);
+    }, 180);
+    return () => window.clearTimeout(openTimer);
+  }, [location.pathname, onboardingOpen, overallOnboardingReady, pageGuide, queryClient, settingsQuery.data]);
+
+  useEffect(() => {
+    const startPageOnboarding = () => {
+      const guide = getPageGuide(location.pathname);
+      if (!guide) return;
+      setOnboardingOpen(false);
+      setPageGuide(guide);
+    };
+    window.addEventListener(START_PAGE_ONBOARDING_EVENT, startPageOnboarding);
+    return () => window.removeEventListener(START_PAGE_ONBOARDING_EVENT, startPageOnboarding);
+  }, [location.pathname]);
 
   useEffect(() => {
     let disposed = false;
@@ -212,7 +291,7 @@ export function AppShell() {
       <GlobalContextBar />
       <main className="ml-[248px] min-h-screen pt-[108px]" id="main-content" tabIndex={-1}>
         <div className="relative min-h-[calc(100vh-108px)] overflow-x-clip">
-        <div className="theme-content-frame relative mx-auto max-w-[1440px] p-7 xl:p-9">
+        <div className="theme-content-frame relative mx-auto max-w-[1440px] p-7 xl:p-9" data-page-guide-content="true">
             <Outlet />
           </div>
         </div>
@@ -229,6 +308,23 @@ export function AppShell() {
       ) : null}
       {completedSession ? <><GameCompletionOverlay session={completedSession} onClose={() => { setDismissedSession(completedSession.started_at); setCompletedSession(null); }} /><div className="fixed bottom-8 left-1/2 z-[110] -translate-x-1/2 rounded-xl border border-cyan-300/15 bg-[#0b101b]/95 px-4 py-2 text-xs text-slate-400 shadow-xl">Tips：嘛，如果拘泥于数据就会让游戏本来的乐趣消失哦</div></> : null}
       {tosuPromptSettings ? <TosuLaunchPrompt settings={tosuPromptSettings} onClose={() => setTosuPromptSettings(null)} /> : null}
+      {onboardingOpen ? (
+        <OnboardingTour
+          onClose={() => {
+            setOnboardingOpen(false);
+            setOverallOnboardingReady(true);
+          }}
+          reduceMotion={settingsQuery.data?.reduce_motion ?? false}
+        />
+      ) : null}
+      {pageGuide ? (
+        <OnboardingTour
+          eyebrow={`${pageGuide.title} · 页面引导`}
+          onClose={() => setPageGuide(null)}
+          reduceMotion={settingsQuery.data?.reduce_motion ?? false}
+          steps={pageGuide.steps}
+        />
+      ) : null}
       <DownloadToast />
       <DownloadCompletedPlaylist />
       <CollectionAddDialog defaultCreator={profileQuery.data?.data.username ?? ""} />

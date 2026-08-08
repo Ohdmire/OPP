@@ -490,6 +490,14 @@ select option {
   }
 }
 
+[role="dialog"].opp-onboarding-dialog {
+  width: min(400px, calc(100vw - 2rem)) !important;
+  max-height: calc(100vh - 2rem) !important;
+  overflow-y: auto;
+  border-radius: 14px !important;
+  padding: 1.25rem !important;
+}
+
 main .opp-section.overflow-hidden:not(.opp-interactive-surface) {
   border: 1px solid var(--line-strong);
   border-radius: 8px;

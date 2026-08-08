@@ -38,6 +38,8 @@ export interface OAuthResult {
 }
 
 export interface AppSettings {
+  onboarding_version: number;
+  page_onboarding_versions: Record<string, number>;
   reduce_motion: boolean;
   similarity_index_directory: string | null;
   beatmap_download_directory: string | null;

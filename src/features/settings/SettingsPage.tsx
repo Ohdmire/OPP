@@ -33,6 +33,7 @@ import { authQueryKey, useAuthStatus } from "../auth/api";
 import { localSourcesKey, useLocalSources } from "../local-analysis/api";
 import { useSettings, settingsQueryKey } from "./api";
 import { defaultSimilarityPreferences } from "../similar-beatmaps/defaults";
+import { START_ONBOARDING_EVENT } from "../../shared/lib/onboardingEvents";
 
 const colors: Array<[ThemeColor, string, string]> = [
   ["cyan", "青色", "#67e8f9"],
@@ -56,6 +57,8 @@ const clients: Array<[OsuClient, string]> = [
 ];
 
 const base: AppSettings = {
+  onboarding_version: 0,
+  page_onboarding_versions: {},
   reduce_motion: false,
   similarity_index_directory: null,
   beatmap_download_directory: null,
@@ -450,9 +453,14 @@ export function SettingsPage() {
                   OPP v{__APP_VERSION__}
                 </p>
               </div>
-              <Button onClick={() => void desktopApi.openExternal("https://github.com/osuplusplus/OPP")} size="sm" variant="secondary">
-                <ExternalLink className="size-4" />项目仓库
-              </Button>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button onClick={() => window.dispatchEvent(new Event(START_ONBOARDING_EVENT))} size="sm" variant="secondary">
+                  <RotateCcw className="size-4" />重新查看新手引导
+                </Button>
+                <Button onClick={() => void desktopApi.openExternal("https://github.com/osuplusplus/OPP")} size="sm" variant="secondary">
+                  <ExternalLink className="size-4" />项目仓库
+                </Button>
+              </div>
             </div>
           </Card>
         </div>

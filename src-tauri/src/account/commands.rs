@@ -233,6 +233,42 @@ pub fn get_settings(state: State<'_, AppState>) -> CommandResult<AppSettings> {
 }
 
 #[tauri::command]
+pub fn mark_onboarding_seen(
+    version: u32,
+    state: State<'_, AppState>,
+) -> CommandResult<AppSettings> {
+    state.store.update(|persisted| {
+        persisted.settings.onboarding_version = persisted.settings.onboarding_version.max(version);
+        persisted.settings.clone()
+    })
+}
+
+#[tauri::command]
+pub fn mark_page_onboarding_seen(
+    page_id: String,
+    version: u32,
+    state: State<'_, AppState>,
+) -> CommandResult<AppSettings> {
+    if page_id.is_empty()
+        || page_id.len() > 64
+        || !page_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+    {
+        return Err(CommandError::new("INVALID_PAGE_ID", "页面引导标识无效"));
+    }
+    state.store.update(|persisted| {
+        let stored = persisted
+            .settings
+            .page_onboarding_versions
+            .entry(page_id)
+            .or_default();
+        *stored = (*stored).max(version);
+        persisted.settings.clone()
+    })
+}
+
+#[tauri::command]
 pub fn update_settings(
     mut settings: AppSettings,
     state: State<'_, AppState>,
