@@ -50,6 +50,11 @@ function CompletionPreferenceDialog({ onClose }: { onClose: () => void }) {
   const [dontAskAgain, setDontAskAgain] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    const timeout = window.setTimeout(onClose, 5000);
+    return () => window.clearTimeout(timeout);
+  }, [onClose]);
+
   const save = async () => {
     if (dontAskAgain) localStorage.setItem(suppressCompletionPromptKey, "true");
     if (openAfterDownload && settings.data) {
