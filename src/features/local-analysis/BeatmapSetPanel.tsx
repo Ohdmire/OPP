@@ -227,7 +227,7 @@ function BeatmapSetCard({
           打开文件
         </Button>
         <Button
-          aria-label="在网易云音乐客户端中播放歌曲"
+          aria-label="在浏览器中搜索网易云音乐"
           onClick={() => {
             setNeteaseError(null);
             void desktopApi
@@ -238,7 +238,7 @@ function BeatmapSetCard({
           variant="secondary"
         >
           <Music4 className="size-3.5" />
-          在网易云中播放
+          搜索网易云音乐
         </Button>
         <Button
           aria-haspopup="dialog"

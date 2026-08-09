@@ -161,14 +161,51 @@ export function CollectionsPage() {
   });
 
   const changed = () => void queryClient.invalidateQueries({ queryKey: collectionsQueryKey });
+  const downloadMissingBeatmapsToGame = async () => {
+    const folders = collections.data?.folders ?? [];
+    const itemGroups = await Promise.all(folders.map((folder) => desktopApi.getCollectionDownloadItems(folder.id)));
+    const items = [...new Map(itemGroups.flat().map((item) => [item.beatmapset_id, item])).values()];
+    if (!items.length) return null;
+
+    const stable = (await desktopApi.getLocalSources()).find((source) => source.client === "stable");
+    const destination = stable?.install_root;
+    if (!stable?.valid || !destination) {
+      throw new Error("请先在设置中配置有效的 osu!stable 安装目录，才能将线上谱面自动下载到游戏。");
+    }
+
+    const settings = await desktopApi.getSettings();
+    return desktopApi.downloadOnlineBeatmapsets({
+      destination,
+      provider: resolveDefaultDownloadProvider(settings),
+      overwrite: false,
+      items,
+    });
+  };
   const create = async () => { if (!name.trim()) return; setBusy(true); try { await desktopApi.createCollection(name.trim(), ""); setName(""); changed(); } finally { setBusy(false); } };
   const importShare = async () => { setBusy(true); try { setPreview(await desktopApi.previewCollectionShare(shareCode)); } catch (caught) { setNotice((caught as CommandError).message ?? String(caught)); } finally { setBusy(false); } };
   const confirmImport = async () => { setBusy(true); try { const imported = await desktopApi.importCollectionShare(shareCode); setNotice(`已导入“${imported.name}”，包含 ${imported.entries.length} 个难度。`); setShareCode(""); setPreview(null); changed(); } catch (caught) { setNotice((caught as CommandError).message ?? String(caught)); } finally { setBusy(false); } };
   const write = async () => { setBusy(true); try { const result = await desktopApi.writeStableCollections(); setNotice(`已写回 ${result.written_folders} 个收藏夹${result.skipped_entries ? `；${result.skipped_entries} 个未取得 MD5 的条目未写入游戏。` : "。"}`); changed(); return true; } catch (caught) { setNotice((caught as CommandError).message ?? String(caught)); return false; } finally { setBusy(false); } };
+  const writeWithAutoDownload = async () => {
+    setBusy(true);
+    try {
+      const download = await downloadMissingBeatmapsToGame();
+      const written = await write();
+      if (!written) return false;
+      if (download) {
+        setNotice(`已将 ${download.completed} 个缺失谱面下载到 osu!stable${download.failed ? `，${download.failed} 个下载失败` : ""}。尚未被游戏导入的谱面会在下次启动 osu!stable 后可再次写回收藏夹。`);
+      }
+      return true;
+    } catch (caught) {
+      setNotice((caught as CommandError).message ?? String(caught));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
   const completeLeave = () => { const target = pendingNavigation; setLeavePrompt(false); setPendingNavigation(null); if (target) navigate(target); };
-  const saveAndLeave = async () => { if (await write()) completeLeave(); };
+  const saveAndLeave = async () => { if (await writeWithAutoDownload()) completeLeave(); };
   const discardAndLeave = completeLeave;
   const stay = () => { setLeavePrompt(false); setPendingNavigation(null); };
 
-  return <><PageHeader title="谱面收藏夹" description="统一管理游戏收藏夹与 OPP 分享图包；Stable 支持安全写回，lazer 当前只读。" actions={<div className="flex gap-2"><Button disabled={busy} onClick={() => void refresh("stable")} size="sm" variant="secondary"><RefreshCw className="size-3.5" />刷新 Stable</Button><Button disabled={busy} onClick={() => void write()} size="sm"><Save className="size-3.5" />写回游戏</Button></div>} /><div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]"><section className="space-y-4">{collections.isLoading ? <p className="text-sm text-slate-500">正在读取收藏夹…</p> : collections.data?.folders.length ? collections.data.folders.map((folder) => <FolderCard folder={folder} key={folder.id} onChanged={changed} />) : <EmptyState icon={<Heart className="size-6" />} title="还没有收藏夹" description="从在线、本地或相似谱面页将难度加入收藏夹，或在右侧创建一个。" />}</section><aside className="space-y-4"><Card className="p-5"><h2 className="text-sm font-semibold text-white">新建收藏夹</h2><input className="opp-input mt-3" onChange={(event) => setName(event.target.value)} placeholder="收藏夹名称" value={name} /><Button className="mt-3 w-full" disabled={busy || !name.trim()} onClick={() => void create()}><FolderPlus className="size-4" />创建</Button></Card><Card className="p-5"><h2 className="flex items-center gap-2 text-sm font-semibold text-white"><FileInput className="size-4 text-cyan-200" />导入分享码</h2><textarea className="mt-3 h-28 w-full rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs text-slate-300" onChange={(event) => { setShareCode(event.target.value); setPreview(null); }} placeholder="粘贴 OPPC2.… 分享码" value={shareCode} /><Button className="mt-3 w-full" disabled={busy || !shareCode.trim()} onClick={() => void importShare()} variant="secondary">解析分享码</Button></Card><Card className="p-5"><h2 className="text-sm font-semibold text-white">游戏来源</h2>{collections.data?.sources.map((source) => <div className="mt-3 border-t border-white/[0.06] pt-3" key={source.client}><p className="text-sm text-slate-200">osu! {source.client}{source.read_only ? " · 只读" : ""}</p><p className="mt-1 text-xs leading-5 text-slate-500">{source.message}</p></div>)}</Card>{notice ? <p className="rounded-xl border border-cyan-300/15 bg-cyan-300/[0.06] p-4 text-sm text-cyan-100">{notice}</p> : null}</aside></div><ImportPreviewDialog busy={busy} onCancel={() => setPreview(null)} onConfirm={() => void confirmImport()} preview={preview} />{leavePrompt ? <div className="fixed inset-0 z-[280] grid place-items-center bg-black/70 p-5 backdrop-blur-sm"><Card className="w-full max-w-md p-6 shadow-2xl"><h2 className="text-lg font-semibold text-white">收藏夹尚未写回游戏</h2><p className="mt-2 text-sm leading-6 text-slate-400">你对收藏夹做了修改。离开前是否保存到 osu!stable？</p><div className="mt-6 flex flex-wrap justify-end gap-2"><Button disabled={busy} onClick={stay} variant="ghost">留在此页</Button><Button disabled={busy} onClick={discardAndLeave} variant="secondary">不保存并离开</Button><Button loading={busy} onClick={() => void saveAndLeave()}><Save className="size-4" />保存并离开</Button></div></Card></div> : null}</>;
+  return <><PageHeader title="谱面收藏夹" description="统一管理游戏收藏夹与 OPP 分享图包；Stable 支持安全写回，lazer 当前只读。" actions={<div className="flex gap-2"><Button disabled={busy} onClick={() => void refresh("stable")} size="sm" variant="secondary"><RefreshCw className="size-3.5" />刷新 Stable</Button><Button disabled={busy} onClick={() => void writeWithAutoDownload()} size="sm"><Save className="size-3.5" />写回游戏</Button></div>} /><div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]"><section className="space-y-4">{collections.isLoading ? <p className="text-sm text-slate-500">正在读取收藏夹…</p> : collections.data?.folders.length ? collections.data.folders.map((folder) => <FolderCard folder={folder} key={folder.id} onChanged={changed} />) : <EmptyState icon={<Heart className="size-6" />} title="还没有收藏夹" description="从在线、本地或相似谱面页将难度加入收藏夹，或在右侧创建一个。" />}</section><aside className="space-y-4"><Card className="p-5"><h2 className="text-sm font-semibold text-white">新建收藏夹</h2><input className="opp-input mt-3" onChange={(event) => setName(event.target.value)} placeholder="收藏夹名称" value={name} /><Button className="mt-3 w-full" disabled={busy || !name.trim()} onClick={() => void create()}><FolderPlus className="size-4" />创建</Button></Card><Card className="p-5"><h2 className="flex items-center gap-2 text-sm font-semibold text-white"><FileInput className="size-4 text-cyan-200" />导入分享码</h2><textarea className="mt-3 h-28 w-full rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs text-slate-300" onChange={(event) => { setShareCode(event.target.value); setPreview(null); }} placeholder="粘贴 OPPC2.… 分享码" value={shareCode} /><Button className="mt-3 w-full" disabled={busy || !shareCode.trim()} onClick={() => void importShare()} variant="secondary">解析分享码</Button></Card><Card className="p-5"><h2 className="text-sm font-semibold text-white">游戏来源</h2>{collections.data?.sources.map((source) => <div className="mt-3 border-t border-white/[0.06] pt-3" key={source.client}><p className="text-sm text-slate-200">osu! {source.client}{source.read_only ? " · 只读" : ""}</p><p className="mt-1 text-xs leading-5 text-slate-500">{source.message}</p></div>)}</Card>{notice ? <p className="rounded-xl border border-cyan-300/15 bg-cyan-300/[0.06] p-4 text-sm text-cyan-100">{notice}</p> : null}</aside></div><ImportPreviewDialog busy={busy} onCancel={() => setPreview(null)} onConfirm={() => void confirmImport()} preview={preview} />{leavePrompt ? <div className="fixed inset-0 z-[280] grid place-items-center bg-black/70 p-5 backdrop-blur-sm"><Card className="w-full max-w-md p-6 shadow-2xl"><h2 className="text-lg font-semibold text-white">收藏夹尚未写回游戏</h2><p className="mt-2 text-sm leading-6 text-slate-400">你对收藏夹做了修改。离开前是否保存到 osu!stable？</p><div className="mt-6 flex flex-wrap justify-end gap-2"><Button disabled={busy} onClick={stay} variant="ghost">留在此页</Button><Button disabled={busy} onClick={discardAndLeave} variant="secondary">不保存并离开</Button><Button loading={busy} onClick={() => void saveAndLeave()}><Save className="size-4" />保存并离开</Button></div></Card></div> : null}</>;
 }

@@ -241,6 +241,7 @@ pub async fn download_online_beatmapsets(
         let mut last_progress_emit = started_at - Duration::from_secs(1);
         let mut last_speed_at = started_at;
         let mut last_speed_bytes = 0;
+        let mut smoothed_speed: Option<f64> = None;
         match download_with_adapters(
             &state,
             item.beatmapset_id,
@@ -275,7 +276,12 @@ pub async fn download_online_beatmapsets(
                 );
                 byte_progress.downloaded_bytes = downloaded_bytes;
                 byte_progress.total_bytes = total_bytes;
-                byte_progress.bytes_per_second = interval_bytes as f64 / interval_seconds;
+                let instantaneous_speed = interval_bytes as f64 / interval_seconds;
+                let speed = smoothed_speed
+                    .map(|previous| previous * 0.72 + instantaneous_speed * 0.28)
+                    .unwrap_or(instantaneous_speed);
+                smoothed_speed = Some(speed);
+                byte_progress.bytes_per_second = speed;
                 emit_progress(&app, byte_progress);
             },
         )
@@ -301,8 +307,9 @@ pub async fn download_online_beatmapsets(
                 );
                 byte_progress.downloaded_bytes = downloaded_bytes;
                 byte_progress.total_bytes = Some(downloaded_bytes);
-                byte_progress.bytes_per_second =
-                    downloaded_bytes as f64 / started_at.elapsed().as_secs_f64().max(0.001);
+                byte_progress.bytes_per_second = smoothed_speed.unwrap_or_else(|| {
+                    downloaded_bytes as f64 / started_at.elapsed().as_secs_f64().max(0.001)
+                });
                 emit_progress(&app, byte_progress);
                 let file_name = download_file_name(item, download.suggested_filename.as_deref());
                 let target = destination.join(file_name);

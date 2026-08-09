@@ -1119,6 +1119,9 @@ pub fn get_collection_download_items(
         .filter_map(|entry| {
             entry
                 .beatmapset_id
+                // Entries with a checksum are already local. Online entries and
+                // compact share-code entries deliberately have no checksum yet.
+                .filter(|_| entry.checksum.as_deref().is_none_or(str::is_empty))
                 .filter(|id| seen.insert(*id))
                 .map(|beatmapset_id| CollectionDownloadItem {
                     beatmapset_id,

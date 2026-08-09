@@ -22,13 +22,7 @@ OPP 是一个使用 Tauri、Rust 与 React 构建的 Windows 桌面应用。它�
 > [!IMPORTANT]
 > OPP 是独立的社区项目，与 ppy Pty Ltd 或 osu! 官方无隶属关系。osu! 是 ppy Pty Ltd 的商标。
 
-## 相似谱面
 
-1. 从 [`osu-difficulty-lab` Releases](https://github.com/osuplusplus/osu-difficulty-lab/releases) 下载与 Analyzer v3 兼容的数据集。
-2. 将数据集完整解压到本地目录。
-3. 在 OPP 的“相似谱面”页面选择数据集根目录。该目录应直接包含 `metadata.sqlite`、`features-v*.bin`、`indexes/` 和 `normalizers/`。
-
-如果解压后出现两层同名目录，请选择内层、实际包含上述文件的目录。旧版 Analyzer v2 数据集无法直接迁移，需要重新下载或生成 v3 数据集。更多说明见 [相似谱面数据集](./docs/similarity-dataset.md)。
 
 ## 功能概览
 
@@ -49,12 +43,6 @@ OPP 是一个使用 Tauri、Rust 与 React 构建的 Windows 桌面应用。它�
 
 ## 开始使用
 
-### 运行要求
-
-- Windows 10 或 Windows 11
-- Microsoft Edge WebView2 Runtime
-- osu! 个人 OAuth 应用
-
 从仓库的 [Releases](https://github.com/osuplusplus/OPP/releases/latest) 页面下载最新的 Windows x64 EXE。Release 中的 `OPP-vX.Y.Z-windows-x64.exe` 无需安装，可直接运行；首次启动仍需要系统已安装 WebView2 Runtime。
 
 ### 配置 OAuth
@@ -71,6 +59,14 @@ OPP 是一个使用 Tauri、Rust 与 React 构建的 Windows 桌面应用。它�
 5. 在系统浏览器中完成 osu! 授权。
 
 请勿把自己的 Client Secret、Token、凭据导出文件或应用数据提交到仓库。
+
+### 配置相似谱面
+
+1. 从 [`osu-difficulty-lab` Releases](https://github.com/osuplusplus/osu-difficulty-lab/releases) 下载与 Analyzer v3 兼容的数据集。
+2. 将数据集完整解压到本地目录。
+3. 在 OPP 的“相似谱面”页面选择数据集根目录。该目录应直接包含 `metadata.sqlite`、`features-v*.bin`、`indexes/` 和 `normalizers/`。
+
+如果解压后出现两层同名目录，请选择内层、实际包含上述文件的目录。旧版 Analyzer v2 数据集无法直接迁移，需要重新下载或生成 v3 数据集。更多说明见 [相似谱面数据集](./docs/similarity-dataset.md)。
 
 ## 本地开发
 
@@ -143,5 +139,9 @@ OPP/
 - [MaxOhn/rosu-pp](https://github.com/MaxOhn/rosu-pp)
 - [MaxOhn/rosu-map](https://github.com/MaxOhn/rosu-map)
 - [Tauri](https://github.com/tauri-apps/tauri)
+
+## 特别鸣谢
+
+[**Rinne_0** ](https://osu.ppy.sh/users/11511458)和 [**Ribet**](https://osu.ppy.sh/users/19140906) 作为OPP的早期用户，深度参与了软件的测试，提出许多建设性意见，没有你们我可能在中间就放弃了。
 
 感谢所有上游维护者、贡献者以及参与测试和反馈的 osu! 社区用户。

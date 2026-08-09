@@ -1,6 +1,7 @@
 import type { OnboardingStep } from "./tourContent";
 
 export const CURRENT_PAGE_ONBOARDING_VERSION = 2;
+const TRAINER_EMPTY_STATE_ONBOARDING_VERSION = 3;
 
 export interface PageGuide {
   id: string;
@@ -190,6 +191,26 @@ function stepsFor(copy: PageGuideCopy): OnboardingStep[] {
 }
 
 export function getPageGuide(pathname: string): PageGuide | null {
+  if (pathname === "/trainer" && document.querySelector('[data-page-guide-content="true"] .min-h-64')) {
+    return {
+      id: "trainer",
+      title: "谱面练习生成器",
+      version: TRAINER_EMPTY_STATE_ONBOARDING_VERSION,
+      steps: [
+        {
+          title: "先导入一张本地谱面",
+          description: "生成器需要一张本地难度作为源文件。当前还没有导入内容，因此这里会显示开始入口。",
+          example: "点击“前往本地谱面”，展开一张谱面的难度列表，再选择“导入 Trainer”。",
+          target: '[data-page-guide-content="true"] .min-h-64',
+        },
+        {
+          title: "导入后可以做什么",
+          description: "导入后可调整速度、AR、OD、CS、HP、BPM 和时间区间，并生成一个不会修改原谱面的训练副本。",
+          target: '[data-page-guide-title="true"]',
+        },
+      ],
+    };
+  }
   const copy = copies[pathname];
   return copy
     ? { id: copy.id, title: copy.title, version: CURRENT_PAGE_ONBOARDING_VERSION, steps: stepsFor(copy) }
