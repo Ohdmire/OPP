@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Download, FolderOpen, History, LoaderCircle, Map as MapIcon, RefreshCw, Search, Trophy, Upload } from "lucide-react";
+import { Download, ExternalLink, FolderOpen, History, LoaderCircle, Map as MapIcon, RefreshCw, Search, Trophy, Upload } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { PageHeader } from "../../shared/components/PageHeader";
@@ -98,7 +98,7 @@ function IndexUnavailable({
         </div>
       }
       description={`${copy.description}${status.message ? ` ${status.message}` : ""}`}
-      icon={<FolderOpen size={22} aria-hidden="true" />}
+      icon={<a aria-label="下载相似谱面索引" href="https://github.com/osuplusplus/osu-difficulty-lab/releases" rel="noreferrer" target="_blank" title="下载相似谱面索引"><ExternalLink size={22} aria-hidden="true" /></a>}
       title={copy.title}
     />
   );

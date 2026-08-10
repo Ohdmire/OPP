@@ -160,6 +160,25 @@ export function CollectionsPage() {
     event.returnValue = "";
   });
 
+  useEffect(() => {
+    if (!collections.data) return;
+    let cancelled = false;
+    void desktopApi.getCollectionSyncStatus().then((status) => {
+      if (cancelled) return;
+      if (!status.in_sync) {
+        setNotice(status.game_changed ? "游戏收藏夹已变更，点击“刷新 Stable”将从游戏同步。" : "软件收藏夹有待写回的更改。");
+      }
+      if (status.missing_downloadable_count > 0 && window.confirm(`收藏夹发现 ${status.missing_downloadable_count} 个缺失谱面集，是否由 OPP 批量下载到 osu!stable？`)) {
+        void downloadMissingBeatmapsToGame().then((download) => {
+          if (download && !cancelled) setNotice(`已补全 ${download.completed} 个缺失谱面。`);
+        }).catch((caught: unknown) => {
+          if (!cancelled) setNotice((caught as CommandError).message ?? String(caught));
+        });
+      }
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [collections.data]);
+
   const changed = () => void queryClient.invalidateQueries({ queryKey: collectionsQueryKey });
   const downloadMissingBeatmapsToGame = async () => {
     const folders = collections.data?.folders ?? [];

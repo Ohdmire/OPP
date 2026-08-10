@@ -420,7 +420,7 @@ export function SettingsPage() {
             <div className="mt-4 rounded-xl border border-white/[0.1] bg-white/[0.035] p-4">
               <p className="text-xs text-slate-500">当前默认位置</p>
               <p className="mt-1 break-all text-sm text-slate-200">
-                {settings.beatmap_download_directory ?? "尚未设置；首次下载时会询问保存位置。"}
+                {settings.beatmap_download_directory ?? "Windows 下载目录"}
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button onClick={() => void chooseDownloadDirectory()} size="sm" variant="secondary">

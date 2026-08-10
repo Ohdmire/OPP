@@ -13,6 +13,7 @@ import type {
   CollectionFolder,
   CollectionSharePreview,
   CollectionSnapshot,
+  CollectionSyncStatus,
   CollectionWriteResult,
   BeatmapCalculationRequest,
   BeatmapCalculationResult,
@@ -216,6 +217,7 @@ export const desktopApi = {
   cancelOnlineBeatmapDownload: () =>
     call<void>("cancel_online_beatmap_download"),
   listCollections: () => call<CollectionSnapshot>("list_collections"),
+  getCollectionSyncStatus: () => call<CollectionSyncStatus>("get_collection_sync_status"),
   refreshCollections: (client: OsuClient) => call<CollectionSnapshot>("refresh_collections", { client }),
   createCollection: (name: string, creator: string) => call<CollectionFolder>("create_collection", { name, creator }),
   renameCollection: (folderId: string, name: string) => call<void>("rename_collection", { folderId, name }),

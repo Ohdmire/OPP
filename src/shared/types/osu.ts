@@ -900,6 +900,15 @@ export interface CollectionSnapshot {
   sources: CollectionSourceStatus[];
 }
 
+export interface CollectionSyncStatus {
+  available: boolean;
+  in_sync: boolean;
+  pending_changes: boolean;
+  game_changed: boolean;
+  missing_downloadable_count: number;
+  missing_unresolved_count: number;
+}
+
 export interface CollectionSharePreview {
   name: string;
   creator: string;

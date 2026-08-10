@@ -24,9 +24,9 @@ use account::{
 };
 use collections::{
     add_collection_entries, create_collection, delete_collection, export_collection_share,
-    get_collection_download_items, import_collection_share, list_collections,
-    preview_collection_share, refresh_collections, remove_collection_entry, rename_collection,
-    write_stable_collections,
+    get_collection_download_items, get_collection_sync_status, import_collection_share,
+    list_collections, preview_collection_share, refresh_collections, remove_collection_entry,
+    rename_collection, write_stable_collections,
 };
 use game_session::{
     get_game_session_status, get_game_status, inspect_game_replay, list_game_media,
@@ -134,6 +134,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_auth_status,
             list_collections,
+            get_collection_sync_status,
             refresh_collections,
             create_collection,
             rename_collection,

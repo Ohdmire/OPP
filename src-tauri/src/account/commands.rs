@@ -229,7 +229,12 @@ pub fn clear_profile_cache(state: State<'_, AppState>) -> CommandResult<()> {
 
 #[tauri::command]
 pub fn get_settings(state: State<'_, AppState>) -> CommandResult<AppSettings> {
-    Ok(state.store.snapshot()?.settings)
+    state.store.update(|persisted| {
+        if persisted.settings.beatmap_download_directory.is_none() {
+            persisted.settings.beatmap_download_directory = default_download_directory();
+        }
+        persisted.settings.clone()
+    })
 }
 
 #[tauri::command]
@@ -274,6 +279,9 @@ pub fn update_settings(
     state: State<'_, AppState>,
 ) -> CommandResult<AppSettings> {
     settings.cache_limit_mb = settings.cache_limit_mb.clamp(64, 10_240);
+    if settings.beatmap_download_directory.is_none() {
+        settings.beatmap_download_directory = default_download_directory();
+    }
     state
         .local_analysis
         .set_thumbnail_cache_limit_mb(settings.cache_limit_mb)?;
@@ -281,6 +289,17 @@ pub fn update_settings(
         .store
         .update(|persisted| persisted.settings = settings.clone())?;
     Ok(settings)
+}
+
+fn default_download_directory() -> Option<String> {
+    std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(|home| {
+            std::path::PathBuf::from(home)
+                .join("Downloads")
+                .display()
+                .to_string()
+        })
 }
 
 #[tauri::command]
