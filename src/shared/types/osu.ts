@@ -926,6 +926,25 @@ export interface CollectionDownloadItem {
   title: string;
 }
 
+export interface CollectionInstallResult {
+  installed_sets: number;
+  resolved_entries: number;
+  unresolved_entries: number;
+}
+
+export interface CollectionOpenResult {
+  opened: number;
+  failed: number;
+  failures: string[];
+}
+
+export interface CollectionTaskProgress {
+  phase: "checking" | "installing" | "opening";
+  processed: number;
+  total: number;
+  message: string;
+}
+
 export interface CollectionWriteResult {
   written_folders: number;
   skipped_entries: number;
@@ -988,6 +1007,7 @@ export interface BeatmapDownloadRequest {
   items: BeatmapDownloadItem[];
   provider: BeatmapDownloadProvider | "none";
   overwrite: boolean;
+  open_after_download?: boolean;
 }
 
 export interface BeatmapDownloadFailure {

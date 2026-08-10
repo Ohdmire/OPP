@@ -23,10 +23,11 @@ use account::{
     mark_onboarding_seen, mark_page_onboarding_seen, save_oauth_credentials, update_settings,
 };
 use collections::{
-    add_collection_entries, create_collection, delete_collection, export_collection_share,
-    get_collection_download_items, get_collection_sync_status, import_collection_share,
-    list_collections, preview_collection_share, refresh_collections, remove_collection_entry,
-    rename_collection, write_stable_collections,
+    add_collection_entries, begin_collection_task, cancel_collection_task, create_collection,
+    delete_collection, export_collection_share, get_collection_download_items,
+    get_collection_sync_status, import_collection_share, install_collection_downloads,
+    list_collections, open_collection_downloads, preview_collection_share, refresh_collections,
+    remove_collection_entry, rename_collection, write_stable_collections,
 };
 use game_session::{
     get_game_session_status, get_game_status, inspect_game_replay, list_game_media,
@@ -146,6 +147,10 @@ pub fn run() {
             preview_collection_share,
             import_collection_share,
             get_collection_download_items,
+            begin_collection_task,
+            cancel_collection_task,
+            install_collection_downloads,
+            open_collection_downloads,
             save_oauth_credentials,
             begin_oauth_login,
             cancel_oauth_login,

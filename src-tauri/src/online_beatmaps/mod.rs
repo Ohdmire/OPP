@@ -200,9 +200,12 @@ pub async fn download_online_beatmapsets(
         }
         let processed = index;
         if !request.overwrite
-            && find_existing_beatmapset(&destination, item.beatmapset_id).is_some()
+            && let Some(existing) = find_existing_beatmapset(&destination, item.beatmapset_id)
         {
             skipped += 1;
+            // Callers that post-process archives (for example collection
+            // completion) also need paths for files that were already present.
+            completed_paths.push(existing);
             emit_progress(
                 &app,
                 progress_for_item(
@@ -246,6 +249,7 @@ pub async fn download_online_beatmapsets(
             &state,
             item.beatmapset_id,
             &request.provider,
+            cancel.as_ref(),
             |downloaded_bytes, total_bytes| {
                 let now = Instant::now();
                 if now.duration_since(last_progress_emit) < Duration::from_millis(100)
@@ -451,11 +455,13 @@ pub async fn download_online_beatmapsets(
         },
     );
 
-    if state
-        .store
-        .snapshot()
-        .is_ok_and(|saved| saved.settings.open_downloaded_beatmaps_after_download)
-    {
+    let open_after_download = request.open_after_download.unwrap_or_else(|| {
+        state
+            .store
+            .snapshot()
+            .is_ok_and(|saved| saved.settings.open_downloaded_beatmaps_after_download)
+    });
+    if open_after_download {
         tokio::time::sleep(Duration::from_millis(500)).await;
         for path in completed_paths {
             let _ = app.opener().open_path(path.to_string_lossy(), None::<&str>);

@@ -1,5 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useBeforeUnload, useNavigate } from "react-router-dom";
 import {
@@ -18,12 +18,14 @@ import { PageHeader } from "../../shared/components/PageHeader";
 import { desktopApi } from "../../shared/lib/tauri";
 import type {
   CollectionFolder,
+  CollectionSnapshot,
   CollectionSharePreview,
+  BeatmapDownloadProgress,
   CommandError,
 } from "../../shared/types/osu";
 import { resolveDefaultDownloadProvider } from "../online-beatmaps/downloadProvider";
-import { useSettings } from "../settings/api";
-import { collectionsQueryKey, useCollections, useRefreshCollections } from "./api";
+import { collectionsQueryKey, removeFromCollectionsSnapshot, useCollections, useRefreshCollections } from "./api";
+import { beginCollectionTask, throwIfCollectionTaskCancelled, updateCollectionTask } from "./taskStatus";
 
 async function copy(value: string) {
   if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(value);
@@ -77,7 +79,7 @@ function ImportPreviewDialog({
               </div>
               <div className="flex justify-end gap-2 border-t border-white/[0.08] p-5">
                 <Button disabled={busy} onClick={onCancel} variant="ghost">取消</Button>
-                <Button loading={busy} onClick={onConfirm}>确认导入为新收藏夹</Button>
+                <Button loading={busy} onClick={onConfirm}>{preview.downloadable_count ? "导入并自动补齐" : "确认导入为新收藏夹"}</Button>
               </div>
             </>
           ) : null}
@@ -87,8 +89,7 @@ function ImportPreviewDialog({
   );
 }
 
-function FolderCard({ folder, onChanged }: { folder: CollectionFolder; onChanged: () => void }) {
-  const settings = useSettings();
+function FolderCard({ folder, onChanged, onDownload }: { folder: CollectionFolder; onChanged: (folderId: string, entryId?: string) => Promise<void>; onDownload: (folderId: string) => Promise<void> }) {
   const [exported, setExported] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -96,9 +97,7 @@ function FolderCard({ folder, onChanged }: { folder: CollectionFolder; onChanged
   const remove = async (entryId?: string) => {
     setBusy(true);
     try {
-      if (entryId) await desktopApi.removeCollectionEntry(folder.id, entryId);
-      else await desktopApi.deleteCollection(folder.id);
-      onChanged();
+      await onChanged(folder.id, entryId);
     } catch (caught) { setError((caught as CommandError).message ?? String(caught)); }
     finally { setBusy(false); }
   };
@@ -114,16 +113,36 @@ function FolderCard({ folder, onChanged }: { folder: CollectionFolder; onChanged
   const download = async () => {
     setBusy(true);
     try {
-      const items = await desktopApi.getCollectionDownloadItems(folder.id);
-      let destination = settings.data?.beatmap_download_directory ?? "";
-      if (!destination) destination = await desktopApi.chooseBeatmapDownloadDirectory(null) ?? "";
-      if (!destination || !items.length) return;
-      await desktopApi.downloadOnlineBeatmapsets({ destination, provider: resolveDefaultDownloadProvider(settings.data), overwrite: false, items });
+      await onDownload(folder.id);
     } catch (caught) { setError((caught as CommandError).message ?? String(caught)); }
     finally { setBusy(false); }
   };
+  const missingSets = new Set(folder.entries.filter((entry) => !entry.resolved && (entry.beatmapset_id || entry.checksum)).map((entry) => entry.beatmapset_id ?? entry.checksum)).size;
 
-  return <Card className="collection-folder overflow-hidden"><div className="flex items-start justify-between gap-4 border-b border-white/[0.07] p-5"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate text-base font-semibold text-white">{folder.name}</h2>{folder.read_only ? <span className="rounded bg-amber-300/10 px-2 py-0.5 text-xs text-amber-200">只读</span> : null}{folder.pending_write ? <span className="rounded bg-cyan-300/10 px-2 py-0.5 text-xs text-cyan-100">待写回</span> : null}</div><p className="mt-1 text-xs text-slate-500">{folder.creator || "未署名"} · {folder.entries.length} 个难度</p></div><div className="flex gap-1"><Button disabled={busy} onClick={() => void exportShare()} size="icon" title="导出分享码" variant="ghost"><FileOutput className="size-4" /></Button><Button disabled={busy || !folder.entries.some((entry) => entry.beatmapset_id)} onClick={() => void download()} size="icon" title="下载缺失谱面集" variant="ghost"><Download className="size-4" /></Button><Button disabled={busy || folder.read_only} onClick={() => void remove()} size="icon" title="删除收藏夹" variant="ghost"><Trash2 className="size-4" /></Button></div></div><div className="max-h-64 divide-y divide-white/[0.05] overflow-y-auto">{folder.entries.length ? folder.entries.map((entry) => <div className="flex items-center gap-3 px-5 py-3" key={entry.id}><span className={`size-2 rounded-full ${entry.resolved ? "bg-emerald-300" : "bg-amber-300"}`} /><div className="min-w-0 flex-1"><p className="truncate text-sm text-slate-200">{entry.title} <span className="text-slate-500">[{entry.difficulty_name}]</span></p><p className="truncate text-xs text-slate-600">{entry.artist} · {entry.creator}{entry.beatmapset_id ? ` · #${entry.beatmapset_id}` : ""}</p></div>{!folder.read_only ? <Button disabled={busy} onClick={() => void remove(entry.id)} size="icon" variant="ghost"><Trash2 className="size-3.5" /></Button> : null}</div>) : <p className="px-5 py-8 text-center text-sm text-slate-600">还没有谱面</p>}</div>{exported ? <div className="border-t border-white/[0.07] p-4"><p className="mb-2 text-xs text-emerald-200">分享码已复制。OPPC2 会紧凑保存在线谱面 ID。</p><textarea className="h-20 w-full rounded-lg border border-white/10 bg-black/20 p-2 font-mono text-[10px] text-slate-400" readOnly value={exported} /></div> : null}{error ? <p className="p-4 text-sm text-rose-200">{error}</p> : null}</Card>;
+  return (
+    <Card className="collection-folder overflow-hidden">
+      <div className="flex items-start justify-between gap-4 border-b border-white/[0.07] p-5">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="truncate text-base font-semibold text-white">{folder.name}</h2>
+            {folder.read_only ? <span className="rounded bg-amber-300/10 px-2 py-0.5 text-xs text-amber-200">只读</span> : null}
+            {folder.pending_write ? <span className="rounded bg-cyan-300/10 px-2 py-0.5 text-xs text-cyan-100">待写回</span> : null}
+          </div>
+          <p className="mt-1 text-xs text-slate-500">{folder.creator || "未署名"} · {folder.entries.length} 个难度{missingSets ? ` · 缺失 ${missingSets} 项` : ""}</p>
+        </div>
+        <div className="flex gap-1">
+          <Button disabled={busy} onClick={() => void exportShare()} size="icon" title="导出分享码" variant="ghost"><FileOutput className="size-4" /></Button>
+          <Button disabled={busy || folder.read_only} onClick={() => void download()} size="icon" title={missingSets ? `解析并补齐 ${missingSets} 个缺失项` : "检查是否有缺失谱面"} variant="ghost"><Download className="size-4" /></Button>
+          <Button disabled={busy || folder.read_only} onClick={() => void remove()} size="icon" title="删除收藏夹" variant="ghost"><Trash2 className="size-4" /></Button>
+        </div>
+      </div>
+      <div className="max-h-64 divide-y divide-white/[0.05] overflow-y-auto">
+        {folder.entries.length ? folder.entries.map((entry) => <div className="flex items-center gap-3 px-5 py-3" key={entry.id}><span className={`size-2 rounded-full ${entry.resolved ? "bg-emerald-300" : "bg-amber-300"}`} /><div className="min-w-0 flex-1"><p className="truncate text-sm text-slate-200">{entry.title} <span className="text-slate-500">[{entry.difficulty_name}]</span></p><p className="truncate text-xs text-slate-600">{entry.artist} · {entry.creator}{entry.beatmapset_id ? ` · #${entry.beatmapset_id}` : ""}</p></div>{!folder.read_only ? <Button disabled={busy} onClick={() => void remove(entry.id)} size="icon" variant="ghost"><Trash2 className="size-3.5" /></Button> : null}</div>) : <p className="px-5 py-8 text-center text-sm text-slate-600">还没有谱面</p>}
+      </div>
+      {exported ? <div className="border-t border-white/[0.07] p-4"><p className="mb-2 text-xs text-emerald-200">分享码已复制。OPPC2 会紧凑保存在线谱面 ID。</p><textarea className="h-20 w-full rounded-lg border border-white/10 bg-black/20 p-2 font-mono text-[10px] text-slate-400" readOnly value={exported} /></div> : null}
+      {error ? <p className="p-4 text-sm text-rose-200">{error}</p> : null}
+    </Card>
+  );
 }
 
 export function CollectionsPage() {
@@ -135,6 +154,7 @@ export function CollectionsPage() {
   const [preview, setPreview] = useState<CollectionSharePreview | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const collectionDownloadActive = useRef(false);
   const [leavePrompt, setLeavePrompt] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -161,61 +181,179 @@ export function CollectionsPage() {
   });
 
   useEffect(() => {
+    let dispose: (() => void) | undefined;
+    void desktopApi.onBeatmapDownloadProgress((progress: BeatmapDownloadProgress) => {
+      if (!collectionDownloadActive.current) return;
+      if (progress.phase === "finished") {
+        setNotice(`曲包下载完成（成功 ${progress.completed}、跳过 ${progress.skipped}、失败 ${progress.failed}），正在准备安装…`);
+        return;
+      }
+      if (progress.phase === "cancelled") {
+        setNotice("缺失曲包下载已取消。");
+        return;
+      }
+      const current = Math.min(progress.total, progress.processed + (progress.phase === "downloading" ? 1 : 0));
+      setNotice(`正在下载缺失曲包 ${current}/${progress.total}${progress.current_title ? `：${progress.current_title}` : ""}`);
+    }).then((unlisten) => { dispose = unlisten; });
+    return () => dispose?.();
+  }, []);
+
+  const changed = useCallback(async (folderId?: string, entryId?: string) => {
+    if (!folderId) {
+      void queryClient.invalidateQueries({ queryKey: collectionsQueryKey });
+      return;
+    }
+    await queryClient.cancelQueries({ queryKey: collectionsQueryKey });
+    const previous = queryClient.getQueryData<CollectionSnapshot>(collectionsQueryKey);
+    queryClient.setQueryData<CollectionSnapshot>(
+      collectionsQueryKey,
+      (snapshot) => removeFromCollectionsSnapshot(snapshot, folderId, entryId),
+    );
+    try {
+      if (entryId) await desktopApi.removeCollectionEntry(folderId, entryId);
+      else await desktopApi.deleteCollection(folderId);
+    } catch (caught) {
+      queryClient.setQueryData(collectionsQueryKey, previous);
+      throw caught;
+    } finally {
+      void queryClient.invalidateQueries({ queryKey: collectionsQueryKey });
+    }
+  }, [queryClient]);
+  const downloadFoldersToGame = useCallback(async (folderIds: string[]) => {
+    await desktopApi.beginCollectionTask();
+    setNotice("正在检查收藏夹中的缺失谱面…");
+    beginCollectionTask({ phase: "checking", message: "正在检查收藏夹中的缺失谱面和旧 MD5…", processed: 0, total: 0, errors: [] });
+    const detectedItems = await desktopApi.getCollectionDownloadItems(folderIds);
+    throwIfCollectionTaskCancelled();
+    const items = [...new Map(detectedItems.map((item) => [item.beatmapset_id, item])).values()];
+    if (!items.length) {
+      updateCollectionTask({ phase: "completed", message: "没有需要下载的缺失曲包" });
+      return null;
+    }
+
+    const stable = (await desktopApi.getLocalSources()).find((source) => source.client === "stable");
+    if (!stable?.valid || !stable.install_root) {
+      throw new Error("请先在设置中配置有效的 osu!stable 安装目录，才能将线上谱面自动下载到游戏。");
+    }
+
+    const settings = await desktopApi.getSettings();
+    const root = stable.install_root.replace(/[\\/]+$/, "");
+    const destination = settings.beatmap_download_directory || `${root}\\OPP Downloads`;
+    collectionDownloadActive.current = true;
+    setNotice(`准备下载 ${items.length} 个缺失曲包…`);
+    updateCollectionTask({ phase: "downloading", message: `准备下载 ${items.length} 个缺失曲包…`, processed: 0, total: items.length });
+    try {
+      const download = await desktopApi.downloadOnlineBeatmapsets({
+        destination,
+        provider: resolveDefaultDownloadProvider(settings),
+        overwrite: false,
+        open_after_download: false,
+        items,
+      });
+      throwIfCollectionTaskCancelled();
+      const archivePaths = download.completed_paths ?? [];
+      if (!archivePaths.length) {
+        throw new Error(download.failed ? "缺失曲包下载失败，请检查下载源后重试。" : "没有找到可用于补齐收藏夹的曲包文件。");
+      }
+      setNotice(`正在统一读取 ${archivePaths.length} 个曲包，并计算收藏难度 MD5…`);
+      updateCollectionTask({
+        phase: "installing",
+        message: `正在读取 ${archivePaths.length} 个曲包并计算收藏难度 MD5…`,
+        processed: 0,
+        total: archivePaths.length,
+        errors: download.failures.map((failure) => `#${failure.beatmapset_id} ${failure.title}：${failure.message}`),
+      });
+      const install = await desktopApi.installCollectionDownloads(folderIds, archivePaths);
+      throwIfCollectionTaskCancelled();
+      changed();
+      return { download, install };
+    } finally {
+      collectionDownloadActive.current = false;
+    }
+  }, [changed]);
+  const downloadMissingBeatmapsToGame = useCallback(() => downloadFoldersToGame((collections.data?.folders ?? []).filter((folder) => folder.source !== "lazer").map((folder) => folder.id)), [collections.data?.folders, downloadFoldersToGame]);
+  const finalizeCollections = useCallback(async (completed: Awaited<ReturnType<typeof downloadFoldersToGame>>) => {
+    setBusy(true);
+    try {
+      throwIfCollectionTaskCancelled();
+      setNotice("正在安全写回 osu!stable/collection.db…");
+      updateCollectionTask({ phase: "writing", message: "曲包 MD5 已准备完成，正在统一写回 collection.db…", processed: 0, total: 1 });
+      const written = await desktopApi.writeStableCollections();
+      throwIfCollectionTaskCancelled();
+      if (!completed) {
+        const message = `已写回 ${written.written_folders} 个收藏夹，没有需要导入的缺失曲包。`;
+        setNotice(message);
+        updateCollectionTask({ phase: "completed", message, processed: 1, total: 1 });
+        changed();
+        return true;
+      }
+      const archivePaths = completed.download.completed_paths ?? [];
+      updateCollectionTask({ phase: "opening", message: `collection.db 已写回，正在交给 osu! 导入 ${archivePaths.length} 个曲包…`, processed: 0, total: archivePaths.length });
+      const opened = await desktopApi.openCollectionDownloads(archivePaths);
+      throwIfCollectionTaskCancelled();
+      const errors = [
+        ...completed.download.failures.map((failure) => `#${failure.beatmapset_id} ${failure.title}：${failure.message}`),
+        ...opened.failures,
+      ];
+      const message = `已写回 ${written.written_folders} 个收藏夹，并交给 osu! 导入 ${opened.opened} 个曲包${errors.length ? `；${errors.length} 项失败` : ""}。`;
+      setNotice(message);
+      updateCollectionTask({ phase: errors.length ? "failed" : "completed", message, processed: opened.opened + opened.failed, total: archivePaths.length, errors });
+      changed();
+      return errors.length === 0;
+    } catch (caught) {
+      const message = (caught as CommandError).message ?? String(caught);
+      setNotice(message);
+      updateCollectionTask({ phase: "failed", message: "写回或调用游戏导入失败", errors: [message] });
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }, [changed]);
+  const downloadOneFolder = async (folderId: string) => {
+    try {
+      const result = await downloadFoldersToGame([folderId]);
+      await finalizeCollections(result);
+    } catch (caught) {
+      const message = (caught as CommandError).message ?? String(caught);
+      updateCollectionTask({ phase: "failed", message: "收藏夹补齐失败", errors: [message] });
+      throw caught;
+    }
+  };
+
+  useEffect(() => {
     if (!collections.data) return;
     let cancelled = false;
     void desktopApi.getCollectionSyncStatus().then((status) => {
       if (cancelled) return;
       if (!status.in_sync) {
-        setNotice(status.game_changed ? "游戏收藏夹已变更，点击“刷新 Stable”将从游戏同步。" : "软件收藏夹有待写回的更改。");
+        setNotice(status.game_changed ? "游戏收藏夹已变更，点击“读取本地”将重新读取 Stable 数据。" : "软件收藏夹有待写回的更改。");
       }
       if (status.missing_downloadable_count > 0 && window.confirm(`收藏夹发现 ${status.missing_downloadable_count} 个缺失谱面集，是否由 OPP 批量下载到 osu!stable？`)) {
-        void downloadMissingBeatmapsToGame().then((download) => {
-          if (download && !cancelled) setNotice(`已补全 ${download.completed} 个缺失谱面。`);
+        void downloadMissingBeatmapsToGame().then(async (result) => {
+          if (!cancelled) await finalizeCollections(result);
         }).catch((caught: unknown) => {
-          if (!cancelled) setNotice((caught as CommandError).message ?? String(caught));
+          if (!cancelled) {
+            const message = (caught as CommandError).message ?? String(caught);
+            setNotice(message);
+            updateCollectionTask({ phase: "failed", message: "收藏夹自动补齐失败", errors: [message] });
+          }
         });
       }
     }).catch(() => undefined);
     return () => { cancelled = true; };
-  }, [collections.data]);
-
-  const changed = () => void queryClient.invalidateQueries({ queryKey: collectionsQueryKey });
-  const downloadMissingBeatmapsToGame = async () => {
-    const folders = collections.data?.folders ?? [];
-    const itemGroups = await Promise.all(folders.map((folder) => desktopApi.getCollectionDownloadItems(folder.id)));
-    const items = [...new Map(itemGroups.flat().map((item) => [item.beatmapset_id, item])).values()];
-    if (!items.length) return null;
-
-    const stable = (await desktopApi.getLocalSources()).find((source) => source.client === "stable");
-    const destination = stable?.install_root;
-    if (!stable?.valid || !destination) {
-      throw new Error("请先在设置中配置有效的 osu!stable 安装目录，才能将线上谱面自动下载到游戏。");
-    }
-
-    const settings = await desktopApi.getSettings();
-    return desktopApi.downloadOnlineBeatmapsets({
-      destination,
-      provider: resolveDefaultDownloadProvider(settings),
-      overwrite: false,
-      items,
-    });
-  };
+  }, [collections.data, downloadMissingBeatmapsToGame, finalizeCollections]);
   const create = async () => { if (!name.trim()) return; setBusy(true); try { await desktopApi.createCollection(name.trim(), ""); setName(""); changed(); } finally { setBusy(false); } };
   const importShare = async () => { setBusy(true); try { setPreview(await desktopApi.previewCollectionShare(shareCode)); } catch (caught) { setNotice((caught as CommandError).message ?? String(caught)); } finally { setBusy(false); } };
-  const confirmImport = async () => { setBusy(true); try { const imported = await desktopApi.importCollectionShare(shareCode); setNotice(`已导入“${imported.name}”，包含 ${imported.entries.length} 个难度。`); setShareCode(""); setPreview(null); changed(); } catch (caught) { setNotice((caught as CommandError).message ?? String(caught)); } finally { setBusy(false); } };
-  const write = async () => { setBusy(true); try { const result = await desktopApi.writeStableCollections(); setNotice(`已写回 ${result.written_folders} 个收藏夹${result.skipped_entries ? `；${result.skipped_entries} 个未取得 MD5 的条目未写入游戏。` : "。"}`); changed(); return true; } catch (caught) { setNotice((caught as CommandError).message ?? String(caught)); return false; } finally { setBusy(false); } };
+  const confirmImport = async () => { setBusy(true); try { const shouldDownload = Boolean(preview?.downloadable_count); const imported = await desktopApi.importCollectionShare(shareCode); setShareCode(""); setPreview(null); changed(); if (shouldDownload) { const result = await downloadFoldersToGame([imported.id]); await finalizeCollections(result); } else { const message = `已导入“${imported.name}”，包含 ${imported.entries.length} 个难度。`; setNotice(message); updateCollectionTask({ phase: "completed", message }); } } catch (caught) { const message = (caught as CommandError).message ?? String(caught); setNotice(message); updateCollectionTask({ phase: "failed", message: "分享码导入补齐失败", errors: [message] }); } finally { setBusy(false); } };
   const writeWithAutoDownload = async () => {
     setBusy(true);
     try {
-      const download = await downloadMissingBeatmapsToGame();
-      const written = await write();
-      if (!written) return false;
-      if (download) {
-        setNotice(`已将 ${download.completed} 个缺失谱面下载到 osu!stable${download.failed ? `，${download.failed} 个下载失败` : ""}。尚未被游戏导入的谱面会在下次启动 osu!stable 后可再次写回收藏夹。`);
-      }
-      return true;
+      const completed = await downloadMissingBeatmapsToGame();
+      return await finalizeCollections(completed);
     } catch (caught) {
-      setNotice((caught as CommandError).message ?? String(caught));
+      const message = (caught as CommandError).message ?? String(caught);
+      setNotice(message);
+      updateCollectionTask({ phase: "failed", message: "收藏夹同步失败", errors: [message] });
       return false;
     } finally {
       setBusy(false);
@@ -226,5 +364,5 @@ export function CollectionsPage() {
   const discardAndLeave = completeLeave;
   const stay = () => { setLeavePrompt(false); setPendingNavigation(null); };
 
-  return <><PageHeader title="谱面收藏夹" description="统一管理游戏收藏夹与 OPP 分享图包；Stable 支持安全写回，lazer 当前只读。" actions={<div className="flex gap-2"><Button disabled={busy} onClick={() => void refresh("stable")} size="sm" variant="secondary"><RefreshCw className="size-3.5" />刷新 Stable</Button><Button disabled={busy} onClick={() => void writeWithAutoDownload()} size="sm"><Save className="size-3.5" />写回游戏</Button></div>} /><div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]"><section className="space-y-4">{collections.isLoading ? <p className="text-sm text-slate-500">正在读取收藏夹…</p> : collections.data?.folders.length ? collections.data.folders.map((folder) => <FolderCard folder={folder} key={folder.id} onChanged={changed} />) : <EmptyState icon={<Heart className="size-6" />} title="还没有收藏夹" description="从在线、本地或相似谱面页将难度加入收藏夹，或在右侧创建一个。" />}</section><aside className="space-y-4"><Card className="p-5"><h2 className="text-sm font-semibold text-white">新建收藏夹</h2><input className="opp-input mt-3" onChange={(event) => setName(event.target.value)} placeholder="收藏夹名称" value={name} /><Button className="mt-3 w-full" disabled={busy || !name.trim()} onClick={() => void create()}><FolderPlus className="size-4" />创建</Button></Card><Card className="p-5"><h2 className="flex items-center gap-2 text-sm font-semibold text-white"><FileInput className="size-4 text-cyan-200" />导入分享码</h2><textarea className="mt-3 h-28 w-full rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs text-slate-300" onChange={(event) => { setShareCode(event.target.value); setPreview(null); }} placeholder="粘贴 OPPC2.… 分享码" value={shareCode} /><Button className="mt-3 w-full" disabled={busy || !shareCode.trim()} onClick={() => void importShare()} variant="secondary">解析分享码</Button></Card><Card className="p-5"><h2 className="text-sm font-semibold text-white">游戏来源</h2>{collections.data?.sources.map((source) => <div className="mt-3 border-t border-white/[0.06] pt-3" key={source.client}><p className="text-sm text-slate-200">osu! {source.client}{source.read_only ? " · 只读" : ""}</p><p className="mt-1 text-xs leading-5 text-slate-500">{source.message}</p></div>)}</Card>{notice ? <p className="rounded-xl border border-cyan-300/15 bg-cyan-300/[0.06] p-4 text-sm text-cyan-100">{notice}</p> : null}</aside></div><ImportPreviewDialog busy={busy} onCancel={() => setPreview(null)} onConfirm={() => void confirmImport()} preview={preview} />{leavePrompt ? <div className="fixed inset-0 z-[280] grid place-items-center bg-black/70 p-5 backdrop-blur-sm"><Card className="w-full max-w-md p-6 shadow-2xl"><h2 className="text-lg font-semibold text-white">收藏夹尚未写回游戏</h2><p className="mt-2 text-sm leading-6 text-slate-400">你对收藏夹做了修改。离开前是否保存到 osu!stable？</p><div className="mt-6 flex flex-wrap justify-end gap-2"><Button disabled={busy} onClick={stay} variant="ghost">留在此页</Button><Button disabled={busy} onClick={discardAndLeave} variant="secondary">不保存并离开</Button><Button loading={busy} onClick={() => void saveAndLeave()}><Save className="size-4" />保存并离开</Button></div></Card></div> : null}</>;
+  return <><PageHeader title="谱面收藏夹" description="统一管理游戏收藏夹与 OPP 分享图包；Stable 支持自动补齐并安全写回，lazer 当前只读。" actions={<div className="flex gap-2"><Button disabled={busy} onClick={() => void refresh("stable")} size="sm" variant="secondary"><RefreshCw className="size-3.5" />读取本地</Button><Button loading={busy} onClick={() => void writeWithAutoDownload()} size="sm"><Save className="size-3.5" />补齐并写回游戏</Button></div>} /><div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]"><section className="space-y-4">{collections.isLoading ? <p className="text-sm text-slate-500">正在读取收藏夹…</p> : collections.data?.folders.length ? collections.data.folders.map((folder) => <FolderCard folder={folder} key={folder.id} onChanged={changed} onDownload={downloadOneFolder} />) : <EmptyState icon={<Heart className="size-6" />} title="还没有收藏夹" description="从在线、本地或相似谱面页将难度加入收藏夹，或在右侧创建一个。" />}</section><aside className="space-y-4"><Card className="p-5"><h2 className="text-sm font-semibold text-white">新建收藏夹</h2><input className="opp-input mt-3" onChange={(event) => setName(event.target.value)} placeholder="收藏夹名称" value={name} /><Button className="mt-3 w-full" disabled={busy || !name.trim()} onClick={() => void create()}><FolderPlus className="size-4" />创建</Button></Card><Card className="p-5"><h2 className="flex items-center gap-2 text-sm font-semibold text-white"><FileInput className="size-4 text-cyan-200" />导入分享码</h2><textarea className="mt-3 h-28 w-full rounded-xl border border-white/10 bg-black/20 p-3 font-mono text-xs text-slate-300" onChange={(event) => { setShareCode(event.target.value); setPreview(null); }} placeholder="粘贴 OPPC2.… 分享码" value={shareCode} /><Button className="mt-3 w-full" disabled={busy || !shareCode.trim()} onClick={() => void importShare()} variant="secondary">解析分享码</Button></Card><Card className="p-5"><h2 className="text-sm font-semibold text-white">游戏来源</h2>{collections.data?.sources.map((source) => <div className="mt-3 border-t border-white/[0.06] pt-3" key={source.client}><p className="text-sm text-slate-200">osu! {source.client}{source.read_only ? " · 只读" : ""}</p><p className="mt-1 text-xs leading-5 text-slate-500">{source.message}</p></div>)}</Card>{notice ? <p aria-live="polite" className="rounded-xl border border-cyan-300/15 bg-cyan-300/[0.06] p-4 text-sm text-cyan-100">{notice}</p> : null}</aside></div><ImportPreviewDialog busy={busy} onCancel={() => setPreview(null)} onConfirm={() => void confirmImport()} preview={preview} />{leavePrompt ? <div className="fixed inset-0 z-[280] grid place-items-center bg-black/70 p-5 backdrop-blur-sm"><Card className="w-full max-w-md p-6 shadow-2xl"><h2 className="text-lg font-semibold text-white">收藏夹尚未写回游戏</h2><p className="mt-2 text-sm leading-6 text-slate-400">你对收藏夹做了修改。离开前是否保存到 osu!stable？</p><div className="mt-6 flex flex-wrap justify-end gap-2"><Button disabled={busy} onClick={stay} variant="ghost">留在此页</Button><Button disabled={busy} onClick={discardAndLeave} variant="secondary">不保存并离开</Button><Button loading={busy} onClick={() => void saveAndLeave()}><Save className="size-4" />保存并离开</Button></div></Card></div> : null}</>;
 }

@@ -75,6 +75,8 @@ pub struct BeatmapDownloadRequest {
     pub provider: String,
     #[serde(default)]
     pub overwrite: bool,
+    #[serde(default)]
+    pub open_after_download: Option<bool>,
 }
 
 fn default_download_provider() -> String {

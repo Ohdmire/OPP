@@ -1,5 +1,6 @@
 use std::{
     io::{Cursor, Read},
+    sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
 
@@ -72,6 +73,7 @@ impl ProviderRegistry {
         &self,
         id: u64,
         provider: &str,
+        cancel: &AtomicBool,
         on_progress: &mut F,
     ) -> CommandResult<ProviderBytes>
     where
@@ -95,12 +97,20 @@ impl ProviderRegistry {
             ),
             _ => unreachable!("download adapter list only contains registered providers"),
         };
-        let response = self
-            .client
-            .get(url)
-            .send()
-            .await
-            .map_err(|error| CommandError::network(error.to_string()))?;
+        let request = self.client.get(url).send();
+        tokio::pin!(request);
+        let response = loop {
+            tokio::select! {
+                result = &mut request => {
+                    break result.map_err(|error| CommandError::network(error.to_string()))?;
+                }
+                _ = tokio::time::sleep(Duration::from_millis(50)) => {
+                    if cancel.load(Ordering::Relaxed) {
+                        return Err(CommandError::new("DOWNLOAD_CANCELLED", "下载已取消"));
+                    }
+                }
+            }
+        };
         let suggested_filename = filename(&response).or(fallback_name);
         let content_type = response
             .headers()
@@ -108,7 +118,8 @@ impl ProviderRegistry {
             .and_then(|value| value.to_str().ok())
             .unwrap_or("")
             .to_string();
-        let bytes = parse_bytes_with_progress(response, code, provider, on_progress).await?;
+        let bytes =
+            parse_bytes_with_progress(response, code, provider, cancel, on_progress).await?;
         let bytes = if content_type.contains("json") {
             serde_json::from_slice::<Value>(&bytes)
                 .ok()
@@ -393,6 +404,7 @@ async fn parse_bytes_with_progress<F>(
     mut response: Response,
     code: &str,
     source: &str,
+    cancel: &AtomicBool,
     on_progress: &mut F,
 ) -> CommandResult<Vec<u8>>
 where
@@ -408,11 +420,19 @@ where
     }
     let total = response.content_length();
     let mut bytes = Vec::with_capacity(total.unwrap_or(0).min(usize::MAX as u64) as usize);
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|error| CommandError::network(error.to_string()))?
-    {
+    loop {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(CommandError::new("DOWNLOAD_CANCELLED", "下载已取消"));
+        }
+        let chunk = tokio::select! {
+            result = response.chunk() => {
+                result.map_err(|error| CommandError::network(error.to_string()))?
+            }
+            _ = tokio::time::sleep(Duration::from_millis(50)) => {
+                continue;
+            }
+        };
+        let Some(chunk) = chunk else { break };
         bytes.extend_from_slice(&chunk);
         on_progress(bytes.len() as u64, total);
     }

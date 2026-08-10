@@ -1,30 +1,64 @@
 use std::{
-    collections::HashSet,
+    collections::{BTreeSet, HashMap, HashSet},
     fs,
-    io::{Read, Write},
+    io::{Cursor, Read, Write},
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{Mutex, atomic::Ordering},
+    time::Duration,
 };
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::Utc;
 use flate2::{Compression, read::ZlibDecoder, write::ZlibEncoder};
+use futures_util::{StreamExt, stream};
 use md5::Md5;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
+use tauri_plugin_opener::OpenerExt;
 use uuid::Uuid;
 
 use crate::{
+    account::ensure_access_token,
     error::{CommandError, CommandResult},
     game_session::get_game_status,
-    local_analysis::LocalClient,
+    local_analysis::{LocalBeatmapSummary, LocalClient},
     state::AppState,
 };
 
 const SHARE_PREFIX: &str = "OPPC2";
 const LEGACY_SHARE_PREFIX: &str = "OPPC1";
 const MAX_SHARE_BYTES: usize = 8 * 1024 * 1024;
+
+fn ensure_collection_task_active(state: &AppState) -> CommandResult<()> {
+    if state.collection_task_cancel.load(Ordering::Relaxed) {
+        Err(CommandError::new(
+            "COLLECTION_TASK_CANCELLED",
+            "收藏夹同步已取消",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+#[tauri::command]
+pub fn begin_collection_task(state: State<'_, AppState>) {
+    state.collection_task_cancel.store(false, Ordering::Relaxed);
+}
+
+#[tauri::command]
+pub fn cancel_collection_task(state: State<'_, AppState>) -> CommandResult<()> {
+    state.collection_task_cancel.store(true, Ordering::Relaxed);
+    if let Some(cancel) = state
+        .beatmap_download
+        .lock()
+        .map_err(|_| CommandError::new("STATE_ERROR", "下载队列状态锁已损坏"))?
+        .as_ref()
+    {
+        cancel.store(true, Ordering::Relaxed);
+    }
+    Ok(())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -128,6 +162,57 @@ pub struct CollectionWriteResult {
     pub backup_path: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollectionInstallResult {
+    pub installed_sets: usize,
+    pub resolved_entries: usize,
+    pub unresolved_entries: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CollectionOpenResult {
+    pub opened: usize,
+    pub failed: usize,
+    pub failures: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CollectionTaskProgress {
+    pub phase: String,
+    pub processed: usize,
+    pub total: usize,
+    pub message: String,
+}
+
+fn emit_collection_progress(
+    app: &AppHandle,
+    phase: &str,
+    processed: usize,
+    total: usize,
+    message: impl Into<String>,
+) {
+    let _ = app.emit(
+        "collection-task-progress",
+        CollectionTaskProgress {
+            phase: phase.into(),
+            processed,
+            total,
+            message: message.into(),
+        },
+    );
+}
+
+#[derive(Debug, Clone)]
+struct DownloadedBeatmap {
+    beatmapset_id: Option<i32>,
+    checksum: String,
+    ruleset: Option<String>,
+    difficulty_name: String,
+    title: String,
+    artist: String,
+    creator: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct CollectionFile {
     #[serde(default)]
@@ -138,6 +223,25 @@ struct CollectionFile {
     stable_version: Option<i32>,
     #[serde(default)]
     refreshed_at: Option<String>,
+    #[serde(default)]
+    local_presence_cache: HashMap<String, LocalPresenceCacheEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LocalPresenceCacheEntry {
+    present: bool,
+    scan_at: Option<String>,
+}
+
+fn cached_local_presence(
+    cache: &HashMap<String, LocalPresenceCacheEntry>,
+    checksum: &str,
+    scan_at: &Option<String>,
+) -> Option<bool> {
+    cache
+        .get(checksum)
+        .filter(|cached| &cached.scan_at == scan_at)
+        .map(|cached| cached.present)
 }
 
 pub struct CollectionService {
@@ -303,7 +407,9 @@ fn touch(folder: &mut CollectionFolder) {
 }
 
 fn candidate_to_entry(candidate: CollectionCandidate) -> CollectionEntry {
-    let resolved = candidate.checksum.is_some();
+    // Online API responses may contain an official checksum even though the
+    // beatmap is not installed locally. Only local candidates are resolved.
+    let resolved = candidate.local_client.is_some() && candidate.checksum.is_some();
     CollectionEntry {
         id: Uuid::new_v4().to_string(),
         beatmap_id: candidate.beatmap_id,
@@ -605,11 +711,55 @@ pub fn get_collection_sync_status(
     })
 }
 
+fn stable_collection_entry(
+    checksum: String,
+    local: Option<&LocalBeatmapSummary>,
+    previous: Option<&CollectionEntry>,
+) -> CollectionEntry {
+    if let Some(local) = local {
+        return CollectionEntry {
+            id: previous
+                .map(|entry| entry.id.clone())
+                .unwrap_or_else(|| Uuid::new_v4().to_string()),
+            checksum: Some(checksum.to_ascii_lowercase()),
+            beatmap_id: local.beatmap_id,
+            beatmapset_id: local.beatmap_set_id,
+            ruleset: Some(local.ruleset.to_string()),
+            difficulty_name: local.difficulty_name.clone(),
+            title: local.title_unicode.clone(),
+            artist: local.artist_unicode.clone(),
+            creator: local.creator.clone(),
+            resolved: true,
+        };
+    }
+    if let Some(previous) = previous {
+        let mut preserved = previous.clone();
+        preserved.checksum = Some(checksum.to_ascii_lowercase());
+        return preserved;
+    }
+    CollectionEntry {
+        id: Uuid::new_v4().to_string(),
+        checksum: Some(checksum.to_ascii_lowercase()),
+        beatmap_id: None,
+        beatmapset_id: None,
+        ruleset: None,
+        difficulty_name: "未解析难度".into(),
+        title: "未解析谱面".into(),
+        artist: String::new(),
+        creator: String::new(),
+        resolved: false,
+    }
+}
+
 fn refresh_stable_collections(
     path: PathBuf,
     collections: std::sync::Arc<CollectionService>,
     local_analysis: std::sync::Arc<crate::local_analysis::LocalAnalysisService>,
 ) -> CommandResult<()> {
+    // Refresh the incremental local index first so collection.db hashes are
+    // resolved against the files that are currently in the Songs directory.
+    // A concurrent scan is harmless: the existing index remains available.
+    let _ = local_analysis.scan(LocalClient::Stable, false, std::sync::Arc::new(|_| {}));
     let (db, fingerprint) = if path.is_file() {
         let bytes = fs::read(&path)?;
         (
@@ -649,29 +799,21 @@ fn refresh_stable_collections(
                         && !matched.contains(index)
                 })
                 .map(|(index, _)| index);
+            let previous_entries = existing
+                .map(|index| file.folders[index].entries.clone())
+                .unwrap_or_default();
             let entries = item
                 .checksums
                 .into_iter()
                 .map(|checksum| {
                     let local = resolved.get(&checksum.to_ascii_lowercase());
-                    CollectionEntry {
-                        id: Uuid::new_v4().to_string(),
-                        checksum: Some(checksum),
-                        beatmap_id: local.and_then(|map| map.beatmap_id),
-                        beatmapset_id: local.and_then(|map| map.beatmap_set_id),
-                        ruleset: local.map(|map| map.ruleset.to_string()),
-                        difficulty_name: local
-                            .map(|map| map.difficulty_name.clone())
-                            .unwrap_or_else(|| "未解析难度".into()),
-                        title: local
-                            .map(|map| map.title_unicode.clone())
-                            .unwrap_or_else(|| "未解析谱面".into()),
-                        artist: local
-                            .map(|map| map.artist_unicode.clone())
-                            .unwrap_or_default(),
-                        creator: local.map(|map| map.creator.clone()).unwrap_or_default(),
-                        resolved: local.is_some(),
-                    }
+                    let previous = previous_entries.iter().find(|entry| {
+                        entry
+                            .checksum
+                            .as_deref()
+                            .is_some_and(|value| value.eq_ignore_ascii_case(&checksum))
+                    });
+                    stable_collection_entry(checksum, local, previous)
                 })
                 .collect();
             if let Some(index) = existing {
@@ -786,6 +928,7 @@ pub fn remove_collection_entry(
 pub fn write_stable_collections(
     state: State<'_, AppState>,
 ) -> CommandResult<CollectionWriteResult> {
+    ensure_collection_task_active(&state)?;
     if get_game_status(state.clone())?
         .clients
         .iter()
@@ -1167,30 +1310,274 @@ pub fn import_collection_share(
 }
 
 #[tauri::command]
-pub fn get_collection_download_items(
-    folder_id: String,
+pub async fn get_collection_download_items(
+    folder_ids: Vec<String>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> CommandResult<Vec<CollectionDownloadItem>> {
+    ensure_collection_task_active(&state)?;
+    let selected = folder_ids.into_iter().collect::<HashSet<_>>();
+    let resolution_candidates = {
+        let file = state
+            .collections
+            .value
+            .lock()
+            .map_err(|_| CommandError::new("COLLECTION_STATE_ERROR", "收藏夹状态不可用"))?;
+        file.folders
+            .iter()
+            .filter(|folder| selected.contains(&folder.id))
+            .flat_map(|folder| {
+                folder.entries.iter().filter_map(|entry| {
+                    entry.checksum.clone().map(|checksum| {
+                        (
+                            folder.id.clone(),
+                            entry.id.clone(),
+                            checksum.to_ascii_lowercase(),
+                            entry.resolved,
+                        )
+                    })
+                })
+            })
+            .collect::<Vec<_>>()
+    };
+    let stable_scan_at = state
+        .local_analysis
+        .summary(LocalClient::Stable)?
+        .map(|summary| summary.scanned_at);
+    let presence_cache = state
+        .collections
+        .value
+        .lock()
+        .map_err(|_| CommandError::new("COLLECTION_STATE_ERROR", "收藏夹状态不可用"))?
+        .local_presence_cache
+        .clone();
+    let cached_resolution = resolution_candidates
+        .iter()
+        .filter_map(|(_, _, checksum, _)| {
+            cached_local_presence(&presence_cache, checksum, &stable_scan_at)
+                .map(|present| (checksum.clone(), present))
+        })
+        .collect::<HashMap<_, _>>();
+    let checksums_to_scan = resolution_candidates
+        .iter()
+        .map(|(_, _, checksum, _)| checksum.clone())
+        .filter(|checksum| !cached_resolution.contains_key(checksum))
+        .collect::<BTreeSet<_>>();
+    let mut scanned_resolution = HashMap::new();
+    if stable_scan_at.is_some() && !checksums_to_scan.is_empty() {
+        emit_collection_progress(
+            &app,
+            "checking",
+            cached_resolution.len(),
+            cached_resolution.len() + checksums_to_scan.len(),
+            format!(
+                "已命中 {} 条缓存，正在核对 {} 个本地谱面 MD5",
+                cached_resolution.len(),
+                checksums_to_scan.len()
+            ),
+        );
+        ensure_collection_task_active(&state)?;
+        let found = state
+            .local_analysis
+            .find_beatmaps_by_md5(LocalClient::Stable, &checksums_to_scan)
+            .unwrap_or_default();
+        scanned_resolution.extend(
+            checksums_to_scan
+                .iter()
+                .map(|checksum| (checksum.clone(), found.contains_key(checksum))),
+        );
+    } else if !cached_resolution.is_empty() {
+        emit_collection_progress(
+            &app,
+            "checking",
+            cached_resolution.len(),
+            cached_resolution.len(),
+            format!("已从缓存确认 {} 个谱面 MD5", cached_resolution.len()),
+        );
+    }
+    if !cached_resolution.is_empty() || !scanned_resolution.is_empty() {
+        state.collections.update(|file| {
+            for (checksum, present) in &scanned_resolution {
+                file.local_presence_cache.insert(
+                    checksum.clone(),
+                    LocalPresenceCacheEntry {
+                        present: *present,
+                        scan_at: stable_scan_at.clone(),
+                    },
+                );
+            }
+            for folder in &mut file.folders {
+                if !selected.contains(&folder.id) {
+                    continue;
+                }
+                for entry in &mut folder.entries {
+                    let Some(checksum) = entry.checksum.as_deref() else {
+                        continue;
+                    };
+                    if let Some(resolved) = cached_resolution
+                        .get(checksum)
+                        .or_else(|| scanned_resolution.get(checksum))
+                    {
+                        entry.resolved = *resolved;
+                    }
+                }
+            }
+            Ok(())
+        })?;
+    }
+
+    let unresolved_checksums = {
+        let file = state
+            .collections
+            .value
+            .lock()
+            .map_err(|_| CommandError::new("COLLECTION_STATE_ERROR", "收藏夹状态不可用"))?;
+        file.folders
+            .iter()
+            .filter(|folder| selected.contains(&folder.id))
+            .flat_map(|folder| folder.entries.iter())
+            .filter(|entry| !entry.resolved && entry.beatmapset_id.is_none())
+            .filter_map(|entry| entry.checksum.as_deref().map(str::to_ascii_lowercase))
+            .collect::<HashSet<_>>()
+    };
+
+    if !unresolved_checksums.is_empty() {
+        emit_collection_progress(
+            &app,
+            "checking",
+            0,
+            unresolved_checksums.len(),
+            format!("正在查询 {} 个旧 MD5", unresolved_checksums.len()),
+        );
+        let access_token = ensure_access_token(&state).await.map_err(|_| {
+            CommandError::new(
+                "COLLECTION_LOOKUP_AUTH_REQUIRED",
+                format!(
+                    "有 {} 个缺失谱面只有旧 MD5。请先登录 osu! 账号，以便查询对应谱面后自动下载",
+                    unresolved_checksums.len()
+                ),
+            )
+        })?;
+        let mut resolved = HashMap::<String, serde_json::Value>::new();
+        let lookups = stream::iter(unresolved_checksums.iter().cloned())
+            .map(|checksum| {
+                let access_token = &access_token;
+                let state = &state;
+                async move {
+                    ensure_collection_task_active(state)?;
+                    let value = state
+                        .api
+                        .lookup_beatmap_by_checksum(access_token, &checksum)
+                        .await
+                        .ok()
+                        .filter(|value| {
+                            value
+                                .get("id")
+                                .and_then(serde_json::Value::as_i64)
+                                .is_some()
+                                && value
+                                    .get("beatmapset_id")
+                                    .and_then(serde_json::Value::as_i64)
+                                    .is_some()
+                        });
+                    Ok::<_, CommandError>((checksum, value))
+                }
+            })
+            .buffer_unordered(4);
+        futures_util::pin_mut!(lookups);
+        let mut processed = 0usize;
+        while let Some(result) = lookups.next().await {
+            let (checksum, value) = result?;
+            if let Some(value) = value {
+                resolved.insert(checksum, value);
+            }
+            processed += 1;
+            emit_collection_progress(
+                &app,
+                "checking",
+                processed,
+                unresolved_checksums.len(),
+                format!(
+                    "正在解析旧收藏条目 {}/{}",
+                    processed,
+                    unresolved_checksums.len()
+                ),
+            );
+        }
+        if !resolved.is_empty() {
+            state.collections.update(|file| {
+                for folder in file
+                    .folders
+                    .iter_mut()
+                    .filter(|folder| selected.contains(&folder.id))
+                {
+                    for entry in &mut folder.entries {
+                        let Some(value) = entry
+                            .checksum
+                            .as_deref()
+                            .and_then(|checksum| resolved.get(&checksum.to_ascii_lowercase()))
+                        else {
+                            continue;
+                        };
+                        entry.beatmap_id = value
+                            .get("id")
+                            .and_then(serde_json::Value::as_i64)
+                            .and_then(|id| i32::try_from(id).ok());
+                        entry.beatmapset_id = value
+                            .get("beatmapset_id")
+                            .and_then(serde_json::Value::as_i64)
+                            .and_then(|id| i32::try_from(id).ok());
+                        if let Some(version) =
+                            value.get("version").and_then(serde_json::Value::as_str)
+                        {
+                            entry.difficulty_name = version.to_string();
+                        }
+                        if let Some(mode) = value.get("mode").and_then(serde_json::Value::as_str) {
+                            entry.ruleset = Some(mode.to_string());
+                        }
+                        if let Some(set) = value.get("beatmapset") {
+                            if let Some(title) = set
+                                .get("title_unicode")
+                                .or_else(|| set.get("title"))
+                                .and_then(serde_json::Value::as_str)
+                            {
+                                entry.title = title.to_string();
+                            }
+                            if let Some(artist) = set
+                                .get("artist_unicode")
+                                .or_else(|| set.get("artist"))
+                                .and_then(serde_json::Value::as_str)
+                            {
+                                entry.artist = artist.to_string();
+                            }
+                            if let Some(creator) =
+                                set.get("creator").and_then(serde_json::Value::as_str)
+                            {
+                                entry.creator = creator.to_string();
+                            }
+                        }
+                    }
+                }
+                Ok(())
+            })?;
+        }
+    }
+
     let file = state
         .collections
         .value
         .lock()
         .map_err(|_| CommandError::new("COLLECTION_STATE_ERROR", "收藏夹状态不可用"))?;
-    let folder = file
+    let mut seen = HashSet::new();
+    let items = file
         .folders
         .iter()
-        .find(|folder| folder.id == folder_id)
-        .ok_or_else(|| CommandError::new("COLLECTION_NOT_FOUND", "未找到收藏夹"))?;
-    let mut seen = HashSet::new();
-    Ok(folder
-        .entries
-        .iter()
+        .filter(|folder| selected.contains(&folder.id))
+        .flat_map(|folder| folder.entries.iter())
+        .filter(|entry| !entry.resolved)
         .filter_map(|entry| {
             entry
                 .beatmapset_id
-                // Entries with a checksum are already local. Online entries and
-                // compact share-code entries deliberately have no checksum yet.
-                .filter(|_| entry.checksum.as_deref().is_none_or(str::is_empty))
                 .filter(|id| seen.insert(*id))
                 .map(|beatmapset_id| CollectionDownloadItem {
                     beatmapset_id,
@@ -1198,7 +1585,273 @@ pub fn get_collection_download_items(
                     title: entry.title.clone(),
                 })
         })
-        .collect())
+        .collect::<Vec<_>>();
+    if items.is_empty() && !unresolved_checksums.is_empty() {
+        return Err(CommandError::new(
+            "COLLECTION_LOOKUP_FAILED",
+            format!(
+                "{} 个缺失谱面只有旧 MD5，osu! 官网未能找到对应谱面，当前无法自动下载",
+                unresolved_checksums.len()
+            ),
+        ));
+    }
+    Ok(items)
+}
+
+fn osu_metadata_value<'a>(text: &'a str, key: &str) -> Option<&'a str> {
+    let mut in_metadata = false;
+    for raw_line in text.lines() {
+        let line = raw_line.trim().trim_start_matches('\u{feff}');
+        if line.starts_with('[') && line.ends_with(']') {
+            in_metadata = line.eq_ignore_ascii_case("[Metadata]");
+            continue;
+        }
+        if !in_metadata {
+            continue;
+        }
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        if name.trim().eq_ignore_ascii_case(key) {
+            return Some(value.trim());
+        }
+    }
+    None
+}
+
+fn parse_downloaded_beatmap(bytes: &[u8]) -> Option<(i32, DownloadedBeatmap)> {
+    let text = String::from_utf8_lossy(bytes);
+    let beatmap_id = osu_metadata_value(&text, "BeatmapID")?.parse().ok()?;
+    let beatmapset_id =
+        osu_metadata_value(&text, "BeatmapSetID").and_then(|value| value.parse().ok());
+    let mode = text.lines().find_map(|raw_line| {
+        let line = raw_line.trim();
+        line.strip_prefix("Mode:")
+            .and_then(|value| value.trim().parse::<u8>().ok())
+    });
+    let ruleset = mode.map(|value| match value {
+        1 => "taiko",
+        2 => "fruits",
+        3 => "mania",
+        _ => "osu",
+    });
+    Some((
+        beatmap_id,
+        DownloadedBeatmap {
+            beatmapset_id,
+            checksum: format!("{:x}", Md5::digest(bytes)),
+            ruleset: ruleset.map(str::to_string),
+            difficulty_name: osu_metadata_value(&text, "Version")
+                .unwrap_or("")
+                .to_string(),
+            title: osu_metadata_value(&text, "TitleUnicode")
+                .filter(|value| !value.is_empty())
+                .or_else(|| osu_metadata_value(&text, "Title"))
+                .unwrap_or("")
+                .to_string(),
+            artist: osu_metadata_value(&text, "ArtistUnicode")
+                .filter(|value| !value.is_empty())
+                .or_else(|| osu_metadata_value(&text, "Artist"))
+                .unwrap_or("")
+                .to_string(),
+            creator: osu_metadata_value(&text, "Creator")
+                .unwrap_or("")
+                .to_string(),
+        },
+    ))
+}
+
+/// Reads downloaded archives and hydrates compact share-code entries with the
+/// exact MD5 required by collection.db. The archives are intentionally opened
+/// by osu! only after collection.db has been written.
+#[tauri::command]
+pub fn install_collection_downloads(
+    folder_ids: Vec<String>,
+    archive_paths: Vec<String>,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> CommandResult<CollectionInstallResult> {
+    ensure_collection_task_active(&state)?;
+    if get_game_status(state.clone())?
+        .clients
+        .iter()
+        .any(|client| client.client == LocalClient::Stable && client.running)
+    {
+        return Err(CommandError::new(
+            "GAME_RUNNING",
+            "请关闭 osu!stable 后再准备缺失谱面并写回收藏夹",
+        ));
+    }
+    let source = state.local_analysis.source_status(LocalClient::Stable)?;
+    if !source.valid || source.install_root.is_none() {
+        return Err(CommandError::new(
+            "COLLECTION_SOURCE_UNAVAILABLE",
+            "未配置有效的 osu!stable 目录",
+        ));
+    }
+
+    let mut installed_sets = 0usize;
+    let mut downloaded = HashMap::<i32, DownloadedBeatmap>::new();
+    let archive_total = archive_paths.len();
+    emit_collection_progress(
+        &app,
+        "installing",
+        0,
+        archive_total,
+        format!("正在读取 {archive_total} 个曲包并计算 MD5"),
+    );
+    for value in archive_paths {
+        ensure_collection_task_active(&state)?;
+        let archive_path = PathBuf::from(value);
+        if !archive_path.is_file()
+            || !archive_path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("osz"))
+        {
+            continue;
+        }
+        let bytes = fs::read(&archive_path)?;
+        let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
+            .map_err(|error| CommandError::new("INVALID_ARCHIVE", error.to_string()))?;
+        if archive.len() > 10_000 {
+            return Err(CommandError::new(
+                "INVALID_ARCHIVE",
+                "曲包内文件数量超出限制",
+            ));
+        }
+        let mut archive_maps = Vec::<(i32, DownloadedBeatmap)>::new();
+        let mut expanded_size = 0u64;
+        for index in 0..archive.len() {
+            ensure_collection_task_active(&state)?;
+            let mut file = archive
+                .by_index(index)
+                .map_err(|error| CommandError::new("INVALID_ARCHIVE", error.to_string()))?;
+            expanded_size = expanded_size.saturating_add(file.size());
+            if expanded_size > 4 * 1024 * 1024 * 1024 {
+                return Err(CommandError::new(
+                    "INVALID_ARCHIVE",
+                    "曲包解压后体积超出限制",
+                ));
+            }
+            if !file.name().to_ascii_lowercase().ends_with(".osu") {
+                continue;
+            }
+            let mut map_bytes = Vec::new();
+            file.read_to_end(&mut map_bytes)?;
+            if let Some(map) = parse_downloaded_beatmap(&map_bytes) {
+                archive_maps.push(map);
+            }
+        }
+        downloaded.extend(archive_maps);
+        installed_sets += 1;
+        emit_collection_progress(
+            &app,
+            "installing",
+            installed_sets,
+            archive_total,
+            format!("已读取 {installed_sets}/{archive_total} 个曲包"),
+        );
+    }
+
+    let selected = folder_ids.into_iter().collect::<HashSet<_>>();
+    let cache_scan_at = state
+        .local_analysis
+        .summary(LocalClient::Stable)?
+        .map(|summary| summary.scanned_at);
+    ensure_collection_task_active(&state)?;
+    state.collections.update(|file| {
+        let mut resolved_entries = 0usize;
+        let mut unresolved_entries = 0usize;
+        for folder in &mut file.folders {
+            if !selected.contains(&folder.id) {
+                continue;
+            }
+            let mut changed = false;
+            for entry in &mut folder.entries {
+                if entry.resolved {
+                    continue;
+                }
+                let Some(map) = entry.beatmap_id.and_then(|id| downloaded.get(&id)) else {
+                    unresolved_entries += 1;
+                    continue;
+                };
+                entry.beatmapset_id = map.beatmapset_id.or(entry.beatmapset_id);
+                entry.checksum = Some(map.checksum.clone());
+                entry.ruleset = map.ruleset.clone().or(entry.ruleset.clone());
+                entry.difficulty_name = map.difficulty_name.clone();
+                entry.title = map.title.clone();
+                entry.artist = map.artist.clone();
+                entry.creator = map.creator.clone();
+                entry.resolved = true;
+                resolved_entries += 1;
+                changed = true;
+            }
+            if changed {
+                touch(folder);
+            }
+        }
+        for map in downloaded.values() {
+            file.local_presence_cache.insert(
+                map.checksum.clone(),
+                LocalPresenceCacheEntry {
+                    present: true,
+                    scan_at: cache_scan_at.clone(),
+                },
+            );
+        }
+        Ok(CollectionInstallResult {
+            installed_sets,
+            resolved_entries,
+            unresolved_entries,
+        })
+    })
+}
+
+#[tauri::command]
+pub async fn open_collection_downloads(
+    archive_paths: Vec<String>,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> CommandResult<CollectionOpenResult> {
+    ensure_collection_task_active(&state)?;
+    let total = archive_paths.len();
+    let mut opened = 0usize;
+    let mut failures = Vec::new();
+    emit_collection_progress(&app, "opening", 0, total, "正在调用 osu! 导入曲包");
+    for value in archive_paths {
+        ensure_collection_task_active(&state)?;
+        let path = PathBuf::from(&value);
+        let valid = path.is_file()
+            && path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("osz"));
+        if !valid {
+            failures.push(format!("曲包文件不存在：{value}"));
+        } else if let Err(error) = app.opener().open_path(path.to_string_lossy(), None::<&str>) {
+            failures.push(format!("无法打开 {}：{error}", path.display()));
+        } else {
+            opened += 1;
+        }
+        emit_collection_progress(
+            &app,
+            "opening",
+            opened + failures.len(),
+            total,
+            format!(
+                "已交给游戏处理 {}/{} 个曲包",
+                opened + failures.len(),
+                total
+            ),
+        );
+        tokio::time::sleep(Duration::from_millis(180)).await;
+    }
+    Ok(CollectionOpenResult {
+        opened,
+        failed: failures.len(),
+        failures,
+    })
 }
 
 #[cfg(test)]
@@ -1220,6 +1873,28 @@ mod tests {
                 .name,
             "测试合集"
         );
+    }
+    #[test]
+    fn stable_refresh_preserves_known_entry_when_local_index_is_stale() {
+        let previous = CollectionEntry {
+            id: "entry-1".into(),
+            beatmap_id: Some(123),
+            beatmapset_id: Some(456),
+            checksum: Some("ABCDEF".into()),
+            ruleset: Some("osu".into()),
+            difficulty_name: "Insane".into(),
+            title: "Known song".into(),
+            artist: "Known artist".into(),
+            creator: "Known mapper".into(),
+            resolved: true,
+        };
+
+        let refreshed = stable_collection_entry("abcdef".into(), None, Some(&previous));
+
+        assert_eq!(refreshed.id, previous.id);
+        assert_eq!(refreshed.title, previous.title);
+        assert_eq!(refreshed.checksum.as_deref(), Some("abcdef"));
+        assert!(refreshed.resolved);
     }
     #[test]
     fn share_round_trip() {
@@ -1261,5 +1936,67 @@ mod tests {
         let decoded = decode_share(&encode_share(&payload).unwrap()).unwrap();
         assert_eq!(decoded.entries[0].beatmap_id, Some(1_234_567));
         assert_eq!(decoded.entries[0].beatmapset_id, Some(765_432));
+    }
+
+    #[test]
+    fn downloaded_beatmap_metadata_supplies_collection_checksum() {
+        let bytes = br#"osu file format v14
+
+[General]
+Mode:3
+
+[Metadata]
+Title:Test Song
+TitleUnicode:Unicode Title
+Artist:Test Artist
+Creator:Mapper
+Version:Another
+BeatmapID:456
+BeatmapSetID:123
+"#;
+        let (beatmap_id, parsed) = parse_downloaded_beatmap(bytes).unwrap();
+        assert_eq!(beatmap_id, 456);
+        assert_eq!(parsed.beatmapset_id, Some(123));
+        assert_eq!(parsed.ruleset.as_deref(), Some("mania"));
+        assert_eq!(parsed.title, "Unicode Title");
+        assert_eq!(parsed.difficulty_name, "Another");
+        assert_eq!(parsed.checksum, format!("{:x}", Md5::digest(bytes)));
+    }
+
+    #[test]
+    fn online_checksum_does_not_claim_the_beatmap_is_local() {
+        let online = candidate_to_entry(CollectionCandidate {
+            beatmap_id: Some(5775199),
+            beatmapset_id: Some(2588665),
+            checksum: Some("05b5b08930762a1952f37db991e16c62".into()),
+            ruleset: Some("osu".into()),
+            difficulty_name: "test".into(),
+            title: "tree".into(),
+            artist: "artist".into(),
+            creator: "mapper".into(),
+            local_client: None,
+            local_resource_id: None,
+        });
+        assert!(!online.resolved);
+    }
+
+    #[test]
+    fn local_presence_cache_expires_after_a_new_scan() {
+        let mut cache = HashMap::new();
+        cache.insert(
+            "abc".into(),
+            LocalPresenceCacheEntry {
+                present: true,
+                scan_at: Some("scan-1".into()),
+            },
+        );
+        assert_eq!(
+            cached_local_presence(&cache, "abc", &Some("scan-1".into())),
+            Some(true)
+        );
+        assert_eq!(
+            cached_local_presence(&cache, "abc", &Some("scan-2".into())),
+            None
+        );
     }
 }

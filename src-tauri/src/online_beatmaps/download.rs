@@ -7,6 +7,7 @@ use crate::{
     error::{CommandError, CommandResult},
     state::AppState,
 };
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub fn download_file_name(item: &BeatmapDownloadItem, suggested: Option<&str>) -> String {
     let fallback = format!(
@@ -35,6 +36,7 @@ pub async fn download_with_adapters<F>(
     state: &AppState,
     beatmapset_id: u64,
     provider: &str,
+    cancel: &AtomicBool,
     mut on_progress: F,
 ) -> CommandResult<super::providers::ProviderBytes>
 where
@@ -54,13 +56,21 @@ where
 
     let mut failures = Vec::new();
     for adapter in adapters {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(CommandError::new("DOWNLOAD_CANCELLED", "下载已取消"));
+        }
         match state
             .providers
-            .osz_with_progress(beatmapset_id, adapter, &mut on_progress)
+            .osz_with_progress(beatmapset_id, adapter, cancel, &mut on_progress)
             .await
         {
             Ok(download) => return Ok(download),
-            Err(error) => failures.push(format!("{adapter}: {}", error.message)),
+            Err(error) => {
+                if cancel.load(Ordering::Relaxed) {
+                    return Err(CommandError::new("DOWNLOAD_CANCELLED", "下载已取消"));
+                }
+                failures.push(format!("{adapter}: {}", error.message));
+            }
         }
     }
     Err(CommandError::new(

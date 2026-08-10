@@ -176,6 +176,17 @@ impl OsuApi {
         self.authorized_get(&url, access_token).await
     }
 
+    pub async fn lookup_beatmap_by_checksum(
+        &self,
+        access_token: &str,
+        checksum: &str,
+    ) -> CommandResult<Value> {
+        let mut url = Url::parse(&format!("{}/beatmaps/lookup", self.api_base_url))
+            .map_err(|error| CommandError::new("INVALID_URL", error.to_string()))?;
+        url.query_pairs_mut().append_pair("checksum", checksum);
+        self.authorized_get(url.as_str(), access_token).await
+    }
+
     pub async fn revoke_current_token(&self, access_token: &str) -> CommandResult<()> {
         let response = self
             .client

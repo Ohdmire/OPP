@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, FolderOpen, Play, X } from "lucide-react";
+import { AlertTriangle, ArrowUp, CheckCircle2, ChevronDown, ChevronUp, FolderOpen, Loader2, Play, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Outlet, useLocation } from "react-router-dom";
-import type { AppSettings, BeatmapDownloadProgress, CommandError, Ruleset } from "../shared/types/osu";
+import type { AppSettings, BeatmapDownloadProgress, CollectionTaskProgress, CommandError, Ruleset } from "../shared/types/osu";
 import { authQueryKey } from "../features/auth/api";
 import { useOwnProfile } from "../features/profile/api";
 import { useMode } from "./ModeContext";
@@ -13,6 +13,7 @@ import type { GameSessionSummary } from "../shared/types/osu";
 import { dateTime, fullNumber, percent } from "../shared/lib/format";
 import { Badge, Button, Card, DataLine } from "../shared/components/ui";
 import { CollectionAddDialog } from "../features/collections/CollectionAddDialog";
+import { requestCollectionTaskCancellation, subscribeCollectionTask, updateCollectionTask, type CollectionTaskStatus } from "../features/collections/taskStatus";
 import { settingsQueryKey, useSettings } from "../features/settings/api";
 import { OnboardingTour } from "../features/onboarding/OnboardingTour";
 import {
@@ -114,6 +115,75 @@ function DownloadToast() {
     </div>
   );
   return <div aria-live="polite" className="fixed bottom-6 right-6 z-[180] w-[340px] rounded-2xl border border-cyan-300/20 bg-[#0b101b]/95 p-4 shadow-2xl backdrop-blur"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="text-sm font-semibold text-white">{completed ? "下载完成" : "正在下载谱面"}</p><p className="mt-1 truncate text-xs text-slate-400">{progress.current_title ?? progress.message ?? "准备下载"}</p></div><span className="shrink-0 font-mono text-xs text-cyan-200">{progress.processed}/{progress.total}</span></div><div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/[0.08]"><div className="h-full rounded-full bg-[var(--theme-primary)] transition-[width]" style={{ width: `${percent}%` }} /></div><div className="mt-2 flex justify-between gap-3 text-xs"><span className="truncate text-slate-500">{formatDownloadedBytes(progress)}</span><strong className="shrink-0 font-mono text-emerald-200">{formatTransfer(progress.bytes_per_second ?? 0)}</strong></div></div>;
+}
+
+function CollectionTaskToast() {
+  const [status, setStatus] = useState<CollectionTaskStatus | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
+  const active = useRef(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  useEffect(() => subscribeCollectionTask((next) => {
+    active.current = !["completed", "failed", "cancelled"].includes(next.phase);
+    if (next.phase !== "cancelled") setCancelling(false);
+    setStatus(next);
+  }), []);
+
+  useEffect(() => {
+    let disposeCollection: (() => void) | undefined;
+    let disposeDownload: (() => void) | undefined;
+    void desktopApi.onCollectionTaskProgress((progress: CollectionTaskProgress) => {
+      if (!active.current) return;
+      updateCollectionTask({
+        phase: progress.phase,
+        message: progress.message,
+        processed: progress.processed,
+        total: progress.total,
+      });
+    }).then((unlisten) => { disposeCollection = unlisten; });
+    void desktopApi.onBeatmapDownloadProgress((progress) => {
+      if (!active.current) return;
+      if (progress.phase === "cancelled") {
+        updateCollectionTask({ phase: "cancelled", message: "缺失曲包下载已取消" });
+        return;
+      }
+      updateCollectionTask({
+        phase: "downloading",
+        message: progress.current_title ?? progress.message ?? "正在下载缺失曲包",
+        processed: progress.processed,
+        total: progress.total,
+      });
+    }).then((unlisten) => { disposeDownload = unlisten; });
+    return () => { disposeCollection?.(); disposeDownload?.(); };
+  }, []);
+
+  if (!status) return null;
+  const terminal = ["completed", "failed", "cancelled"].includes(status.phase);
+  const percent = status.total ? Math.min(100, (status.processed / status.total) * 100) : 0;
+  const labels: Record<CollectionTaskStatus["phase"], string> = {
+    checking: "解析缺失谱面",
+    downloading: "下载曲包",
+    installing: "读取曲包并补齐 MD5",
+    writing: "写回游戏收藏夹",
+    opening: "调用游戏导入曲包",
+    completed: "收藏夹同步完成",
+    failed: "收藏夹同步失败",
+    cancelled: "收藏夹同步已取消",
+  };
+
+  const cancelTask = async () => {
+    setCancelling(true);
+    requestCollectionTaskCancellation();
+    try {
+      await desktopApi.cancelCollectionTask();
+    } catch {
+      await desktopApi.cancelOnlineBeatmapDownload().catch(() => undefined);
+    }
+  };
+
+  if (collapsed) return <button className="fixed right-6 top-[124px] z-[210] flex items-center gap-2 rounded-xl border border-cyan-300/20 bg-[#0b101b]/95 px-4 py-3 text-sm text-cyan-100 shadow-2xl backdrop-blur" onClick={() => setCollapsed(false)} type="button">{terminal ? status.phase === "completed" ? <CheckCircle2 className="size-4 text-emerald-300" /> : <AlertTriangle className="size-4 text-amber-300" /> : <Loader2 className="size-4 animate-spin" />}<span>{labels[status.phase]}</span><ChevronDown className="size-4 text-slate-500" /></button>;
+
+  return <section aria-live="polite" className="fixed right-6 top-[124px] z-[210] w-[390px] overflow-hidden rounded-2xl border border-cyan-300/20 bg-[#0b101b]/95 shadow-2xl backdrop-blur"><div className="flex items-start gap-3 border-b border-white/[0.08] p-4"><span className="mt-0.5">{terminal ? status.phase === "completed" ? <CheckCircle2 className="size-5 text-emerald-300" /> : <AlertTriangle className="size-5 text-amber-300" /> : <Loader2 className="size-5 animate-spin text-cyan-300" />}</span><div className="min-w-0 flex-1"><h2 className="text-sm font-semibold text-white">{labels[status.phase]}</h2><p className="mt-1 text-xs text-slate-500">后台执行中，可以自由切换到其他页面</p></div><button aria-label="最小化同步进度" className="text-slate-500 hover:text-white" onClick={() => setCollapsed(true)} type="button"><ChevronUp className="size-4" /></button>{terminal ? <button aria-label="关闭同步进度" className="text-slate-500 hover:text-white" onClick={() => setStatus(null)} type="button"><X className="size-4" /></button> : null}</div><div className="space-y-3 p-4"><p className="text-sm leading-5 text-slate-300">{status.message}</p>{status.total ? <><div className="h-2 overflow-hidden rounded-full bg-white/[0.08]"><div className={`h-full rounded-full transition-[width] ${status.phase === "failed" ? "bg-rose-400" : "bg-[var(--theme-primary)]"}`} style={{ width: `${percent}%` }} /></div><div className="flex justify-between font-mono text-xs text-slate-500"><span>{status.processed}/{status.total}</span><span>{percent.toFixed(0)}%</span></div></> : null}{status.errors.length ? <div className="max-h-36 overflow-y-auto rounded-xl border border-rose-300/15 bg-rose-300/[0.05] p-3"><p className="mb-2 text-xs font-semibold text-rose-200">错误信息</p>{status.errors.map((error, index) => <p className="mt-1 text-xs leading-5 text-rose-100/80" key={`${error}-${index}`}>{error}</p>)}</div> : null}{!terminal ? <Button disabled={cancelling} onClick={() => void cancelTask()} size="sm" variant="ghost"><X className="size-3.5" />{cancelling ? "正在取消…" : "取消任务"}</Button> : null}</div></section>;
 }
 
 function DownloadCompletedPlaylist() {
@@ -371,6 +441,7 @@ export function AppShell() {
         />
       ) : null}
       <DownloadToast />
+      <CollectionTaskToast />
       <DownloadCompletedPlaylist />
       <CollectionAddDialog defaultCreator={profileQuery.data?.data.username ?? ""} />
     </div>

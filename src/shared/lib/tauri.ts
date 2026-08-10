@@ -11,9 +11,12 @@ import type {
   CollectionCandidate,
   CollectionDownloadItem,
   CollectionFolder,
+  CollectionInstallResult,
+  CollectionOpenResult,
   CollectionSharePreview,
   CollectionSnapshot,
   CollectionSyncStatus,
+  CollectionTaskProgress,
   CollectionWriteResult,
   BeatmapCalculationRequest,
   BeatmapCalculationResult,
@@ -169,7 +172,7 @@ function browserPreviewValue<T>(command: string, args?: Record<string, unknown>)
     return { target: { ...target, source: "index", analyzer_version: 3, normalization_version: 1 }, results, dynamic_profile: dynamicProfile } as T;
   }
   if (command === "update_settings") return args?.settings as T;
-  if (["clear_profile_cache", "set_default_file_client", "set_display_gamma", "open_netease_music_search", "set_local_source", "reset_local_source", "start_tosu", "stop_tosu", "set_tosu_executable", "set_tosu_lyrics_executable", "cancel_online_beatmap_download", "exit_app"].includes(command)) return null as T;
+  if (["clear_profile_cache", "set_default_file_client", "set_display_gamma", "open_netease_music_search", "set_local_source", "reset_local_source", "start_tosu", "stop_tosu", "set_tosu_executable", "set_tosu_lyrics_executable", "cancel_online_beatmap_download", "begin_collection_task", "cancel_collection_task", "exit_app"].includes(command)) return null as T;
   return undefined;
 }
 
@@ -228,7 +231,13 @@ export const desktopApi = {
   exportCollectionShare: (folderId: string, creator: string) => call<string>("export_collection_share", { folderId, creator }),
   previewCollectionShare: (code: string) => call<CollectionSharePreview>("preview_collection_share", { code }),
   importCollectionShare: (code: string) => call<CollectionFolder>("import_collection_share", { code }),
-  getCollectionDownloadItems: (folderId: string) => call<CollectionDownloadItem[]>("get_collection_download_items", { folderId }),
+  getCollectionDownloadItems: (folderIds: string[]) => call<CollectionDownloadItem[]>("get_collection_download_items", { folderIds }),
+  beginCollectionTask: () => call<void>("begin_collection_task"),
+  cancelCollectionTask: () => call<void>("cancel_collection_task"),
+  installCollectionDownloads: (folderIds: string[], archivePaths: string[]) =>
+    call<CollectionInstallResult>("install_collection_downloads", { folderIds, archivePaths }),
+  openCollectionDownloads: (archivePaths: string[]) =>
+    call<CollectionOpenResult>("open_collection_downloads", { archivePaths }),
   openDownloadedPath: (path: string) => call<void>("open_downloaded_path", { path }),
   exitApp: () => call<void>("exit_app"),
   clearProfileCache: () => call<void>("clear_profile_cache"),
@@ -431,6 +440,14 @@ export const desktopApi = {
     return listen<BeatmapDownloadProgress>(
       "beatmap-download-progress",
       (event) => handler(event.payload),
+    );
+  },
+  onCollectionTaskProgress: async (
+    handler: (progress: CollectionTaskProgress) => void,
+  ): Promise<UnlistenFn> => {
+    if (!isTauri()) return () => undefined;
+    return listen<CollectionTaskProgress>("collection-task-progress", (event) =>
+      handler(event.payload),
     );
   },
   onReplayRenderProgress: async (
