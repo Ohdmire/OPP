@@ -75,6 +75,16 @@ import type {
 
 export const isTauri = () => "__TAURI_INTERNALS__" in window;
 
+export interface UpdateCheckResult {
+  current_version: string;
+  latest_version: string;
+  latest_tag: string;
+  is_latest: boolean;
+  release_name: string | null;
+  release_url: string;
+  published_at: string | null;
+}
+
 function normalizeError(error: unknown): CommandError {
   if (typeof error === "object" && error && "code" in error && "message" in error) {
     return error as CommandError;
@@ -133,6 +143,15 @@ function browserPreviewValue<T>(command: string, args?: Record<string, unknown>)
   if (command === "get_obs_scenes") return ["直播场景", "练习场景"] as T;
   if (command === "refresh_selected_obs_scene") return { refreshed_sources: [], skipped: true, message: "预览模式未连接 OBS" } as T;
   if (command === "get_default_file_clients") return { beatmap: "stable", skin: "stable" } as T;
+  if (command === "check_for_updates") return {
+    current_version: __APP_VERSION__,
+    latest_version: __APP_VERSION__,
+    latest_tag: `v${__APP_VERSION__}`,
+    is_latest: true,
+    release_name: `OPP v${__APP_VERSION__}`,
+    release_url: "https://github.com/osuplusplus/OPP/releases/latest",
+    published_at: null,
+  } as T;
   if (command === "get_similarity_index_status") return {
     state: "unconfigured",
     directory: null,
@@ -241,6 +260,7 @@ export const desktopApi = {
   openDownloadedPath: (path: string) => call<void>("open_downloaded_path", { path }),
   exitApp: () => call<void>("exit_app"),
   clearProfileCache: () => call<void>("clear_profile_cache"),
+  checkForUpdates: () => call<UpdateCheckResult>("check_for_updates"),
   getSettings: () => call<AppSettings>("get_settings"),
   updateSettings: (settings: AppSettings) =>
     call<AppSettings>("update_settings", { settings }),

@@ -3114,7 +3114,7 @@ checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
 
 [[package]]
 name = "opp"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -3134,6 +3134,7 @@ dependencies = [
  "rosu-map",
  "rosu-pp",
  "rosu-render",
+ "semver",
  "serde",
  "serde_json",
  "sha2",

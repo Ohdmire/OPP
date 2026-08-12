@@ -164,6 +164,7 @@ function renderPage(advancedEnabled = false) {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  localStorage.clear();
 });
 
 describe("SimilarBeatmapsPage", () => {
@@ -214,7 +215,7 @@ describe("SimilarBeatmapsPage", () => {
     const input = await screen.findByLabelText("Beatmap ID 或 osu! 链接");
     await user.type(input, "https://osu.ppy.sh/beatmaps/10");
     await user.click(screen.getByRole("button", { name: "展开高级参数" }));
-    expect(screen.getByLabelText("结果数量")).toHaveValue("20");
+    expect(screen.getByLabelText("结果数量")).toHaveValue("50");
     expect(screen.getByRole("tab", { name: "动态" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByLabelText("向下范围")).toHaveValue("4");
     expect(screen.getByLabelText("向上范围")).toHaveValue("4");
@@ -228,7 +229,7 @@ describe("SimilarBeatmapsPage", () => {
           value: "https://osu.ppy.sh/beatmaps/10",
         },
         weighting: { mode: "dynamic", lower_sections: 4, upper_sections: 4 },
-        result_limit: 20,
+        result_limit: 50,
       }),
     );
     expect(screen.getByText("动态权重档案")).toBeInTheDocument();
@@ -298,13 +299,13 @@ describe("SimilarBeatmapsPage", () => {
     expect(await screen.findByText("根据最近游玩生成")).toBeInTheDocument();
     expect(screen.getAllByText(/由 Reference - Target \[Insane\] 推荐/).length).toBeGreaterThan(0);
     expect(recommend).toHaveBeenLastCalledWith(
-      expect.objectContaining({ kind: "recent", result_limit: 20 }),
+      expect.objectContaining({ kind: "recent", result_limit: 50 }),
     );
 
     await user.click(screen.getByRole("button", { name: "根据你的 BP 推荐" }));
     await waitFor(() => expect(screen.getByText("根据你的 BP 生成")).toBeInTheDocument());
     expect(recommend).toHaveBeenLastCalledWith(
-      expect.objectContaining({ kind: "best", result_limit: 20 }),
+      expect.objectContaining({ kind: "best", result_limit: 50 }),
     );
   });
 
@@ -330,6 +331,40 @@ describe("SimilarBeatmapsPage", () => {
     await user.click(screen.getByRole("button", { name: "换一批" }));
     expect(screen.queryByText("Artist 1 - Recommendation 1")).not.toBeInTheDocument();
     expect(screen.getByText("Artist 6 - Recommendation 6")).toBeInTheDocument();
+  });
+
+  it("records complete batches and excludes them from the next recommendation", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(desktopApi, "getSimilarityIndexStatus").mockResolvedValue(ready);
+    const recommendations = Array.from({ length: 5 }, (_, index) => ({
+      ...recommendationResponse.results[0],
+      beatmap_id: 30 + index,
+      beatmapset_id: 300 + index,
+      title: `History ${index + 1}`,
+    }));
+    const recommend = vi.spyOn(desktopApi, "recommendSimilarBeatmaps").mockResolvedValue({
+      ...recommendationResponse,
+      results: recommendations,
+    });
+
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "根据最近游玩推荐" }));
+    expect(await screen.findByText("Signal - History 1")).toBeInTheDocument();
+    await waitFor(() => expect(localStorage.getItem("opp.similarity-recommendation-history.v1")).toContain("History 5"));
+    const historyButton = await screen.findByRole("button", { name: /今日推荐历史/ });
+
+    await user.click(historyButton);
+    expect(screen.getByRole("dialog", { name: "今日推荐历史" })).toHaveTextContent("Signal - History 5");
+    await user.click(screen.getByRole("button", { name: "关闭今日推荐历史" }));
+    await user.click(screen.getByRole("button", { name: "根据最近游玩推荐" }));
+
+    await waitFor(() => expect(recommend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        excluded_beatmap_ids: expect.arrayContaining(
+          recommendations.map((result) => result.beatmap_id),
+        ),
+      }),
+    ));
   });
 
   it("applies range sliders to the recalled candidate batch without changing the query", async () => {

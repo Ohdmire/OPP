@@ -185,6 +185,7 @@ pub async fn recommend_similar_beatmaps(
 
     let kind = request.kind;
     let final_result_limit = request.result_limit;
+    let excluded_beatmap_ids = request.excluded_beatmap_ids.into_iter().collect();
     tauri::async_runtime::spawn_blocking(move || {
         let mut batches = Vec::with_capacity(targets.len());
         for target in targets {
@@ -198,6 +199,7 @@ pub async fn recommend_similar_beatmaps(
             batches,
             skipped_seed_count,
             final_result_limit,
+            &excluded_beatmap_ids,
         ))
     })
     .await

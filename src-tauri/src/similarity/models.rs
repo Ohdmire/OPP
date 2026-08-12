@@ -113,6 +113,8 @@ pub struct SimilarityRecommendationRequest {
     pub result_limit: usize,
     #[serde(default)]
     pub seed_limit: Option<usize>,
+    #[serde(default)]
+    pub excluded_beatmap_ids: Vec<u64>,
 }
 
 #[derive(Debug, Clone, Serialize)]

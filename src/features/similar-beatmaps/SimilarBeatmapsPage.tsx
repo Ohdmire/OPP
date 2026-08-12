@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { useQueryClient } from "@tanstack/react-query";
-import { Download, ExternalLink, FolderOpen, History, LoaderCircle, Map as MapIcon, RefreshCw, Search, Trophy, Upload } from "lucide-react";
+import { Download, ExternalLink, FolderOpen, History, LoaderCircle, Map as MapIcon, RefreshCw, Search, Trophy, Upload, X } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { PageHeader } from "../../shared/components/PageHeader";
@@ -13,6 +14,7 @@ import type {
   SimilarityQueryRequest,
   SimilarityQueryResponse,
   SimilarityRecommendationKind,
+  SimilarityRecommendationResult,
   SimilarityRecommendationResponse,
   SimilarityResult,
 } from "../../shared/types/osu";
@@ -48,6 +50,12 @@ import {
   resolveSimilarityWeighting,
   similarityIndexStateCopy,
 } from "./viewModel";
+import {
+  getTodayRecommendationHistory,
+  getTodayRecommendedBeatmapIds,
+  recordDisplayedRecommendationBatch,
+  type RecommendationHistoryEntry,
+} from "./recommendationHistory";
 
 const RESULTS_PER_BATCH = 5;
 
@@ -131,6 +139,10 @@ export function SimilarBeatmapsPage() {
       () => similaritySession?.recommendationResponse ?? null,
     );
   const [recommendationCompleting, setRecommendationCompleting] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [recommendationHistory, setRecommendationHistory] = useState<RecommendationHistoryEntry[]>(
+    () => getTodayRecommendationHistory(),
+  );
   const [selectedResultId, setSelectedResultId] = useState<number | null>(
     () => similaritySession?.selectedResultId ?? null,
   );
@@ -165,6 +177,11 @@ export function SimilarBeatmapsPage() {
     ),
     [activeResultBatch, filteredResults],
   );
+
+  useEffect(() => {
+    if (!recommendationResponse || visibleResults.length !== RESULTS_PER_BATCH) return;
+    recordDisplayedRecommendationBatch(visibleResults as SimilarityRecommendationResult[]);
+  }, [recommendationResponse, visibleResults]);
 
   const selected = useMemo(() => {
     if (!filteredResults.length) return null;
@@ -472,17 +489,25 @@ export function SimilarBeatmapsPage() {
     setRecommendationResponse(null);
     setRecommendationCompleting(false);
     similarityQuery.reset();
+    const excludedBeatmapIds = [...getTodayRecommendedBeatmapIds()];
+    const withoutTodayHistory = (nextResponse: SimilarityRecommendationResponse) => ({
+      ...nextResponse,
+      results: nextResponse.results.filter(
+        (result) => !excludedBeatmapIds.includes(result.beatmap_id),
+      ),
+    });
     const fullRequest = {
       kind,
       weighting: effectiveWeighting,
       filters: { ...request.filters },
       result_limit: request.result_limit,
+      excluded_beatmap_ids: excludedBeatmapIds,
     };
     const fullCacheKey = similarityRecommendationKey(fullRequest);
     const complete = (nextResponse: SimilarityRecommendationResponse) => {
       if (recommendationRun.current !== run) return;
       queryClient.setQueryData(fullCacheKey, nextResponse);
-      setRecommendationResponse(nextResponse);
+      setRecommendationResponse(withoutTodayHistory(nextResponse));
       setRecommendationCompleting(false);
     };
     const cached = queryClient.getQueryData<SimilarityRecommendationResponse>(fullCacheKey);
@@ -504,7 +529,7 @@ export function SimilarBeatmapsPage() {
     };
     const quickCached = queryClient.getQueryData<SimilarityRecommendationResponse>(quickCacheKey);
     if (quickCached) {
-      if (recommendationRun.current === run) setRecommendationResponse(quickCached);
+      if (recommendationRun.current === run) setRecommendationResponse(withoutTodayHistory(quickCached));
       finishInBackground();
       return;
     }
@@ -512,7 +537,7 @@ export function SimilarBeatmapsPage() {
       onSuccess: (nextResponse) => {
         if (recommendationRun.current !== run) return;
         queryClient.setQueryData(quickCacheKey, nextResponse);
-        setRecommendationResponse(nextResponse);
+        setRecommendationResponse(withoutTodayHistory(nextResponse));
         finishInBackground();
       },
     });
@@ -539,6 +564,52 @@ export function SimilarBeatmapsPage() {
 
   return (
     <>
+      <Dialog.Root open={historyOpen} onOpenChange={(open) => {
+        setHistoryOpen(open);
+        if (open) setRecommendationHistory(getTodayRecommendationHistory());
+      }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[260] bg-black/70 backdrop-blur-sm" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-[270] flex max-h-[min(760px,calc(100vh-32px))] w-[min(760px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-cyan-300/20 bg-[#101724] shadow-2xl outline-none">
+            <div className="flex items-start justify-between gap-4 border-b border-white/[0.08] p-6">
+              <div>
+                <Dialog.Title className="text-lg font-semibold text-white">今日推荐历史</Dialog.Title>
+                <Dialog.Description className="mt-1 text-sm text-slate-400">
+                  仅记录今天曾以完整 5 张一批展示的推荐谱面，共 {recommendationHistory.length} 张。
+                </Dialog.Description>
+              </div>
+              <Dialog.Close aria-label="关闭今日推荐历史" className="text-slate-500 transition hover:text-white">
+                <X className="size-5" />
+              </Dialog.Close>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              {recommendationHistory.length ? (
+                <div className="space-y-2">
+                  {recommendationHistory.map(({ displayed_at, result }) => (
+                    <button
+                      className="flex w-full items-center gap-4 rounded-xl border border-white/[0.06] bg-black/10 px-4 py-3 text-left transition hover:border-cyan-300/20 hover:bg-white/[0.04]"
+                      key={result.beatmap_id}
+                      onClick={() => {
+                        setHistoryOpen(false);
+                        openOnlineBeatmap(result);
+                      }}
+                      type="button"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-slate-100">{result.artist} - {result.title}</p>
+                        <p className="mt-1 truncate text-xs text-slate-500">[{result.version}] · {result.creator} · {result.star_rating == null ? "星数未知" : `${result.star_rating.toFixed(2)}★`}</p>
+                      </div>
+                      <time className="shrink-0 text-xs text-slate-500">{new Date(displayed_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState title="今天还没有完整推荐记录" description="当一批 5 张推荐谱面完整展示后，会自动出现在这里。" />
+              )}
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
       <PageHeader
         title="相似谱面"
         description="以谱面难度特征为参照，从你选择的本地私有索引中寻找相近谱面。索引及查询内容不会上传。"
@@ -608,7 +679,7 @@ export function SimilarBeatmapsPage() {
           <div className="mb-5 border-b border-white/[0.07] pb-5">
             <div className="mb-3">
               <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--theme-primary)]">为你推荐</span>
-              <p className="mt-1 text-xs text-slate-400">从最近通过或 BP 前 20 张谱面出发，按总距离寻找最接近的谱面。</p>
+              <p className="mt-1 text-xs text-slate-400">从最近通过或 BP 前 50 张谱面出发，推荐最多 50 张最接近的谱面。</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -629,6 +700,17 @@ export function SimilarBeatmapsPage() {
               >
                 <Trophy size={16} aria-hidden="true" />
                 根据你的 BP 推荐
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setRecommendationHistory(getTodayRecommendationHistory());
+                  setHistoryOpen(true);
+                }}
+              >
+                <History size={16} aria-hidden="true" />
+                今日推荐历史
               </Button>
             </div>
           </div>

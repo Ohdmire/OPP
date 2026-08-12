@@ -7,6 +7,7 @@ import {
   Gamepad2,
   LogOut,
   RotateCcw,
+  RefreshCw,
   Trash2,
   Volume2,
 } from "lucide-react";
@@ -22,6 +23,7 @@ import {
   SectionTitle,
 } from "../../shared/components/ui";
 import { desktopApi } from "../../shared/lib/tauri";
+import type { UpdateCheckResult } from "../../shared/lib/tauri";
 import type {
   AppSettings,
   BeatmapDownloadProvider,
@@ -122,6 +124,9 @@ export function SettingsPage() {
   const [accountBusy, setAccountBusy] = useState<"logout" | "reauth" | null>(null);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [sourceBusy, setSourceBusy] = useState<OsuClient | null>(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const settings: AppSettings = {
     ...base,
     ...stored.data,
@@ -201,6 +206,18 @@ export function SettingsPage() {
       setAccountError((error as { message?: string }).message ?? String(error));
     } finally {
       setAccountBusy(null);
+    }
+  };
+
+  const checkForUpdates = async () => {
+    setUpdateBusy(true);
+    setUpdateError(null);
+    try {
+      setUpdateResult(await desktopApi.checkForUpdates());
+    } catch (error) {
+      setUpdateError((error as { message?: string }).message ?? String(error));
+    } finally {
+      setUpdateBusy(false);
     }
   };
 
@@ -452,8 +469,24 @@ export function SettingsPage() {
                   <Gamepad2 className="size-4 text-[var(--theme-primary)]" />
                   OPP v{__APP_VERSION__}
                 </p>
+                {updateResult ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Badge tone={updateResult.is_latest ? "success" : "warning"}>
+                      {updateResult.is_latest ? "已是最新版本" : `发现新版本 ${updateResult.latest_tag}`}
+                    </Badge>
+                    {!updateResult.is_latest ? (
+                      <Button onClick={() => void desktopApi.openExternal(updateResult.release_url)} size="sm" variant="ghost">
+                        <ExternalLink className="size-4" />查看 Release
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
+                {updateError ? <p className="mt-3 max-w-md text-xs text-rose-200">{updateError}</p> : null}
               </div>
               <div className="flex flex-wrap justify-end gap-2">
+                <Button disabled={updateBusy} loading={updateBusy} onClick={() => void checkForUpdates()} size="sm" variant="secondary">
+                  <RefreshCw className="size-4" />检查更新
+                </Button>
                 <Button onClick={() => window.dispatchEvent(new Event(START_ONBOARDING_EVENT))} size="sm" variant="secondary">
                   <RotateCcw className="size-4" />重新查看新手引导
                 </Button>

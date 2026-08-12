@@ -98,7 +98,7 @@ export function SimilarityAdvancedPanel({
         <section className="mt-5">
           <div className="mb-2 flex items-center justify-between">
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-600">六组推荐权重</p>
-            <Button onClick={() => onChange({ ...request, weighting: { mode: "manual", difficulty_weights: { ...defaultDifficultyWeights }, parameter_weight: 1 }, result_limit: 20 })} size="sm" type="button" variant="ghost"><RotateCcw className="size-3.5" />恢复默认</Button>
+            <Button onClick={() => onChange({ ...request, weighting: { mode: "manual", difficulty_weights: { ...defaultDifficultyWeights }, parameter_weight: 1 }, result_limit: 50 })} size="sm" type="button" variant="ghost"><RotateCcw className="size-3.5" />恢复默认</Button>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             {difficultyControls.map(({ key, label }) => (

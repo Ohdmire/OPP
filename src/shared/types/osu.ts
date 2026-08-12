@@ -254,6 +254,7 @@ export interface SimilarityRecommendationRequest {
   filters: SimilarityFilters;
   result_limit: number;
   seed_limit?: number;
+  excluded_beatmap_ids?: number[];
 }
 
 export interface SimilarityRecommendationResult extends SimilarityResult {

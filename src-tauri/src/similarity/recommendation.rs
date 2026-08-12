@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::models::Score;
 
-pub const MAX_RECOMMENDATION_SEEDS: usize = 20;
+pub const MAX_RECOMMENDATION_SEEDS: usize = 50;
 
 pub fn requested_seed_limit(value: Option<usize>) -> usize {
     value

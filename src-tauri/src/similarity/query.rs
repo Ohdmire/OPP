@@ -24,7 +24,11 @@ pub fn options_from_recommendation_request(
 ) -> CommandResult<QueryOptions> {
     let mut options =
         options_from_parts(request.weighting, &request.filters, request.result_limit)?;
-    options.result_limit = request.result_limit.saturating_mul(3).clamp(50, 150);
+    options.result_limit = request
+        .result_limit
+        .saturating_add(request.excluded_beatmap_ids.len())
+        .saturating_mul(3)
+        .clamp(50, 150);
     Ok(options)
 }
 
@@ -171,6 +175,7 @@ pub fn recommendation_response_from_runtime(
     batches: Vec<(RuntimeQueryTarget, RuntimeQueryResponse)>,
     skipped_seed_count: usize,
     result_limit: usize,
+    excluded_beatmap_ids: &HashSet<u64>,
 ) -> SimilarityRecommendationResponse {
     let seed_count = batches.len();
     let seed_ids = batches
@@ -194,7 +199,8 @@ pub fn recommendation_response_from_runtime(
         }
         let recommended_by = beatmap_from_parts(target.metadata, target.record);
         for result in response.results {
-            if seed_ids.contains(&result.record.beatmap_id)
+            if excluded_beatmap_ids.contains(&result.record.beatmap_id)
+                || seed_ids.contains(&result.record.beatmap_id)
                 || (result.record.beatmapset_id != 0
                     && seed_sets.contains(&result.record.beatmapset_id))
             {
@@ -362,6 +368,7 @@ mod tests {
             filters: QueryFilters::default(),
             result_limit: 20,
             seed_limit: None,
+            excluded_beatmap_ids: Vec::new(),
         };
         assert_eq!(
             options_from_recommendation_request(&recommendation)
@@ -459,6 +466,7 @@ mod tests {
             ],
             3,
             20,
+            &HashSet::new(),
         );
 
         assert_eq!(response.seed_count, 2);
@@ -469,5 +477,25 @@ mod tests {
         assert_eq!(response.results[1].result.beatmap.beatmap_id, 101);
         assert_eq!(response.dynamic_profiles.len(), 1);
         assert_eq!(response.dynamic_profiles[0].seed_beatmap_id, 1);
+    }
+
+    #[test]
+    fn recommendation_excludes_history_before_truncating_results() {
+        let response = recommendation_response_from_runtime(
+            SimilarityRecommendationKind::Recent,
+            vec![(
+                target(1, 10),
+                RuntimeQueryResponse {
+                    results: vec![result(100, 100, 0.1), result(101, 101, 0.2)],
+                    weight_profile: None,
+                },
+            )],
+            0,
+            1,
+            &HashSet::from([100]),
+        );
+
+        assert_eq!(response.results.len(), 1);
+        assert_eq!(response.results[0].result.beatmap.beatmap_id, 101);
     }
 }

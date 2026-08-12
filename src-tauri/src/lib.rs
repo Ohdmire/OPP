@@ -16,6 +16,7 @@ mod storage;
 mod tools;
 mod tosu;
 mod trainer;
+mod update_check;
 
 use account::{
     begin_oauth_login, cancel_oauth_login, clear_profile_cache, disconnect_osu,
@@ -72,6 +73,7 @@ use tosu::{
     stop_tosu,
 };
 use trainer::generate_trainer_beatmap;
+use update_check::check_for_updates;
 
 #[tauri::command]
 fn exit_app(app: tauri::AppHandle) {
@@ -219,6 +221,7 @@ pub fn run() {
             get_obs_scenes,
             save_obs_connection,
             refresh_selected_obs_scene,
+            check_for_updates,
             exit_app,
         ])
         .run(tauri::generate_context!())

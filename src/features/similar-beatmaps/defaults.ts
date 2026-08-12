@@ -61,6 +61,6 @@ export function createSimilarityRequest(
     source,
     weighting: { ...defaultDynamicWeighting },
     filters: { ...defaultSimilarityFilters },
-    result_limit: 20,
+    result_limit: 50,
   };
 }
