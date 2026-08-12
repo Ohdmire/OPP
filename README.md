@@ -22,9 +22,9 @@ OPP 是一个使用 Tauri、Rust 与 React 构建的 Windows 桌面应用。它�
 > [!IMPORTANT]
 > OPP 是独立的社区项目，与 ppy Pty Ltd 或 osu! 官方无隶属关系。osu! 是 ppy Pty Ltd 的商标。
 
+**创了一个交流吹水群： 1059437719 有任何问题或者功能上的建议欢迎来群中吹水**
 
 
-## 功能概览
 
 - 通过官方 osu! API v2 OAuth 登录，查看玩家资料与成绩数据
 - 提供谱面镜像批量下载、筛选队列与多镜像自动回退
