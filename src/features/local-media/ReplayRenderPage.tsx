@@ -38,10 +38,12 @@ export function ReplayRenderPage() {
   const [options, setOptions] = useState<ReplayRenderOptions>(defaults);
   const [advanced, setAdvanced] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [loadingReplays, setLoadingReplays] = useState(true);
+  const [inspectingReplay, setInspectingReplay] = useState(false);
   const [progress, setProgress] = useState<ReplayRenderProgress | null>(null);
   const [error, setError] = useState<unknown>(null);
 
-  const inspect = useCallback(async (path: string) => { setReplayPath(path); setReplayInfo(null); try { setReplayInfo(await desktopApi.inspectGameReplay(client, path)); } catch (value) { setError(value); } }, [client]);
+  const inspect = useCallback(async (path: string) => { setReplayPath(path); setReplayInfo(null); setInspectingReplay(true); try { setReplayInfo(await desktopApi.inspectGameReplay(client, path)); } catch (value) { setError(value); } finally { setInspectingReplay(false); } }, [client]);
 
   useEffect(() => {
     let unlisten: () => void = () => undefined;
@@ -50,13 +52,20 @@ export function ReplayRenderPage() {
   }, []);
 
   useEffect(() => {
-    desktopApi.listGameMedia(client).then((media) => {
+    let active = true;
+    Promise.resolve().then(() => {
+      if (!active) return [];
+      setLoadingReplays(true);
+      return desktopApi.listGameMedia(client);
+    }).then((media) => {
+      if (!active) return;
       const items = media.filter((item) => item.kind === "replay");
       const requested = searchParams.get("replay");
       const selected = requested && items.some((item) => item.path === requested) ? requested : items[0]?.path ?? "";
       setReplays(items); setReplayPath(selected); setProgress(null); setError(null);
       if (selected) void inspect(selected);
-    }).catch(setError);
+    }).catch((value) => { if (active) setError(value); }).finally(() => { if (active) setLoadingReplays(false); });
+    return () => { active = false; };
   }, [client, inspect, searchParams]);
   const update = <K extends keyof ReplayRenderOptions>(key: K, value: ReplayRenderOptions[K]) => setOptions((current) => ({ ...current, [key]: value }));
   const filteredReplays = replays.filter((item) => {
@@ -83,9 +92,9 @@ export function ReplayRenderPage() {
         <Card className="p-5"><SectionTitle title="素材" description="回放会从当前客户端的 Replays 目录安全读取；谱面用于提交前的本地兼容性校验。" />
           <label className="mt-5 block text-base font-medium text-slate-200">本地回放
             <span className="relative mt-2 block"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-500" /><input list="replay-search-suggestions" className="w-full rounded-xl border border-white/10 bg-black/20 py-3 pl-10 pr-3 text-base text-white" value={replaySearch} onChange={(event) => setReplaySearch(event.target.value)} placeholder="搜索文件名或路径" /><datalist id="replay-search-suggestions">{replaySuggestions.map((suggestion) => <option key={suggestion} value={suggestion} />)}</datalist></span>
-            <select className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-base text-white" value={replayPath} onChange={(event) => void inspect(event.target.value)}><option value="">选择回放</option>{filteredReplays.map((item) => <option key={item.path} value={item.path}>{labelForReplay(item)}</option>)}</select>
+            <select className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-base text-white" disabled={loadingReplays} value={replayPath} onChange={(event) => void inspect(event.target.value)}><option value="">{loadingReplays ? "正在扫描本地回放…" : "选择回放"}</option>{filteredReplays.map((item) => <option key={item.path} value={item.path}>{labelForReplay(item)}</option>)}</select>
           </label>
-          {replayInfo ? <div className={`mt-4 rounded-xl border p-4 text-sm ${replayInfo.submitted ? "border-emerald-300/15 bg-emerald-300/[0.05] text-emerald-100" : "border-amber-300/15 bg-amber-300/[0.05] text-amber-100"}`}>{replayInfo.submitted ? `已匹配 Beatmap ID ${replayInfo.beatmap_id} · ${replayInfo.beatmap_title ?? "已提交谱面"}` : "未在本地索引中找到对应谱面，或该谱面尚未提交。请先扫描本地谱面。"}</div> : null}
+          {inspectingReplay ? <div className="mt-4 flex items-center gap-2 rounded-xl border border-white/10 p-4 text-sm text-slate-300"><LoaderCircle className="size-4 animate-spin" />正在校验回放…</div> : replayInfo ? <div className={`mt-4 rounded-xl border p-4 text-sm ${replayInfo.submitted ? "border-emerald-300/15 bg-emerald-300/[0.05] text-emerald-100" : "border-amber-300/15 bg-amber-300/[0.05] text-amber-100"}`}>{replayInfo.submitted ? `已匹配 Beatmap ID ${replayInfo.beatmap_id} · ${replayInfo.beatmap_title ?? "已提交谱面"}` : "未在本地索引中找到对应谱面，或该谱面尚未提交。请先扫描本地谱面。"}</div> : null}
         </Card>
         <Card className="p-5"><SectionTitle title="输出与音频" description="分辨率由 o!rdr 的当前权限与服务器能力决定。" />
           <div className="mt-5 grid gap-4 md:grid-cols-4"><label className="text-xs text-slate-400">分辨率<select className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-white" value={options.resolution} onChange={(event) => update("resolution", event.target.value as ReplayRenderOptions["resolution"])}>{["720x480", "960x540", "1280x720", "1920x1080"].map((value) => <option key={value}>{value}</option>)}</select></label>{([['global_volume','总音量'], ['music_volume','音乐'], ['hitsound_volume','打击音']] as const).map(([key, label]) => <label className="text-xs text-slate-400" key={key}>{label} {options[key]}%<input className="mt-3 w-full accent-pink-400" type="range" min="0" max="100" value={options[key]} onChange={(event) => update(key, Number(event.target.value))} /></label>)}</div>

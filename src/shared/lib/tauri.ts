@@ -30,6 +30,7 @@ import type {
   LocalBeatmapSetSummary,
   LocalBeatmapSummary,
   LocalLibrarySummary,
+  LocalIndexLoadStatus,
   LocalScanProgress,
   LocalSkinAssetPayload,
   LocalSkinDetail,
@@ -310,6 +311,8 @@ export const desktopApi = {
   refreshSelectedObsScene: () => call<ObsRefreshResult>("refresh_selected_obs_scene"),
   getLocalSources: () =>
     call<LocalSourceStatus[]>("get_local_sources"),
+  getLocalIndexStatus: () =>
+    call<LocalIndexLoadStatus>("get_local_index_status"),
   getSimilarityIndexStatus: () =>
     call<SimilarityIndexStatus>("get_similarity_index_status"),
   configureSimilarityIndex: (directory: string | null) =>

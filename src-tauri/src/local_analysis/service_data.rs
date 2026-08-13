@@ -4,6 +4,7 @@
 //! the service focused on orchestration rather than serialization details.
 
 use std::{
+    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
     time::SystemTime,
@@ -17,14 +18,15 @@ use crate::error::CommandResult;
 
 use super::super::{
     models::{
-        LocalBeatmapDetail, LocalBeatmapSummary, LocalClient, LocalLibrarySummary,
-        LocalSkinAssetSummary, LocalSkinDetail, ScanDiagnostic,
+        BeatmapSort, LocalBeatmapDetail, LocalBeatmapSummary, LocalClient, LocalLibrarySummary,
+        LocalSkinAssetSummary, LocalSkinDetail, ScanDiagnostic, SkinSort,
     },
     parser::DIFFICULTY_ALGORITHM,
 };
+use super::service_query::{compare_beatmaps, compare_skins};
 
 /// Bump this only when a serialized [`LocalIndex`] can no longer be read safely.
-pub(super) const INDEX_SCHEMA: u32 = 5;
+pub(super) const INDEX_SCHEMA: u32 = 6;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub(super) struct FileStamp {
@@ -50,6 +52,8 @@ pub(super) struct IndexedEntry {
     pub(super) physical_path: PathBuf,
     pub(super) stamp: FileStamp,
     pub(super) content_hash: Option<String>,
+    #[serde(default)]
+    pub(super) beatmap_md5: Option<String>,
     pub(super) data: IndexedData,
     pub(super) diagnostics: Vec<ScanDiagnostic>,
 }
@@ -62,6 +66,77 @@ pub(super) struct LocalIndex {
     pub(super) summary: LocalLibrarySummary,
     pub(super) diagnostics: Vec<ScanDiagnostic>,
     pub(super) entries: Vec<IndexedEntry>,
+    #[serde(skip)]
+    pub(super) beatmap_md5_lookup: BTreeMap<String, usize>,
+    #[serde(skip)]
+    pub(super) beatmap_sets: BTreeMap<String, Vec<usize>>,
+    #[serde(skip)]
+    pub(super) beatmap_orders: BTreeMap<BeatmapSort, Vec<usize>>,
+    #[serde(skip)]
+    pub(super) skin_orders: BTreeMap<SkinSort, Vec<usize>>,
+}
+
+impl LocalIndex {
+    pub(super) fn rebuild_runtime_indexes(&mut self) {
+        self.beatmap_md5_lookup.clear();
+        self.beatmap_sets.clear();
+        self.beatmap_orders.clear();
+        self.skin_orders.clear();
+        for (position, entry) in self.entries.iter().enumerate() {
+            if let Some(checksum) = entry.beatmap_md5.as_ref() {
+                self.beatmap_md5_lookup
+                    .entry(checksum.to_ascii_lowercase())
+                    .or_insert(position);
+            }
+            if let IndexedData::Beatmap { summary, .. } = &entry.data {
+                self.beatmap_sets
+                    .entry(summary.set_key.clone())
+                    .or_default()
+                    .push(position);
+            }
+        }
+        let beatmap_positions = self
+            .entries
+            .iter()
+            .enumerate()
+            .filter_map(|(position, entry)| {
+                matches!(entry.data, IndexedData::Beatmap { .. }).then_some(position)
+            })
+            .collect::<Vec<_>>();
+        for sort in BeatmapSort::ALL {
+            let mut positions = beatmap_positions.clone();
+            positions.sort_by(|left, right| {
+                match (&self.entries[*left].data, &self.entries[*right].data) {
+                    (
+                        IndexedData::Beatmap { summary: left, .. },
+                        IndexedData::Beatmap { summary: right, .. },
+                    ) => compare_beatmaps(left, right, sort),
+                    _ => std::cmp::Ordering::Equal,
+                }
+            });
+            self.beatmap_orders.insert(sort, positions);
+        }
+        let skin_positions = self
+            .entries
+            .iter()
+            .enumerate()
+            .filter_map(|(position, entry)| {
+                matches!(entry.data, IndexedData::Skin { .. }).then_some(position)
+            })
+            .collect::<Vec<_>>();
+        for sort in SkinSort::ALL {
+            let mut positions = skin_positions.clone();
+            positions.sort_by(|left, right| {
+                match (&self.entries[*left].data, &self.entries[*right].data) {
+                    (IndexedData::Skin { detail: left }, IndexedData::Skin { detail: right }) => {
+                        compare_skins(&left.summary, &right.summary, sort)
+                    }
+                    _ => std::cmp::Ordering::Equal,
+                }
+            });
+            self.skin_orders.insert(sort, positions);
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -131,9 +206,12 @@ pub(super) fn load_index(cache_dir: &Path, client: LocalClient) -> Option<LocalI
     let backup = cache_dir.join(format!("{client}-index.json.bak"));
     [target, backup].into_iter().find_map(|path| {
         let bytes = fs::read(path).ok()?;
-        let index: LocalIndex = serde_json::from_slice(&bytes).ok()?;
-        (index.schema == INDEX_SCHEMA && index.difficulty_algorithm == DIFFICULTY_ALGORITHM)
-            .then_some(index)
+        let mut index: LocalIndex = serde_json::from_slice(&bytes).ok()?;
+        if index.schema != INDEX_SCHEMA || index.difficulty_algorithm != DIFFICULTY_ALGORITHM {
+            return None;
+        }
+        index.rebuild_runtime_indexes();
+        Some(index)
     })
 }
 

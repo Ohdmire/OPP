@@ -498,7 +498,9 @@ pub(crate) fn parse_replay_metadata(bytes: &[u8]) -> CommandResult<(String, Stri
     Ok((beatmap_hash, username))
 }
 
-#[tauri::command]
+// Media libraries can contain years of replays and screenshots. Keep all
+// filesystem traversal and decoding away from the window event loop.
+#[tauri::command(async)]
 pub fn list_game_media(
     client: LocalClient,
     state: State<'_, AppState>,
@@ -545,7 +547,7 @@ pub fn list_game_media(
     Ok(items)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_game_replay(
     client: LocalClient,
     path: String,
@@ -581,7 +583,7 @@ pub fn read_game_replay(
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn inspect_game_replay(
     client: LocalClient,
     path: String,
@@ -608,7 +610,7 @@ pub fn inspect_game_replay(
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn read_game_screenshot(
     client: LocalClient,
     path: String,
@@ -631,6 +633,14 @@ pub fn read_game_screenshot(
         return Err(CommandError::new(
             "SCREENSHOT_PATH_NOT_ALLOWED",
             "截图文件不在 osu! 数据目录内",
+        ));
+    }
+    let metadata = fs::metadata(&candidate)
+        .map_err(|error| CommandError::new("SCREENSHOT_READ_FAILED", error.to_string()))?;
+    if metadata.len() > 64 * 1024 * 1024 {
+        return Err(CommandError::new(
+            "SCREENSHOT_TOO_LARGE",
+            "截图文件超过 64 MB，请使用资源管理器直接查看",
         ));
     }
     let mime_type = match ext.as_str() {

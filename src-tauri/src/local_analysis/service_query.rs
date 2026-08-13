@@ -9,16 +9,38 @@ use walkdir::WalkDir;
 
 use crate::error::{CommandError, CommandResult};
 
+#[cfg(test)]
+use super::super::models::Page;
 use super::super::{
     models::{
         BeatmapQuery, BeatmapSort, LocalBeatmapDetail, LocalBeatmapSetSummary, LocalBeatmapSummary,
-        LocalSkinAssetSummary, LocalSkinSummary, Page, SkinAssetKind, SkinSort, SortDirection,
+        LocalSkinAssetSummary, LocalSkinSummary, SkinAssetKind, SkinSort, SortDirection,
     },
     parser::sha256,
 };
 use super::service_data::{IndexedData, IndexedEntry, LocalIndex};
 
 pub(super) const MAX_QUERY_LIMIT: usize = 500;
+
+pub(super) fn insert_bounded<T>(
+    items: &mut Vec<T>,
+    item: T,
+    capacity: usize,
+    compare: impl Fn(&T, &T) -> Ordering,
+) {
+    if capacity == 0 {
+        return;
+    }
+    let position = items
+        .binary_search_by(|current| compare(current, &item))
+        .unwrap_or_else(|position| position);
+    if position < capacity {
+        items.insert(position, item);
+        if items.len() > capacity {
+            items.pop();
+        }
+    }
+}
 
 pub(super) fn find_skin_entry<'a>(
     index: &'a LocalIndex,
@@ -268,6 +290,7 @@ pub(super) fn apply_direction(ordering: Ordering, direction: SortDirection) -> O
     }
 }
 
+#[cfg(test)]
 pub(super) fn page<T>(items: Vec<T>, offset: usize, requested_limit: usize) -> Page<T> {
     let total = items.len();
     let limit = requested_limit.clamp(1, MAX_QUERY_LIMIT);

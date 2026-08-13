@@ -7,8 +7,8 @@ use std::{path::Path, sync::Arc};
 
 pub use models::{
     BeatmapQuery, LocalBeatmapDetail, LocalBeatmapSetSummary, LocalBeatmapSummary, LocalClient,
-    LocalLibrarySummary, LocalScanProgress, LocalSkinAssetPayload, LocalSkinDetail,
-    LocalSkinPreview, LocalSkinSummary, LocalSourceStatus, Page, SkinQuery,
+    LocalIndexLoadStatus, LocalLibrarySummary, LocalScanProgress, LocalSkinAssetPayload,
+    LocalSkinDetail, LocalSkinPreview, LocalSkinSummary, LocalSourceStatus, Page, SkinQuery,
 };
 pub use service::LocalAnalysisService;
 use tauri::{AppHandle, Emitter, State};
@@ -18,12 +18,17 @@ use crate::{
     state::AppState,
 };
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_local_sources(state: State<'_, AppState>) -> CommandResult<Vec<LocalSourceStatus>> {
     state.local_analysis.source_statuses()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
+pub fn get_local_index_status(state: State<'_, AppState>) -> CommandResult<LocalIndexLoadStatus> {
+    state.local_analysis.index_load_status()
+}
+
+#[tauri::command(async)]
 pub fn set_local_source(
     client: LocalClient,
     path: String,
@@ -34,7 +39,7 @@ pub fn set_local_source(
         .set_source(client, Path::new(path.trim()))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn reset_local_source(
     client: LocalClient,
     state: State<'_, AppState>,
@@ -42,7 +47,7 @@ pub fn reset_local_source(
     state.local_analysis.reset_source(client)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_local_summary(
     client: LocalClient,
     state: State<'_, AppState>,
@@ -76,7 +81,7 @@ pub fn cancel_local_scan(client: LocalClient, state: State<'_, AppState>) -> Com
     state.local_analysis.cancel_scan(client)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn query_local_beatmaps(
     query: BeatmapQuery,
     state: State<'_, AppState>,
@@ -84,7 +89,7 @@ pub fn query_local_beatmaps(
     state.local_analysis.query_beatmaps(query)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn query_local_beatmap_sets(
     query: BeatmapQuery,
     state: State<'_, AppState>,
@@ -92,7 +97,7 @@ pub fn query_local_beatmap_sets(
     state.local_analysis.query_beatmap_sets(query)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_local_beatmap_detail(
     client: LocalClient,
     resource_id: String,
@@ -101,7 +106,7 @@ pub fn get_local_beatmap_detail(
     state.local_analysis.beatmap_detail(client, &resource_id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_local_beatmap_path(
     client: LocalClient,
     resource_id: String,
@@ -127,7 +132,7 @@ pub async fn get_local_beatmap_background(
         })?
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn query_local_skins(
     query: SkinQuery,
     state: State<'_, AppState>,
@@ -135,7 +140,7 @@ pub fn query_local_skins(
     state.local_analysis.query_skins(query)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_local_skin_detail(
     client: LocalClient,
     resource_id: String,

@@ -37,10 +37,10 @@ use game_session::{
 };
 use local_analysis::{
     cancel_local_scan, get_local_beatmap_background, get_local_beatmap_detail,
-    get_local_beatmap_path, get_local_skin_asset, get_local_skin_detail, get_local_skin_preview,
-    get_local_sources, get_local_summary, query_local_beatmap_sets, query_local_beatmaps,
-    query_local_skins, replace_local_skin_asset, reset_local_source, scan_local_source,
-    set_local_source,
+    get_local_beatmap_path, get_local_index_status, get_local_skin_asset, get_local_skin_detail,
+    get_local_skin_preview, get_local_sources, get_local_summary, query_local_beatmap_sets,
+    query_local_beatmaps, query_local_skins, replace_local_skin_asset, reset_local_source,
+    scan_local_source, set_local_source,
 };
 use netease_music::open_netease_music_search;
 use obs::{
@@ -89,6 +89,8 @@ pub fn run() {
             let app_data_dir = app.path().app_data_dir()?;
             app.manage(AppState::new(&app_data_dir)?);
             let state = app.state::<AppState>();
+            let local_analysis = state.local_analysis.clone();
+            tauri::async_runtime::spawn_blocking(move || local_analysis.load_cached_indexes());
             start_game_monitor(
                 state.local_analysis.clone(),
                 state.game_monitor.clone(),
@@ -189,6 +191,7 @@ pub fn run() {
             update_settings,
             export_replay_video,
             get_local_sources,
+            get_local_index_status,
             set_local_source,
             reset_local_source,
             get_local_summary,

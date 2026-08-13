@@ -7,6 +7,7 @@ import type {
 } from "../../shared/types/osu";
 
 export const localSourcesKey = ["local-sources"] as const;
+export const localIndexStatusKey = ["local-index-status"] as const;
 export const localSummaryKey = (client: OsuClient) =>
   ["local-summary", client] as const;
 export const localBeatmapsKey = (query: BeatmapQuery) =>
@@ -21,6 +22,15 @@ export function useLocalSources() {
     queryKey: localSourcesKey,
     queryFn: desktopApi.getLocalSources,
     staleTime: 30_000,
+    retry: false,
+  });
+}
+
+export function useLocalIndexStatus() {
+  return useQuery({
+    queryKey: localIndexStatusKey,
+    queryFn: desktopApi.getLocalIndexStatus,
+    refetchInterval: (query) => query.state.data?.phase === "loading" ? 250 : false,
     retry: false,
   });
 }

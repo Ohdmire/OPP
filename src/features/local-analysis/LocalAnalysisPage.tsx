@@ -34,6 +34,7 @@ import {
   localSourcesKey,
   localSummaryKey,
   useLocalSources,
+  useLocalIndexStatus,
   useLocalSummary,
 } from "./api";
 import { BeatmapSetPanel } from "./BeatmapSetPanel";
@@ -266,6 +267,7 @@ function LocalAnalysisClientPage({ section }: { section: LocalSection }) {
   const { client, ruleset } = useMode();
   const queryClient = useQueryClient();
   const sourcesQuery = useLocalSources();
+  const indexStatusQuery = useLocalIndexStatus();
   const summaryQuery = useLocalSummary(client);
   const source = sourcesQuery.data?.find((item) => item.client === client);
   const summary = summaryQuery.data;
@@ -273,6 +275,13 @@ function LocalAnalysisClientPage({ section }: { section: LocalSection }) {
   const [progress, setProgress] = useState<LocalScanProgress | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [selectedBeatmap, setSelectedBeatmap] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (indexStatusQuery.data?.phase === "ready") {
+      void queryClient.invalidateQueries({ queryKey: localSummaryKey(client) });
+      void queryClient.invalidateQueries({ queryKey: localSourcesKey });
+    }
+  }, [client, indexStatusQuery.data?.phase, queryClient]);
 
   useEffect(() => {
     let unlisten: () => void = () => undefined;
@@ -365,6 +374,16 @@ function LocalAnalysisClientPage({ section }: { section: LocalSection }) {
         eyebrow="Local library"
         title={section === "maps" ? "本地谱面" : "本地皮肤"}
       />
+
+      {indexStatusQuery.data?.phase === "loading" ? (
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-cyan-300/10 bg-cyan-300/[0.05] px-4 py-3 text-sm text-cyan-100">
+          <RefreshCw className="size-4 animate-spin" />正在后台加载本地索引，窗口可继续使用…
+        </div>
+      ) : indexStatusQuery.data?.phase === "error" ? (
+        <div className="mb-4 rounded-xl border border-amber-300/10 bg-amber-300/[0.05] px-4 py-3 text-sm text-amber-100">
+          本地索引加载失败：{indexStatusQuery.data.error ?? "未知错误"}。可重新扫描以重建索引。
+        </div>
+      ) : null}
 
       {sourcesQuery.error ? (
         <ErrorPanel error={sourcesQuery.error} onRetry={() => sourcesQuery.refetch()} />

@@ -284,7 +284,7 @@ fn prepare_audio(source: &Path, destination: &Path, request: &TrainerRequest) ->
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn generate_trainer_beatmap(
     request: TrainerRequest,
     state: tauri::State<'_, AppState>,

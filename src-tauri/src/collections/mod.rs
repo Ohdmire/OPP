@@ -1,7 +1,7 @@
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     fs,
-    io::{Cursor, Read, Write},
+    io::{BufReader, Read, Write},
     path::{Path, PathBuf},
     sync::{Mutex, atomic::Ordering},
     time::Duration,
@@ -29,6 +29,14 @@ use crate::{
 const SHARE_PREFIX: &str = "OPPC2";
 const LEGACY_SHARE_PREFIX: &str = "OPPC1";
 const MAX_SHARE_BYTES: usize = 8 * 1024 * 1024;
+const MAX_PRESENCE_CACHE_ENTRIES: usize = 50_000;
+const MAX_PRESENCE_CACHE_BYTES: usize = 16 * 1024 * 1024;
+const MAX_INSTALL_ARCHIVES: usize = 500;
+const MAX_ARCHIVE_COMPRESSED_BYTES: u64 = 512 * 1024 * 1024;
+const MAX_ARCHIVE_FILES: usize = 10_000;
+const MAX_OSU_FILE_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_COMPRESSION_RATIO: u64 = 200;
+const MAX_INSTALL_EXPANDED_BYTES: u64 = 1024 * 1024 * 1024;
 
 fn ensure_collection_task_active(state: &AppState) -> CommandResult<()> {
     if state.collection_task_cancel.load(Ordering::Relaxed) {
@@ -216,6 +224,10 @@ struct DownloadedBeatmap {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct CollectionFile {
     #[serde(default)]
+    sharded: bool,
+    #[serde(default)]
+    folder_order: Vec<String>,
+    #[serde(default)]
     folders: Vec<CollectionFolder>,
     #[serde(default)]
     stable_fingerprint: Option<String>,
@@ -233,6 +245,19 @@ struct LocalPresenceCacheEntry {
     scan_at: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct CollectionCacheFile {
+    #[serde(default)]
+    local_presence_cache: HashMap<String, LocalPresenceCacheEntry>,
+}
+
+#[derive(Default)]
+struct CollectionPersistedBytes {
+    collections: Vec<u8>,
+    cache: Vec<u8>,
+    folders: HashMap<String, Vec<u8>>,
+}
+
 fn cached_local_presence(
     cache: &HashMap<String, LocalPresenceCacheEntry>,
     checksum: &str,
@@ -246,20 +271,65 @@ fn cached_local_presence(
 
 pub struct CollectionService {
     path: PathBuf,
+    cache_path: PathBuf,
+    folders_path: PathBuf,
     value: Mutex<CollectionFile>,
+    persist: Mutex<CollectionPersistedBytes>,
 }
 
 impl CollectionService {
     pub fn new(app_data_dir: &Path) -> CommandResult<Self> {
         fs::create_dir_all(app_data_dir)?;
         let path = app_data_dir.join("collections.json");
-        let value = fs::read(&path)
+        let collection_bytes = fs::read(&path).unwrap_or_default();
+        let mut value: CollectionFile = serde_json::from_slice(&collection_bytes)
             .ok()
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
             .unwrap_or_default();
+        let cache_path = app_data_dir.join("collections-cache.json");
+        let cache_bytes = fs::read(&cache_path).unwrap_or_default();
+        if let Ok(cache) = serde_json::from_slice::<CollectionCacheFile>(&cache_bytes) {
+            value.local_presence_cache = cache.local_presence_cache;
+        }
+        let folders_path = app_data_dir.join("collections-data");
+        fs::create_dir_all(&folders_path)?;
+        let mut persisted_folders = HashMap::new();
+        let mut sharded_folders = HashMap::new();
+        for entry in fs::read_dir(&folders_path)?.filter_map(Result::ok) {
+            let path = entry.path();
+            if !path.is_file() || path.extension().and_then(|value| value.to_str()) != Some("json")
+            {
+                continue;
+            }
+            let Ok(bytes) = fs::read(&path) else {
+                continue;
+            };
+            let Ok(folder) = serde_json::from_slice::<CollectionFolder>(&bytes) else {
+                continue;
+            };
+            persisted_folders.insert(folder.id.clone(), bytes);
+            sharded_folders.insert(folder.id.clone(), folder);
+        }
+        if value.sharded {
+            value.folders = value
+                .folder_order
+                .iter()
+                .filter_map(|id| sharded_folders.remove(id))
+                .collect();
+            let mut remaining = sharded_folders.into_values().collect::<Vec<_>>();
+            remaining.sort_by(|left, right| left.id.cmp(&right.id));
+            value.folders.extend(remaining);
+        }
+        prune_presence_cache(&mut value.local_presence_cache);
         Ok(Self {
             path,
+            cache_path,
+            folders_path,
             value: Mutex::new(value),
+            persist: Mutex::new(CollectionPersistedBytes {
+                collections: collection_bytes,
+                cache: cache_bytes,
+                folders: persisted_folders,
+            }),
         })
     }
 
@@ -267,14 +337,72 @@ impl CollectionService {
         &self,
         action: impl FnOnce(&mut CollectionFile) -> CommandResult<R>,
     ) -> CommandResult<R> {
-        let mut file = self
-            .value
+        let mut persisted = self
+            .persist
             .lock()
-            .map_err(|_| CommandError::new("COLLECTION_STATE_ERROR", "收藏夹状态不可用"))?;
-        let result = action(&mut file)?;
-        let temporary = self.path.with_extension("json.tmp");
-        fs::write(&temporary, serde_json::to_vec_pretty(&*file)?)?;
-        atomic_replace(&temporary, &self.path)?;
+            .map_err(|_| CommandError::new("COLLECTION_STATE_ERROR", "收藏夹持久化状态不可用"))?;
+        let (result, file) = {
+            let mut file = self
+                .value
+                .lock()
+                .map_err(|_| CommandError::new("COLLECTION_STATE_ERROR", "收藏夹状态不可用"))?;
+            let result = action(&mut file)?;
+            prune_presence_cache(&mut file.local_presence_cache);
+            (result, file.clone())
+        };
+        let cache = CollectionCacheFile {
+            local_presence_cache: file.local_presence_cache.clone(),
+        };
+        let folders = file.folders.clone();
+        let mut durable = file;
+        durable.sharded = true;
+        durable.folder_order = folders.iter().map(|folder| folder.id.clone()).collect();
+        durable.folders.clear();
+        durable.local_presence_cache.clear();
+        let collection_bytes = serde_json::to_vec_pretty(&durable)?;
+        let cache_bytes = serde_json::to_vec(&cache)?;
+        if persisted.cache != cache_bytes {
+            let temporary = self.cache_path.with_extension("json.tmp");
+            fs::write(&temporary, &cache_bytes)?;
+            atomic_replace(&temporary, &self.cache_path)?;
+            persisted.cache = cache_bytes;
+        }
+        let mut current_folder_ids = HashSet::new();
+        for folder in folders {
+            current_folder_ids.insert(folder.id.clone());
+            let bytes = serde_json::to_vec(&folder)?;
+            if persisted.folders.get(&folder.id) == Some(&bytes) {
+                continue;
+            }
+            let target = self
+                .folders_path
+                .join(format!("{}.json", folder_storage_key(&folder.id)));
+            let temporary = target.with_extension("json.tmp");
+            fs::write(&temporary, &bytes)?;
+            atomic_replace(&temporary, &target)?;
+            persisted.folders.insert(folder.id, bytes);
+        }
+        let removed = persisted
+            .folders
+            .keys()
+            .filter(|id| !current_folder_ids.contains(*id))
+            .cloned()
+            .collect::<Vec<_>>();
+        for id in removed {
+            let target = self
+                .folders_path
+                .join(format!("{}.json", folder_storage_key(&id)));
+            if target.exists() {
+                fs::remove_file(target)?;
+            }
+            persisted.folders.remove(&id);
+        }
+        if persisted.collections != collection_bytes {
+            let temporary = self.path.with_extension("json.tmp");
+            fs::write(&temporary, &collection_bytes)?;
+            atomic_replace(&temporary, &self.path)?;
+            persisted.collections = collection_bytes;
+        }
         Ok(result)
     }
 
@@ -364,6 +492,31 @@ impl CollectionService {
             touch(folder);
             Ok(())
         })
+    }
+}
+
+fn folder_storage_key(id: &str) -> String {
+    format!("{:x}", Sha256::digest(id.as_bytes()))
+}
+
+fn prune_presence_cache(cache: &mut HashMap<String, LocalPresenceCacheEntry>) {
+    let mut entries = cache
+        .iter()
+        .map(|(key, value)| {
+            let bytes = serde_json::to_vec(&(key, value)).map_or(0, |bytes| bytes.len());
+            (key.clone(), bytes)
+        })
+        .collect::<Vec<_>>();
+    entries.sort_by(|left, right| left.0.cmp(&right.0));
+    let mut total_bytes = entries.iter().map(|(_, bytes)| *bytes).sum::<usize>();
+    let mut total_entries = entries.len();
+    for (key, bytes) in entries {
+        if total_entries <= MAX_PRESENCE_CACHE_ENTRIES && total_bytes <= MAX_PRESENCE_CACHE_BYTES {
+            break;
+        }
+        cache.remove(&key);
+        total_entries = total_entries.saturating_sub(1);
+        total_bytes = total_bytes.saturating_sub(bytes);
     }
 }
 
@@ -649,12 +802,12 @@ fn source_statuses(state: &AppState) -> Vec<CollectionSourceStatus> {
         .collect()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn list_collections(state: State<'_, AppState>) -> CommandResult<CollectionSnapshot> {
     state.collections.snapshot(source_statuses(&state))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_collection_sync_status(
     state: State<'_, AppState>,
 ) -> CommandResult<CollectionSyncStatus> {
@@ -875,7 +1028,7 @@ pub async fn refresh_collections(
     state.collections.snapshot(source_statuses(&state))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn create_collection(
     name: String,
     creator: String,
@@ -883,7 +1036,7 @@ pub fn create_collection(
 ) -> CommandResult<CollectionFolder> {
     state.collections.create(&name, &creator)
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn rename_collection(
     folder_id: String,
     name: String,
@@ -891,11 +1044,11 @@ pub fn rename_collection(
 ) -> CommandResult<()> {
     state.collections.rename(&folder_id, &name)
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn delete_collection(folder_id: String, state: State<'_, AppState>) -> CommandResult<()> {
     state.collections.delete(&folder_id)
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn add_collection_entries(
     folder_id: String,
     mut candidates: Vec<CollectionCandidate>,
@@ -915,7 +1068,7 @@ pub fn add_collection_entries(
     }
     state.collections.add_entries(&folder_id, candidates)
 }
-#[tauri::command]
+#[tauri::command(async)]
 pub fn remove_collection_entry(
     folder_id: String,
     entry_id: String,
@@ -924,7 +1077,7 @@ pub fn remove_collection_entry(
     state.collections.remove_entry(&folder_id, &entry_id)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn write_stable_collections(
     state: State<'_, AppState>,
 ) -> CommandResult<CollectionWriteResult> {
@@ -1208,22 +1361,34 @@ fn decode_share(code: &str) -> CommandResult<SharePayload> {
 }
 
 fn preview_payload(payload: SharePayload, state: &AppState) -> CollectionSharePreview {
+    let checksums = payload
+        .entries
+        .iter()
+        .filter_map(|entry| {
+            entry
+                .checksum
+                .as_ref()
+                .map(|value| value.to_ascii_lowercase())
+        })
+        .collect::<BTreeSet<_>>();
+    let resolved = [LocalClient::Stable, LocalClient::Lazer]
+        .into_iter()
+        .filter_map(|client| {
+            state
+                .local_analysis
+                .find_beatmaps_by_md5(client, &checksums)
+                .ok()
+        })
+        .flat_map(|found| found.into_keys())
+        .collect::<HashSet<_>>();
     let entries = payload
         .entries
         .into_iter()
         .map(|mut entry| {
-            entry.resolved = entry.checksum.as_deref().is_some_and(|checksum| {
-                [LocalClient::Stable, LocalClient::Lazer]
-                    .into_iter()
-                    .any(|client| {
-                        state
-                            .local_analysis
-                            .find_beatmap_by_md5(client, checksum)
-                            .ok()
-                            .flatten()
-                            .is_some()
-                    })
-            });
+            entry.resolved = entry
+                .checksum
+                .as_deref()
+                .is_some_and(|checksum| resolved.contains(&checksum.to_ascii_lowercase()));
             entry
         })
         .collect::<Vec<_>>();
@@ -1247,7 +1412,7 @@ fn preview_payload(payload: SharePayload, state: &AppState) -> CollectionSharePr
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn export_collection_share(
     folder_id: String,
     creator: String,
@@ -1277,7 +1442,7 @@ pub fn export_collection_share(
     })
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn preview_collection_share(
     code: String,
     state: State<'_, AppState>,
@@ -1285,7 +1450,7 @@ pub fn preview_collection_share(
     Ok(preview_payload(decode_share(&code)?, &state))
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn import_collection_share(
     code: String,
     state: State<'_, AppState>,
@@ -1664,7 +1829,7 @@ fn parse_downloaded_beatmap(bytes: &[u8]) -> Option<(i32, DownloadedBeatmap)> {
 /// Reads downloaded archives and hydrates compact share-code entries with the
 /// exact MD5 required by collection.db. The archives are intentionally opened
 /// by osu! only after collection.db has been written.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn install_collection_downloads(
     folder_ids: Vec<String>,
     archive_paths: Vec<String>,
@@ -1693,6 +1858,13 @@ pub fn install_collection_downloads(
     let mut installed_sets = 0usize;
     let mut downloaded = HashMap::<i32, DownloadedBeatmap>::new();
     let archive_total = archive_paths.len();
+    if archive_total > MAX_INSTALL_ARCHIVES {
+        return Err(CommandError::new(
+            "COLLECTION_ARCHIVE_LIMIT",
+            "单次最多处理 500 个曲包",
+        ));
+    }
+    let mut task_expanded_size = 0u64;
     emit_collection_progress(
         &app,
         "installing",
@@ -1711,34 +1883,64 @@ pub fn install_collection_downloads(
         {
             continue;
         }
-        let bytes = fs::read(&archive_path)?;
-        let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
+        let compressed_size = fs::metadata(&archive_path)?.len();
+        if compressed_size > MAX_ARCHIVE_COMPRESSED_BYTES {
+            return Err(CommandError::new(
+                "COLLECTION_ARCHIVE_TOO_LARGE",
+                "单个曲包压缩体积不得超过 512 MB",
+            ));
+        }
+        let archive_file = fs::File::open(&archive_path)?;
+        let mut archive = zip::ZipArchive::new(BufReader::new(archive_file))
             .map_err(|error| CommandError::new("INVALID_ARCHIVE", error.to_string()))?;
-        if archive.len() > 10_000 {
+        if archive.len() > MAX_ARCHIVE_FILES {
             return Err(CommandError::new(
                 "INVALID_ARCHIVE",
                 "曲包内文件数量超出限制",
             ));
         }
         let mut archive_maps = Vec::<(i32, DownloadedBeatmap)>::new();
-        let mut expanded_size = 0u64;
         for index in 0..archive.len() {
             ensure_collection_task_active(&state)?;
             let mut file = archive
                 .by_index(index)
                 .map_err(|error| CommandError::new("INVALID_ARCHIVE", error.to_string()))?;
-            expanded_size = expanded_size.saturating_add(file.size());
-            if expanded_size > 4 * 1024 * 1024 * 1024 {
+            task_expanded_size = task_expanded_size.saturating_add(file.size());
+            if task_expanded_size > MAX_INSTALL_EXPANDED_BYTES {
                 return Err(CommandError::new(
                     "INVALID_ARCHIVE",
-                    "曲包解压后体积超出限制",
+                    "本次任务的累计展开体积超过 1 GB",
+                ));
+            }
+            let compressed = file.compressed_size();
+            if file.size() > 0
+                && (compressed == 0
+                    || file.size() > compressed.saturating_mul(MAX_COMPRESSION_RATIO))
+            {
+                return Err(CommandError::new(
+                    "INVALID_ARCHIVE",
+                    "曲包包含压缩比异常的文件",
                 ));
             }
             if !file.name().to_ascii_lowercase().ends_with(".osu") {
                 continue;
             }
-            let mut map_bytes = Vec::new();
-            file.read_to_end(&mut map_bytes)?;
+            if file.size() > MAX_OSU_FILE_BYTES {
+                return Err(CommandError::new(
+                    "INVALID_ARCHIVE",
+                    "单个 .osu 文件不得超过 16 MB",
+                ));
+            }
+            let mut map_bytes = Vec::with_capacity(file.size() as usize);
+            (&mut file)
+                .take(MAX_OSU_FILE_BYTES + 1)
+                .read_to_end(&mut map_bytes)?;
+            if map_bytes.len() as u64 > MAX_OSU_FILE_BYTES {
+                return Err(CommandError::new(
+                    "INVALID_ARCHIVE",
+                    "单个 .osu 文件不得超过 16 MB",
+                ));
+            }
             if let Some(map) = parse_downloaded_beatmap(&map_bytes) {
                 archive_maps.push(map);
             }
@@ -1998,5 +2200,28 @@ BeatmapSetID:123
             cached_local_presence(&cache, "abc", &Some("scan-2".into())),
             None
         );
+    }
+
+    #[test]
+    fn collections_are_migrated_to_atomic_folder_shards() {
+        let directory = tempfile::tempdir().expect("app data");
+        let service = CollectionService::new(directory.path()).expect("service");
+        let folder = service
+            .create("Large library", "tester")
+            .expect("create folder");
+        let second = service.create("Second", "tester").expect("second folder");
+        let metadata =
+            fs::read_to_string(directory.path().join("collections.json")).expect("metadata");
+        assert!(!metadata.contains("Large library"));
+        assert_eq!(
+            fs::read_dir(directory.path().join("collections-data"))
+                .expect("shards")
+                .count(),
+            2
+        );
+
+        let reloaded = CollectionService::new(directory.path()).expect("reload");
+        let snapshot = reloaded.snapshot(Vec::new()).expect("snapshot");
+        assert_eq!(snapshot.folders, vec![folder, second]);
     }
 }

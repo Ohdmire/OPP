@@ -331,7 +331,7 @@ pub struct Page<T> {
     pub limit: usize,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum SortDirection {
     #[default]
@@ -339,7 +339,7 @@ pub enum SortDirection {
     Desc,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum BeatmapSort {
     #[default]
@@ -351,6 +351,19 @@ pub enum BeatmapSort {
     Length,
     ObjectCount,
     ModifiedAt,
+}
+
+impl BeatmapSort {
+    pub const ALL: [Self; 8] = [
+        Self::Title,
+        Self::Artist,
+        Self::Creator,
+        Self::Stars,
+        Self::Bpm,
+        Self::Length,
+        Self::ObjectCount,
+        Self::ModifiedAt,
+    ];
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -410,7 +423,7 @@ impl Default for BeatmapQuery {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum SkinSort {
     #[default]
@@ -418,6 +431,10 @@ pub enum SkinSort {
     Author,
     Size,
     ModifiedAt,
+}
+
+impl SkinSort {
+    pub const ALL: [Self; 4] = [Self::Name, Self::Author, Self::Size, Self::ModifiedAt];
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -452,4 +469,18 @@ pub struct LocalScanProgress {
     pub processed: usize,
     pub total: usize,
     pub percent: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LocalIndexLoadPhase {
+    Loading,
+    Ready,
+    Error,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LocalIndexLoadStatus {
+    pub phase: LocalIndexLoadPhase,
+    pub error: Option<String>,
 }

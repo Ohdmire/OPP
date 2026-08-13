@@ -10,7 +10,8 @@ const MAX_GAMMA: f64 = 2.5;
 ///
 /// `SetDeviceGammaRamp` owns the display state; the setting is not persisted by OPP and may be
 /// reset when the graphics driver is restarted or the user signs out.
-#[tauri::command]
+// Some display drivers take hundreds of milliseconds to apply a ramp.
+#[tauri::command(async)]
 pub fn set_display_gamma(gamma: f64) -> CommandResult<()> {
     if !gamma.is_finite() || !(MIN_GAMMA..=MAX_GAMMA).contains(&gamma) {
         return Err(CommandError::new(

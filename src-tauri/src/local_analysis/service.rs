@@ -29,9 +29,10 @@ use crate::models::Ruleset;
 use super::{
     models::{
         BeatmapQuery, Completeness, LocalBeatmapDetail, LocalBeatmapSetSummary,
-        LocalBeatmapSummary, LocalClient, LocalLibrarySummary, LocalScanProgress,
-        LocalSkinAssetPayload, LocalSkinAssetSummary, LocalSkinDetail, LocalSkinPreview,
-        LocalSkinSummary, LocalSourceStatus, Page, ScanDiagnostic, SkinAssetKind, SkinQuery,
+        LocalBeatmapSummary, LocalClient, LocalIndexLoadPhase, LocalIndexLoadStatus,
+        LocalLibrarySummary, LocalScanProgress, LocalSkinAssetPayload, LocalSkinAssetSummary,
+        LocalSkinDetail, LocalSkinPreview, LocalSkinSummary, LocalSourceStatus, Page,
+        ScanDiagnostic, SkinAssetKind, SkinQuery,
     },
     parser::{
         DIFFICULTY_ALGORITHM, calculate_strains, calculation_version, looks_like_beatmap,
@@ -45,10 +46,11 @@ use service_data::{
     SkinAssetLocation, directory_stamp, load_index, modified_iso, persist_index, stamp,
 };
 use service_query::{
-    apply_direction, audio_mime, beatmap_matches, compare_beatmap_sets, compare_beatmaps,
-    compare_skins, enumerate_skin_assets, find_skin_entry, option_f64_order, page, skin_root,
-    text_order,
+    apply_direction, audio_mime, beatmap_matches, compare_beatmap_sets, enumerate_skin_assets,
+    find_skin_entry, insert_bounded, option_f64_order, skin_root, text_order,
 };
+#[cfg(test)]
+use service_query::{compare_beatmaps, page};
 
 #[derive(Debug)]
 /// 文件发现阶段的中间结果：候选文件、源文件统计与可展示的诊断信息。
@@ -113,6 +115,7 @@ pub struct LocalAnalysisService {
     scans: Mutex<BTreeMap<LocalClient, Arc<AtomicBool>>>,
     pool: rayon::ThreadPool,
     thumbnail_cache_limit_bytes: AtomicUsize,
+    load_status: RwLock<LocalIndexLoadStatus>,
 }
 
 impl LocalAnalysisService {
@@ -131,22 +134,58 @@ impl LocalAnalysisService {
                     format!("无法初始化本地分析线程池：{error}"),
                 )
             })?;
-        let mut indexes = BTreeMap::new();
-        for client in [LocalClient::Stable, LocalClient::Lazer] {
-            if let Some(index) = load_index(&cache_dir, client) {
-                indexes.insert(client, Arc::new(index));
-            }
-        }
-
         Ok(Self {
             cache_dir,
             sources,
-            indexes: RwLock::new(indexes),
+            indexes: RwLock::new(BTreeMap::new()),
             skin_assets: RwLock::new(BTreeMap::new()),
             scans: Mutex::new(BTreeMap::new()),
             pool,
             thumbnail_cache_limit_bytes: AtomicUsize::new(512 * 1024 * 1024),
+            load_status: RwLock::new(LocalIndexLoadStatus {
+                phase: LocalIndexLoadPhase::Loading,
+                error: None,
+            }),
         })
+    }
+
+    pub fn load_cached_indexes(&self) {
+        let result = (|| -> CommandResult<()> {
+            let mut loaded = BTreeMap::new();
+            for client in [LocalClient::Stable, LocalClient::Lazer] {
+                if let Some(index) = load_index(&self.cache_dir, client) {
+                    loaded.insert(client, Arc::new(index));
+                }
+            }
+            let mut indexes = self
+                .indexes
+                .write()
+                .map_err(|_| CommandError::new("LOCAL_INDEX_STATE_ERROR", "本地索引状态已损坏"))?;
+            for (client, index) in loaded {
+                indexes.entry(client).or_insert(index);
+            }
+            self.trim_thumbnail_cache()?;
+            Ok(())
+        })();
+        if let Ok(mut status) = self.load_status.write() {
+            *status = match result {
+                Ok(()) => LocalIndexLoadStatus {
+                    phase: LocalIndexLoadPhase::Ready,
+                    error: None,
+                },
+                Err(error) => LocalIndexLoadStatus {
+                    phase: LocalIndexLoadPhase::Error,
+                    error: Some(error.message),
+                },
+            };
+        }
+    }
+
+    pub fn index_load_status(&self) -> CommandResult<LocalIndexLoadStatus> {
+        self.load_status
+            .read()
+            .map(|status| status.clone())
+            .map_err(|_| CommandError::new("LOCAL_INDEX_STATE_ERROR", "本地索引状态已损坏"))
     }
 
     pub fn set_thumbnail_cache_limit_mb(&self, limit_mb: u32) -> CommandResult<()> {
@@ -370,14 +409,19 @@ impl LocalAnalysisService {
             discovery.source_bytes,
             diagnostics.len(),
         );
-        let index = LocalIndex {
+        let mut index = LocalIndex {
             schema: INDEX_SCHEMA,
             difficulty_algorithm: DIFFICULTY_ALGORITHM.to_string(),
             source_root,
             summary: summary.clone(),
             diagnostics,
             entries,
+            beatmap_md5_lookup: BTreeMap::new(),
+            beatmap_sets: BTreeMap::new(),
+            beatmap_orders: BTreeMap::new(),
+            skin_orders: BTreeMap::new(),
         };
+        index.rebuild_runtime_indexes();
         check_cancelled(cancel)?;
         reporter.emit("finalizing", total, total, 99.0, true);
         persist_index(&self.cache_dir, client, &index)?;
@@ -392,21 +436,39 @@ impl LocalAnalysisService {
     pub fn query_beatmaps(&self, query: BeatmapQuery) -> CommandResult<Page<LocalBeatmapSummary>> {
         let index = self.require_current_index(query.client)?;
         let search = query.search.trim().to_lowercase();
-        let mut items = index
-            .entries
-            .iter()
-            .filter_map(|entry| match &entry.data {
-                IndexedData::Beatmap { summary, detail } => {
-                    beatmap_matches(summary, detail, &query, &search).then(|| summary.clone())
+        let limit = query.limit.clamp(1, service_query::MAX_QUERY_LIMIT);
+        let ordered = index
+            .beatmap_orders
+            .get(&query.sort)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        let positions: Box<dyn Iterator<Item = &usize>> = match query.direction {
+            super::models::SortDirection::Asc => Box::new(ordered.iter()),
+            super::models::SortDirection::Desc => Box::new(ordered.iter().rev()),
+        };
+        let mut total = 0usize;
+        let mut items = Vec::with_capacity(limit);
+        for position in positions {
+            let Some(IndexedEntry {
+                data: IndexedData::Beatmap { summary, detail },
+                ..
+            }) = index.entries.get(*position)
+            else {
+                continue;
+            };
+            if beatmap_matches(summary, detail, &query, &search) {
+                if total >= query.offset && items.len() < limit {
+                    items.push(summary.clone());
                 }
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        items.sort_by(|left, right| {
-            let ordering = compare_beatmaps(left, right, query.sort);
-            apply_direction(ordering, query.direction)
-        });
-        Ok(page(items, query.offset, query.limit))
+                total += 1;
+            }
+        }
+        Ok(Page {
+            items,
+            total,
+            offset: query.offset,
+            limit,
+        })
     }
 
     pub fn query_beatmap_sets(
@@ -415,23 +477,26 @@ impl LocalAnalysisService {
     ) -> CommandResult<Page<LocalBeatmapSetSummary>> {
         let index = self.require_current_index(query.client)?;
         let search = query.search.trim().to_lowercase();
-        let mut grouped =
-            BTreeMap::<String, Vec<(&LocalBeatmapSummary, &LocalBeatmapDetail)>>::new();
-        for entry in &index.entries {
-            let IndexedData::Beatmap { summary, detail } = &entry.data else {
-                continue;
-            };
-            if beatmap_matches(summary, detail, &query, &search) {
-                grouped
-                    .entry(summary.set_key.clone())
-                    .or_default()
-                    .push((summary, detail));
-            }
-        }
-
-        let mut sets = grouped
-            .into_iter()
-            .filter_map(|(set_key, mut maps)| {
+        let limit = query.limit.clamp(1, service_query::MAX_QUERY_LIMIT);
+        let capacity = query
+            .offset
+            .saturating_add(limit)
+            .min(index.beatmap_sets.len());
+        let mut sets = Vec::with_capacity(capacity);
+        let mut total = 0usize;
+        for (set_key, positions) in &index.beatmap_sets {
+            let mut maps = positions
+                .iter()
+                .filter_map(|position| match &index.entries.get(*position)?.data {
+                    IndexedData::Beatmap { summary, detail }
+                        if beatmap_matches(summary, detail, &query, &search) =>
+                    {
+                        Some((summary, detail.as_ref()))
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            let Some(set) = (|| {
                 maps.sort_by(|(left, _), (right, _)| {
                     option_f64_order(left.stars, right.stars)
                         .then_with(|| text_order(&left.difficulty_name, &right.difficulty_name))
@@ -477,7 +542,7 @@ impl LocalAnalysisService {
                     })
                     .flatten();
                 Some(LocalBeatmapSetSummary {
-                    set_key,
+                    set_key: set_key.clone(),
                     completeness: match query.client {
                         LocalClient::Stable => Completeness::Complete,
                         LocalClient::Lazer => Completeness::Partial,
@@ -501,15 +566,24 @@ impl LocalAnalysisService {
                         .map(|(summary, _)| summary.clone())
                         .collect(),
                 })
-            })
-            .collect::<Vec<_>>();
-        sets.sort_by(|left, right| {
-            apply_direction(
-                compare_beatmap_sets(left, right, query.sort),
-                query.direction,
-            )
-        });
-        Ok(page(sets, query.offset, query.limit))
+            })() else {
+                continue;
+            };
+            total += 1;
+            insert_bounded(&mut sets, set, capacity, |left, right| {
+                apply_direction(
+                    compare_beatmap_sets(left, right, query.sort),
+                    query.direction,
+                )
+            });
+        }
+        let items = sets.into_iter().skip(query.offset).take(limit).collect();
+        Ok(Page {
+            items,
+            total,
+            offset: query.offset,
+            limit,
+        })
     }
 
     pub fn beatmap_detail(
@@ -591,20 +665,14 @@ impl LocalAnalysisService {
     ) -> CommandResult<Option<LocalBeatmapSummary>> {
         let index = self.require_current_index(client)?;
         let target = beatmap_md5.trim().to_ascii_lowercase();
-        for entry in &index.entries {
-            let IndexedData::Beatmap { summary, detail: _ } = &entry.data else {
-                continue;
-            };
-            let Ok(bytes) = fs::read(&entry.physical_path) else {
-                continue;
-            };
-            let mut digest = Md5::new();
-            digest.update(bytes);
-            if format!("{:x}", digest.finalize()) == target {
-                return Ok(Some(summary.clone()));
-            }
-        }
-        Ok(None)
+        Ok(index
+            .beatmap_md5_lookup
+            .get(&target)
+            .and_then(|position| index.entries.get(*position))
+            .and_then(|entry| match &entry.data {
+                IndexedData::Beatmap { summary, .. } => Some(summary.clone()),
+                _ => None,
+            }))
     }
 
     /// Resolves a collection of stable MD5 hashes in one pass over the local
@@ -619,22 +687,17 @@ impl LocalAnalysisService {
             return Ok(BTreeMap::new());
         }
         let index = self.require_current_index(client)?;
-        let found = self.pool.install(|| {
-            index
-                .entries
-                .par_iter()
-                .filter_map(|entry| {
-                    let IndexedData::Beatmap { summary, .. } = &entry.data else {
-                        return None;
-                    };
-                    let bytes = fs::read(&entry.physical_path).ok()?;
-                    let checksum = format!("{:x}", Md5::digest(bytes));
-                    checksums
-                        .contains(&checksum)
-                        .then(|| (checksum, summary.clone()))
-                })
-                .collect::<BTreeMap<_, _>>()
-        });
+        let found = checksums
+            .iter()
+            .filter_map(|checksum| {
+                let position = index.beatmap_md5_lookup.get(checksum)?;
+                let entry = index.entries.get(*position)?;
+                let IndexedData::Beatmap { summary, .. } = &entry.data else {
+                    return None;
+                };
+                Some((checksum.clone(), summary.clone()))
+            })
+            .collect::<BTreeMap<_, _>>();
         Ok(found)
     }
 
@@ -739,25 +802,44 @@ impl LocalAnalysisService {
     pub fn query_skins(&self, query: SkinQuery) -> CommandResult<Page<LocalSkinSummary>> {
         let index = self.require_current_index(query.client)?;
         let search = query.search.trim().to_lowercase();
-        let mut items = index
-            .entries
-            .iter()
-            .filter_map(|entry| match &entry.data {
-                IndexedData::Skin { detail } => Some(detail.summary.clone()),
-                _ => None,
-            })
-            .filter(|item| {
-                search.is_empty()
-                    || [&item.name, &item.author, &item.version]
-                        .iter()
-                        .any(|value| value.to_lowercase().contains(&search))
-            })
-            .collect::<Vec<_>>();
-        items.sort_by(|left, right| {
-            let ordering = compare_skins(left, right, query.sort);
-            apply_direction(ordering, query.direction)
-        });
-        Ok(page(items, query.offset, query.limit))
+        let limit = query.limit.clamp(1, service_query::MAX_QUERY_LIMIT);
+        let ordered = index
+            .skin_orders
+            .get(&query.sort)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        let positions: Box<dyn Iterator<Item = &usize>> = match query.direction {
+            super::models::SortDirection::Asc => Box::new(ordered.iter()),
+            super::models::SortDirection::Desc => Box::new(ordered.iter().rev()),
+        };
+        let mut total = 0usize;
+        let mut items = Vec::with_capacity(limit);
+        for position in positions {
+            let Some(IndexedEntry {
+                data: IndexedData::Skin { detail },
+                ..
+            }) = index.entries.get(*position)
+            else {
+                continue;
+            };
+            let item = &detail.summary;
+            if search.is_empty()
+                || [&item.name, &item.author, &item.version]
+                    .iter()
+                    .any(|value| value.to_lowercase().contains(&search))
+            {
+                if total >= query.offset && items.len() < limit {
+                    items.push(item.clone());
+                }
+                total += 1;
+            }
+        }
+        Ok(Page {
+            items,
+            total,
+            offset: query.offset,
+            limit,
+        })
     }
 
     pub fn skin_detail(
@@ -1435,11 +1517,16 @@ fn process_candidate(client: LocalClient, candidate: &Candidate) -> IndexedEntry
         IndexedData::Ignored => candidate.known_hash.clone(),
     };
 
+    let beatmap_md5 = matches!(data, IndexedData::Beatmap { .. })
+        .then(|| fs::read(&candidate.physical_path).ok())
+        .flatten()
+        .map(|bytes| format!("{:x}", Md5::digest(bytes)));
     IndexedEntry {
         key: candidate.key.clone(),
         physical_path: candidate.physical_path.clone(),
         stamp: candidate.stamp.clone(),
         content_hash,
+        beatmap_md5,
         data,
         diagnostics,
     }
@@ -1741,6 +1828,10 @@ SliderTickRate:1
             },
             diagnostics: Vec::new(),
             entries: Vec::new(),
+            beatmap_md5_lookup: BTreeMap::new(),
+            beatmap_sets: BTreeMap::new(),
+            beatmap_orders: BTreeMap::new(),
+            skin_orders: BTreeMap::new(),
         }
     }
 
@@ -1920,6 +2011,34 @@ SliderTickRate:1
             .run_scan(LocalClient::Stable, false, Arc::new(|_| {}), &cancel)
             .expect("incremental delete");
         assert_eq!(summary.beatmap_count, 1);
+    }
+
+    #[test]
+    fn md5_lookup_is_persisted_and_reloaded_without_reading_the_library() {
+        let (app_data, _stable, service, beatmap) = fixture_service();
+        let checksum = format!(
+            "{:x}",
+            Md5::digest(fs::read(&beatmap).expect("beatmap bytes"))
+        );
+        let cancel = AtomicBool::new(false);
+        service
+            .run_scan(LocalClient::Stable, false, Arc::new(|_| {}), &cancel)
+            .expect("scan");
+        assert!(
+            service
+                .find_beatmap_by_md5(LocalClient::Stable, &checksum)
+                .expect("lookup")
+                .is_some()
+        );
+
+        let reloaded = LocalAnalysisService::new(app_data.path()).expect("reloaded service");
+        reloaded.load_cached_indexes();
+        assert!(
+            reloaded
+                .find_beatmap_by_md5(LocalClient::Stable, &checksum)
+                .expect("reloaded lookup")
+                .is_some()
+        );
     }
 
     #[test]

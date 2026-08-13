@@ -50,6 +50,7 @@ export function LocalMediaPage() {
   const [selected, setSelected] = useState<GameMediaItem | null>(null);
   const [payload, setPayload] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -75,22 +76,22 @@ export function LocalMediaPage() {
   );
 
   const refresh = useCallback(async () => {
+    setScanning(true);
     setError(null);
     setSelected(null);
     setPayload(null);
     try {
       const nextItems = await desktopApi.listGameMedia(client);
-      const nextVisibleItems = filter === "all"
-        ? nextItems
-        : nextItems.filter((item) => item.kind === filter);
       setItems(nextItems);
-      const preferred = nextVisibleItems[0] ?? null;
+      const preferred = nextItems[0] ?? null;
       if (preferred) await read(preferred);
     } catch (value) {
       setError(value);
       setItems([]);
+    } finally {
+      setScanning(false);
     }
-  }, [client, filter, read]);
+  }, [client, read]);
 
   useEffect(() => {
     const initial = window.setTimeout(() => void refresh(), 0);
@@ -141,7 +142,7 @@ export function LocalMediaPage() {
         eyebrow={`Local media · ${client}`}
         title="截图与回放"
         description="在同一个工作区浏览、预览和管理本地媒体"
-        actions={<Button aria-label="刷新媒体" onClick={() => void refresh()} size="icon"><RefreshCw className="size-4" /></Button>}
+        actions={<Button aria-label="刷新媒体" disabled={scanning} loading={scanning} onClick={() => void refresh()} size="icon"><RefreshCw className="size-4" /></Button>}
       />
 
       <div aria-label="媒体类型" className="mb-5 flex gap-2 border-b border-white/[0.06] pb-3" role="group">
@@ -171,7 +172,7 @@ export function LocalMediaPage() {
             <Badge tone="cyan">{client}</Badge>
           </div>
           <div className="mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
-            {filteredItems.length ? filteredItems.map((item) => (
+            {scanning ? <div className="grid min-h-32 place-items-center text-sm text-slate-400"><span className="flex items-center gap-2"><RefreshCw className="size-4 animate-spin" />正在扫描本地媒体…</span></div> : filteredItems.length ? filteredItems.map((item) => (
               <button
                 aria-pressed={selected?.path === item.path}
                 className={`w-full rounded-xl border p-3 text-left transition-colors ${

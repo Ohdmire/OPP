@@ -608,6 +608,11 @@ export interface LocalSourceStatus {
   last_scanned_at: string | null;
 }
 
+export interface LocalIndexLoadStatus {
+  phase: "loading" | "ready" | "error";
+  error: string | null;
+}
+
 export interface LocalResourceRef {
   resource_id: string;
   client: OsuClient;
