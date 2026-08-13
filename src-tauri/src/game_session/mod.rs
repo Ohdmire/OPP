@@ -72,41 +72,24 @@ async fn snapshot(state: &AppState, ruleset: Ruleset) -> CommandResult<UserSnaps
     })
 }
 
+#[cfg(windows)]
 fn running_executables() -> Vec<PathBuf> {
-    #[cfg(windows)]
-    {
-        Command::new("powershell.exe")
-            .creation_flags(CREATE_NO_WINDOW)
-            .args([
-                "-NoProfile",
-                "-NonInteractive",
-                "-Command",
-                "Get-Process -Name 'osu!' -ErrorAction SilentlyContinue | ForEach-Object { $_.Path }",
-            ])
-            .output()
-            .map(|output| String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .map(str::trim)
-                .filter(|path| !path.is_empty())
-                .map(PathBuf::from)
-                .collect())
-            .unwrap_or_default()
-    }
-    #[cfg(not(windows))]
-    {
-        let mut running = Vec::new();
-        for name in crate::platform::game_commands() {
-            let is_running = Command::new("pgrep")
-                .args(["-x", name])
-                .output()
-                .map(|output| output.status.success())
-                .unwrap_or(false);
-            if is_running {
-                running.push(PathBuf::from(*name));
-            }
-        }
-        running
-    }
+    Command::new("powershell.exe")
+        .creation_flags(CREATE_NO_WINDOW)
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "Get-Process -Name 'osu!' -ErrorAction SilentlyContinue | ForEach-Object { $_.Path }",
+        ])
+        .output()
+        .map(|output| String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(str::trim)
+            .filter(|path| !path.is_empty())
+            .map(PathBuf::from)
+            .collect())
+        .unwrap_or_default()
 }
 
 fn same_executable(left: &Path, right: &Path) -> bool {
@@ -114,8 +97,32 @@ fn same_executable(left: &Path, right: &Path) -> bool {
         .eq_ignore_ascii_case(&right.to_string_lossy())
 }
 
+#[cfg(windows)]
 fn executable_running(executable: &Path, running: &[PathBuf]) -> bool {
     running.iter().any(|path| same_executable(path, executable))
+}
+
+/// 判断客户端当前是否正在运行。Windows 按可执行文件路径比对进程列表；Linux
+/// 下游戏经 wine / pressure-vessel 等包装层启动，实际进程名与启动命令不同
+/// （stable 表现为 `D:\osu!.exe`），改按 `/proc` 匹配真实进程。
+fn client_running(client: LocalClient, executable: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        executable_running(executable, &running_executables())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = executable;
+        crate::platform::game_process_running(&client.to_string())
+    }
+}
+
+fn client_from_str(value: &str) -> Option<LocalClient> {
+    match value {
+        "stable" => Some(LocalClient::Stable),
+        "lazer" => Some(LocalClient::Lazer),
+        _ => None,
+    }
 }
 
 pub(crate) fn executable(client: LocalClient, root: &str) -> Option<PathBuf> {
@@ -141,7 +148,6 @@ fn scan_game_status(
 ) -> GameStatusSnapshot {
     #[cfg(not(windows))]
     let _ = local_analysis;
-    let running = running_executables();
     let detected_at = Utc::now();
     let clients = [LocalClient::Stable, LocalClient::Lazer]
         .into_iter()
@@ -164,7 +170,7 @@ fn scan_game_status(
                 client,
                 running: executable
                     .as_deref()
-                    .is_some_and(|path| executable_running(path, &running)),
+                    .is_some_and(|path| client_running(client, path)),
                 executable: executable.map(|path| path.display().to_string()),
                 detected_at,
             }
@@ -288,7 +294,7 @@ pub async fn start_game_session(
     app: AppHandle,
 ) -> CommandResult<GameSessionSummary> {
     let target = game_launch_target(client, &state)?;
-    if executable_running(&target.exe, &running_executables()) {
+    if client_running(client, &target.exe) {
         return Err(CommandError::new("GAME_ALREADY_RUNNING", "osu! 已经在运行"));
     }
     if launch_tosu.unwrap_or(false) {
@@ -333,7 +339,7 @@ pub async fn start_detected_game_session(
     state: State<'_, AppState>,
 ) -> CommandResult<GameSessionSummary> {
     let exe = game_launch_target(client, &state)?.exe;
-    if !executable_running(&exe, &running_executables()) {
+    if !client_running(client, &exe) {
         return Err(CommandError::new(
             "GAME_NOT_RUNNING",
             "未检测到正在运行的 osu! 客户端",
@@ -385,18 +391,20 @@ pub async fn get_game_session_status(
     let Some(mut summary) = current else {
         return Ok(None);
     };
-    if summary.running
-        && !executable_running(Path::new(&summary.executable), &running_executables())
-    {
-        summary.running = false;
-        summary.ended_at = Some(Utc::now());
-        summary.end = Some(snapshot(&state, summary.ruleset).await?);
-        *state
-            .game_session
-            .active
-            .lock()
-            .map_err(|_| CommandError::new("SESSION_LOCKED", "游戏会话状态不可用"))? =
-            Some(summary.clone());
+    if summary.running {
+        let still_running = client_from_str(&summary.client)
+            .is_some_and(|client| client_running(client, Path::new(&summary.executable)));
+        if !still_running {
+            summary.running = false;
+            summary.ended_at = Some(Utc::now());
+            summary.end = Some(snapshot(&state, summary.ruleset).await?);
+            *state
+                .game_session
+                .active
+                .lock()
+                .map_err(|_| CommandError::new("SESSION_LOCKED", "游戏会话状态不可用"))? =
+                Some(summary.clone());
+        }
     }
     Ok(Some(summary))
 }

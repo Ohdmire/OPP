@@ -1,6 +1,5 @@
-//! 平台抽象层：把所有操作系统差异（OS 标识、注册表访问、各平台默认路径、
-//! 能力表）集中收口于此。业务模块面向这里的函数与 [`Capabilities`]，不再
-//! 各自散写 `#[cfg(...)]` 判断。
+//! 平台抽象层：把所有操作系统差异业务模块面向这里的函数与 [`Capabilities`]
+//! 不再各自散写 `#[cfg(...)]` 判断
 
 use std::env;
 use std::fs;
@@ -56,9 +55,10 @@ pub fn stable_install_candidates() -> Vec<PathBuf> {
     }
     #[cfg(not(windows))]
     {
+        // osu-wine 方案的实际安装目录是 `osu-wine/osu!`。
         data_dir()
             .into_iter()
-            .map(|data| data.join("osu-wine"))
+            .map(|data| data.join("osu-wine").join("osu!"))
             .collect()
     }
 }
@@ -146,16 +146,73 @@ pub fn game_command(client: &str) -> Option<&'static str> {
     }
 }
 
-/// Linux 上所有受支持的游戏命令名，用于进程扫描；Windows 返回空切片。
-pub fn game_commands() -> &'static [&'static str] {
+/// 判断某个 osu! 客户端当前是否正在运行。
+pub fn game_process_running(client: &str) -> bool {
     #[cfg(not(windows))]
     {
-        &["osu-wine", "osu-lazer"]
+        match client {
+            "stable" => any_process(|comm, cmdline| {
+                comm.ends_with("osu!.exe") || cmdline.contains("osu!.exe")
+            }),
+            "lazer" => any_process(|comm, cmdline| {
+                comm == "osu!"
+                    || comm == "osu-lazer"
+                    || cmdline.contains("osu-lazer")
+                    || cmdline.contains("osu.appimage")
+            }),
+            _ => false,
+        }
     }
     #[cfg(windows)]
     {
-        &[]
+        let _ = client;
+        false
     }
+}
+
+/// 遍历 `/proc` 下的进程，`comm` 与 `cmdline`（NUL 替换为空格、统一小写）任一
+#[cfg(not(windows))]
+fn any_process(predicate: impl Fn(&str, &str) -> bool) -> bool {
+    let Ok(entries) = fs::read_dir("/proc") else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        if !name.bytes().all(|byte| byte.is_ascii_digit()) {
+            continue;
+        }
+        let root = entry.path();
+        if is_zombie(&root) {
+            continue;
+        }
+        let comm = fs::read_to_string(root.join("comm"))
+            .unwrap_or_default()
+            .trim_end_matches('\n')
+            .to_ascii_lowercase();
+        let cmdline = fs::read(root.join("cmdline"))
+            .map(|bytes| {
+                String::from_utf8_lossy(&bytes)
+                    .replace('\0', " ")
+                    .to_ascii_lowercase()
+            })
+            .unwrap_or_default();
+        if predicate(&comm, &cmdline) {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(not(windows))]
+fn is_zombie(process_root: &Path) -> bool {
+    let Ok(stat) = fs::read_to_string(process_root.join("stat")) else {
+        return false;
+    };
+    stat.rsplit(')')
+        .next()
+        .and_then(|rest| rest.trim_start().chars().next())
+        .is_some_and(|state| state == 'Z')
 }
 
 #[derive(Debug, Clone, Serialize)]
