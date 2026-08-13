@@ -23,7 +23,7 @@ export function CollectionAddDialog({ defaultCreator = "" }: { defaultCreator?: 
   useEffect(() => {
     const handler = (event: Event) => {
       const next = (event as CustomEvent<CollectionCandidate[]>).detail ?? [];
-      setCandidates(next); setSelected(new Set(next.map((_, index) => index))); setFolderId(initialFolderId); setNewFolder(""); setError(null); setOpen(true); void refetch();
+      setCandidates(next); setSelected(new Set()); setFolderId(initialFolderId); setNewFolder(""); setError(null); setOpen(true); void refetch();
     };
     window.addEventListener(collectionAddEvent, handler);
     return () => window.removeEventListener(collectionAddEvent, handler);

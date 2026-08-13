@@ -1,5 +1,6 @@
 mod account;
 mod collections;
+mod danser;
 mod error;
 mod game_session;
 mod local_analysis;
@@ -30,6 +31,10 @@ use collections::{
     get_collection_sync_status, import_collection_share, install_collection_downloads,
     list_collections, open_collection_downloads, preview_collection_share, refresh_collections,
     remove_collection_entry, rename_collection, write_stable_collections,
+};
+use danser::{
+    cancel_danser_render, enqueue_danser_renders, get_danser_render_queue, get_danser_status,
+    list_danser_profiles, open_danser_output, start_danser_render_queue,
 };
 use game_session::{
     get_game_session_status, get_game_status, inspect_game_replay, list_game_media,
@@ -75,7 +80,7 @@ use tosu::{
     stop_tosu,
 };
 use trainer::generate_trainer_beatmap;
-use update_check::check_for_updates;
+use update_check::{check_for_updates, ignore_update_version};
 
 #[tauri::command]
 fn exit_app(app: tauri::AppHandle) {
@@ -171,6 +176,13 @@ pub fn run() {
             get_online_beatmap_provider_status,
             calculate_beatmap_pp,
             submit_replay_render,
+            get_danser_status,
+            list_danser_profiles,
+            enqueue_danser_renders,
+            start_danser_render_queue,
+            get_danser_render_queue,
+            cancel_danser_render,
+            open_danser_output,
             get_similarity_index_status,
             configure_similarity_index,
             query_similar_beatmaps,
@@ -229,6 +241,7 @@ pub fn run() {
             save_obs_connection,
             refresh_selected_obs_scene,
             check_for_updates,
+            ignore_update_version,
             exit_app,
         ])
         .run(tauri::generate_context!())

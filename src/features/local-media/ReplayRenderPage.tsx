@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ChevronDown, Copy, ExternalLink, Film, LoaderCircle, Search, SlidersHorizontal, Sparkles } from "lucide-react";
+import { ChevronDown, Cloud, Copy, ExternalLink, Film, LoaderCircle, MonitorUp, Search, SlidersHorizontal, Sparkles } from "lucide-react";
 import { useMode } from "../../app/ModeContext";
 import { ErrorPanel } from "../../shared/components/ErrorPanel";
 import { PageHeader } from "../../shared/components/PageHeader";
 import { Badge, Button, Card, EmptyState, SectionTitle } from "../../shared/components/ui";
 import { desktopApi } from "../../shared/lib/tauri";
 import type { GameMediaItem, ReplayMapInfo, ReplayRenderOptions, ReplayRenderProgress } from "../../shared/types/osu";
+import { DanserRenderPanel } from "./DanserRenderPanel";
 
 const defaults: ReplayRenderOptions = {
   resolution: "1280x720", global_volume: 50, music_volume: 50, hitsound_volume: 50,
@@ -23,7 +24,7 @@ const groups: Array<{ title: string; fields: Array<[keyof ReplayRenderOptions, s
 ];
 
 function labelForReplay(item: GameMediaItem) { return item.path.split(/[\\/]/).pop() ?? item.path; }
-export function ReplayRenderPage() {
+function OrdrRenderPanel() {
   const { client } = useMode();
   const [searchParams] = useSearchParams();
   const [replays, setReplays] = useState<GameMediaItem[]>([]);
@@ -72,7 +73,7 @@ export function ReplayRenderPage() {
     const query = replaySearch.trim().toLocaleLowerCase();
     return !query || `${labelForReplay(item)} ${item.path}`.toLocaleLowerCase().includes(query);
   });
-  const replaySuggestions = replays.flatMap((item) => [item.path, labelForReplay(item)]);
+  const replaySuggestions = replays.map(labelForReplay);
   const submit = async () => {
     if (!replayPath || !replayInfo?.submitted) return;
     setBusy(true); setError(null); setProgress(null);
@@ -84,7 +85,6 @@ export function ReplayRenderPage() {
   const copy = () => progress?.video_url && void navigator.clipboard.writeText(progress.video_url);
 
   return <div className="pb-8">
-    <PageHeader eyebrow="o!rdr · rosu-render" title="回放渲染" description="读取本地回放、校验谱面兼容性，并提交远端视频生成任务。" actions={<Badge tone="pink">远端渲染</Badge>} />
     {error ? <div className="mb-5"><ErrorPanel error={error} onRetry={() => void submit()} /></div> : null}
     <Card className="mb-5 border-amber-300/15 bg-amber-300/[0.045] p-4 text-sm text-amber-100">o!rdr 只接收回放文件并从 osu! 下载谱面。本页仅显示本地库中<strong>已提交的 osu!standard 谱面</strong>；本地未提交谱面、其他模式或没有输入数据的回放无法渲染。</Card>
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -107,5 +107,19 @@ export function ReplayRenderPage() {
         <Card className="p-5">{progress ? <><div className="flex items-center justify-between"><SectionTitle title={`任务 #${progress.render_id}`} description={progress.description} /><Badge tone={progress.status === "completed" ? "success" : progress.status === "failed" ? "warning" : "pink"}>{progress.status}</Badge></div>{progress.status !== "completed" && progress.status !== "failed" ? <div className="mt-5 flex items-center gap-2 text-base text-pink-100"><LoaderCircle className="size-4 animate-spin" />等待 o!rdr 更新</div> : null}{progress.video_url ? <div className="mt-5 flex flex-wrap gap-2"><Button size="sm" onClick={() => void desktopApi.openExternal(progress.video_url!)}><ExternalLink className="size-4" />打开视频</Button><Button size="sm" onClick={copy}><Copy className="size-4" />复制链接</Button><Button size="sm" onClick={() => void desktopApi.exportReplayVideo(progress.video_url!, `opp-${progress.render_id}.mp4`)}><Film className="size-4" />导出到本地</Button></div> : null}</> : <EmptyState icon={<Sparkles className="size-5" />} title="等待提交" description="提交后，o!rdr 的进度和最终视频链接会显示在这里。" />}</Card>
       </div>
     </div>
+  </div>;
+}
+
+export function ReplayRenderPage() {
+  const [provider, setProvider] = useState<"danser" | "ordr">(() => window.localStorage.getItem("opp:replay-render-provider") === "ordr" ? "ordr" : "danser");
+  const choose = (value: "danser" | "ordr") => { setProvider(value); window.localStorage.setItem("opp:replay-render-provider", value); };
+  return <div className="pb-8">
+    <PageHeader eyebrow="Replay studio" title="回放渲染" description="在本机使用 Danser 快速导出，或将回放提交到 o!rdr 在线渲染。" actions={<Badge tone={provider === "danser" ? "cyan" : "pink"}>{provider === "danser" ? "本地渲染" : "在线渲染"}</Badge>} />
+    <div className="mb-5 grid max-w-xl grid-cols-2 rounded-2xl border border-white/[0.08] bg-black/20 p-1.5" role="tablist" aria-label="渲染方式">
+      <button aria-selected={provider === "danser"} className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition ${provider === "danser" ? "selected-mask text-[var(--theme-primary-light)]" : "text-slate-500 hover:text-slate-200"}`} onClick={() => choose("danser")} role="tab" type="button"><MonitorUp className="size-4" />本地 Danser</button>
+      <button aria-selected={provider === "ordr"} className={`flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition ${provider === "ordr" ? "selected-mask text-pink-200" : "text-slate-500 hover:text-slate-200"}`} onClick={() => choose("ordr")} role="tab" type="button"><Cloud className="size-4" />在线 o!rdr</button>
+    </div>
+    <div className={provider === "danser" ? "block" : "hidden"} aria-hidden={provider !== "danser"}><DanserRenderPanel /></div>
+    <div className={provider === "ordr" ? "block" : "hidden"} aria-hidden={provider !== "ordr"}><OrdrRenderPanel /></div>
   </div>;
 }

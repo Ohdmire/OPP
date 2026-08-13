@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Clipboard, FileVideo, FolderSearch, Image, Images, RefreshCw } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { Clipboard, FileVideo, Film, FolderSearch, Image, Images, RefreshCw } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMode } from "../../app/ModeContext";
 import { ErrorPanel } from "../../shared/components/ErrorPanel";
 import { PageHeader } from "../../shared/components/PageHeader";
 import { Badge, Button, Card, EmptyState, SectionTitle } from "../../shared/components/ui";
+import { SearchAutocomplete } from "../../shared/components/SearchAutocomplete";
 import { desktopApi } from "../../shared/lib/tauri";
 import type { GameMediaItem, GameReplayPayload, GameScreenshotPayload } from "../../shared/types/osu";
 
@@ -41,6 +42,7 @@ const mediaFilters: Array<{ value: MediaFilter; label: string; icon: typeof Imag
 
 export function LocalMediaPage() {
   const { client } = useMode();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedFilter = searchParams.get("type");
   const filter: MediaFilter = requestedFilter === "screenshot" || requestedFilter === "replay"
@@ -53,6 +55,7 @@ export function LocalMediaPage() {
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [mediaSearch, setMediaSearch] = useState("");
 
   const read = useCallback(async (item: GameMediaItem) => {
     setSelected(item);
@@ -70,10 +73,16 @@ export function LocalMediaPage() {
     }
   }, [client]);
 
-  const filteredItems = useMemo(
-    () => filter === "all" ? items : items.filter((item) => item.kind === filter),
-    [filter, items],
-  );
+  const filteredItems = useMemo(() => {
+    const query = mediaSearch.trim().toLocaleLowerCase();
+    return items.filter((item) => (filter === "all" || item.kind === filter)
+      && (!query || `${fileName(item.path)} ${item.path}`.toLocaleLowerCase().includes(query)));
+  }, [filter, items, mediaSearch]);
+  const mediaSuggestions = useMemo(() => items.map((item) => ({
+    value: fileName(item.path),
+    label: fileName(item.path),
+    detail: item.kind === "replay" ? "回放" : "截图",
+  })), [items]);
 
   const refresh = useCallback(async () => {
     setScanning(true);
@@ -171,6 +180,7 @@ export function LocalMediaPage() {
             <SectionTitle title="本地媒体" description={`${filteredItems.length} 个对象`} />
             <Badge tone="cyan">{client}</Badge>
           </div>
+          <SearchAutocomplete aria-label="搜索截图与回放" className="px-2" inputClassName="opp-input w-full py-2.5 pl-10 pr-3 text-sm" onChange={setMediaSearch} placeholder="搜索文件名或路径" suggestions={mediaSuggestions} value={mediaSearch} />
           <div className="mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
             {scanning ? <div className="grid min-h-32 place-items-center text-sm text-slate-400"><span className="flex items-center gap-2"><RefreshCw className="size-4 animate-spin" />正在扫描本地媒体…</span></div> : filteredItems.length ? filteredItems.map((item) => (
               <button
@@ -208,6 +218,7 @@ export function LocalMediaPage() {
               <div className="flex flex-wrap gap-2">
                 <Button onClick={() => void openExplorer()} size="sm"><FolderSearch className="size-4" />资源管理器</Button>
                 <Button onClick={() => void copyPath()} size="sm"><Clipboard className="size-4" />复制路径</Button>
+                {selected.kind === "replay" ? <Button onClick={() => navigate(`/local/media/render?replay=${encodeURIComponent(selected.path)}`)} size="sm" variant="primary"><Film className="size-4" />加入渲染</Button> : null}
                 {payload && "mime_type" in payload ? <Button onClick={() => void copyImage()} size="sm"><Image className="size-4" />复制图片</Button> : null}
               </div>
             </div>

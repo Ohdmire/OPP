@@ -147,6 +147,8 @@ pub struct AppSettings {
     #[serde(default)]
     pub page_onboarding_versions: BTreeMap<String, u32>,
     #[serde(default)]
+    pub ignored_update_version: Option<String>,
+    #[serde(default)]
     pub reduce_motion: bool,
     #[serde(default)]
     pub similarity_index_directory: Option<String>,
@@ -160,6 +162,12 @@ pub struct AppSettings {
     pub open_downloaded_beatmaps_after_download: bool,
     #[serde(default)]
     pub replay_export_directory: Option<String>,
+    #[serde(default)]
+    pub danser_executable_path: Option<String>,
+    #[serde(default)]
+    pub auto_export_new_replays_with_danser: bool,
+    #[serde(default)]
+    pub danser_render_preferences: DanserRenderPreferences,
     #[serde(default)]
     pub tosu_executable_path: Option<String>,
     #[serde(default = "default_tosu_api_base_url")]
@@ -195,6 +203,131 @@ pub struct AppSettings {
     pub cache_limit_mb: u32,
     #[serde(default)]
     pub key_bindings: AppKeyBindings,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DanserRenderPreferences {
+    #[serde(default = "default_danser_settings_profile")]
+    pub settings_profile: String,
+    #[serde(default)]
+    pub skin: String,
+    #[serde(default = "default_true")]
+    pub skip: bool,
+    #[serde(default)]
+    pub quickstart: bool,
+    #[serde(default)]
+    pub start: Option<f64>,
+    #[serde(default)]
+    pub end: Option<f64>,
+    #[serde(default = "default_one")]
+    pub speed: f64,
+    #[serde(default = "default_one")]
+    pub pitch: f64,
+    #[serde(default)]
+    pub offset: i32,
+    #[serde(default)]
+    pub mods: String,
+    #[serde(default)]
+    pub mods2: String,
+    #[serde(default)]
+    pub cs: Option<f64>,
+    #[serde(default)]
+    pub ar: Option<f64>,
+    #[serde(default)]
+    pub od: Option<f64>,
+    #[serde(default)]
+    pub hp: Option<f64>,
+    #[serde(default = "default_true")]
+    pub no_db_check: bool,
+    #[serde(default = "default_true")]
+    pub no_update_check: bool,
+    #[serde(default)]
+    pub debug: bool,
+    #[serde(default)]
+    pub settings_patch: String,
+    #[serde(default = "default_danser_frame_width")]
+    pub frame_width: u32,
+    #[serde(default = "default_danser_frame_height")]
+    pub frame_height: u32,
+    #[serde(default = "default_danser_fps")]
+    pub fps: u32,
+    #[serde(default = "default_danser_encoder")]
+    pub encoder: String,
+    #[serde(default = "default_danser_quality")]
+    pub quality: u8,
+    #[serde(default)]
+    pub motion_blur: bool,
+    #[serde(default = "default_danser_motion_blur_oversample")]
+    pub motion_blur_oversample: u32,
+}
+
+fn default_danser_settings_profile() -> String {
+    "default".into()
+}
+
+fn default_one() -> f64 {
+    1.0
+}
+
+fn default_danser_frame_width() -> u32 {
+    1920
+}
+
+fn default_danser_frame_height() -> u32 {
+    1080
+}
+
+fn default_danser_fps() -> u32 {
+    60
+}
+
+fn default_danser_encoder() -> String {
+    "libx264".into()
+}
+
+fn default_danser_quality() -> u8 {
+    14
+}
+
+fn default_danser_motion_blur_oversample() -> u32 {
+    16
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for DanserRenderPreferences {
+    fn default() -> Self {
+        Self {
+            settings_profile: default_danser_settings_profile(),
+            skin: String::new(),
+            skip: true,
+            quickstart: false,
+            start: None,
+            end: None,
+            speed: 1.0,
+            pitch: 1.0,
+            offset: 0,
+            mods: String::new(),
+            mods2: String::new(),
+            cs: None,
+            ar: None,
+            od: None,
+            hp: None,
+            no_db_check: true,
+            no_update_check: true,
+            debug: false,
+            settings_patch: String::new(),
+            frame_width: default_danser_frame_width(),
+            frame_height: default_danser_frame_height(),
+            fps: default_danser_fps(),
+            encoder: default_danser_encoder(),
+            quality: default_danser_quality(),
+            motion_blur: false,
+            motion_blur_oversample: default_danser_motion_blur_oversample(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -252,6 +385,8 @@ pub struct SimilarityPreferences {
     pub upper_sections: u32,
     #[serde(default)]
     pub manual_weights: SimilarityManualWeights,
+    #[serde(default = "default_similarity_results_per_page")]
+    pub results_per_page: u32,
 }
 
 impl Default for SimilarityPreferences {
@@ -262,6 +397,7 @@ impl Default for SimilarityPreferences {
             lower_sections: default_similarity_section_range(),
             upper_sections: default_similarity_section_range(),
             manual_weights: SimilarityManualWeights::default(),
+            results_per_page: default_similarity_results_per_page(),
         }
     }
 }
@@ -319,6 +455,10 @@ fn default_similarity_section_range() -> u32 {
     4
 }
 
+fn default_similarity_results_per_page() -> u32 {
+    5
+}
+
 fn default_obs_websocket_url() -> String {
     "ws://127.0.0.1:4455".into()
 }
@@ -328,6 +468,7 @@ impl Default for AppSettings {
         Self {
             onboarding_version: 0,
             page_onboarding_versions: BTreeMap::new(),
+            ignored_update_version: None,
             reduce_motion: false,
             similarity_index_directory: None,
             similarity_preferences: SimilarityPreferences::default(),
@@ -335,6 +476,9 @@ impl Default for AppSettings {
             default_beatmap_download_provider: BeatmapDownloadProvider::default(),
             open_downloaded_beatmaps_after_download: false,
             replay_export_directory: None,
+            danser_executable_path: None,
+            auto_export_new_replays_with_danser: false,
+            danser_render_preferences: DanserRenderPreferences::default(),
             tosu_executable_path: None,
             tosu_api_base_url: default_tosu_api_base_url(),
             launch_tosu_with_game: false,
@@ -375,6 +519,13 @@ mod settings_tests {
         let settings: AppSettings = serde_json::from_str("{}").expect("deserialize settings");
         assert_eq!(settings.onboarding_version, 0);
         assert!(settings.page_onboarding_versions.is_empty());
+        assert_eq!(settings.ignored_update_version, None);
+        assert_eq!(settings.danser_executable_path, None);
+        assert!(!settings.auto_export_new_replays_with_danser);
+        assert_eq!(
+            settings.danser_render_preferences.settings_profile,
+            "default"
+        );
     }
 
     #[test]
@@ -390,6 +541,17 @@ mod settings_tests {
         let restored: AppSettings = serde_json::from_str(&json).expect("deserialize settings");
         assert_eq!(restored.onboarding_version, 1);
         assert_eq!(restored.page_onboarding_versions.get("tools"), Some(&1));
+    }
+
+    #[test]
+    fn ignored_update_version_round_trips() {
+        let settings = AppSettings {
+            ignored_update_version: Some("1.2.3".to_string()),
+            ..AppSettings::default()
+        };
+        let json = serde_json::to_string(&settings).expect("serialize settings");
+        let restored: AppSettings = serde_json::from_str(&json).expect("deserialize settings");
+        assert_eq!(restored.ignored_update_version.as_deref(), Some("1.2.3"));
     }
 }
 
@@ -521,6 +683,7 @@ mod tests {
         );
         assert_eq!(settings.similarity_preferences.lower_sections, 4);
         assert_eq!(settings.similarity_preferences.upper_sections, 4);
+        assert_eq!(settings.similarity_preferences.results_per_page, 5);
         assert_eq!(
             settings.similarity_preferences.manual_weights.parameters,
             1.0

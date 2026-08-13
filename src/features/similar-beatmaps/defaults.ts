@@ -26,6 +26,7 @@ export const defaultSimilarityPreferences: SimilarityPreferences = {
   lower_sections: 4,
   upper_sections: 4,
   manual_weights: { ...defaultDifficultyWeights, parameters: 1 },
+  results_per_page: 5,
 };
 
 export function manualWeightingFromPreferences(preferences = defaultSimilarityPreferences) {

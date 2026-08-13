@@ -104,6 +104,24 @@ fn bpm_at(timing_points: &[(f64, f64)], time: f64) -> Option<f64> {
         .and_then(|(_, beat_length)| (*beat_length > 0.0).then(|| 60_000.0 / *beat_length))
 }
 
+fn is_mania_beatmap(source: &str) -> bool {
+    let mut in_general = false;
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            in_general = trimmed.eq_ignore_ascii_case("[General]");
+            continue;
+        }
+        if in_general
+            && let Some((key, value)) = trimmed.split_once(':')
+            && key.trim().eq_ignore_ascii_case("Mode")
+        {
+            return value.trim() == "3";
+        }
+    }
+    false
+}
+
 fn transform_beatmap(source: &str, request: &TrainerRequest) -> CommandResult<(String, usize)> {
     if !(0.75..=2.0).contains(&request.rate) {
         return Err(CommandError::new(
@@ -142,6 +160,9 @@ fn transform_beatmap(source: &str, request: &TrainerRequest) -> CommandResult<(S
     let end = request.end_time_ms;
     let transforms_audio =
         (request.rate - 1.0).abs() > f64::EPSILON || start > 0.0 || end.is_some();
+    // In osu!mania CircleSize is the key count, not a visual difficulty setting.
+    // Always preserve the value from the source chart so rate changes cannot collapse lanes.
+    let preserve_circle_size = is_mania_beatmap(source);
     let mut section = "";
     let mut timing_points = Vec::<(f64, f64)>::new();
     for line in source.lines() {
@@ -177,7 +198,11 @@ fn transform_beatmap(source: &str, request: &TrainerRequest) -> CommandResult<(S
         if section == "[Difficulty]" {
             let next = update_key(raw, "ApproachRate", request.ar);
             let next = update_key(&next, "OverallDifficulty", request.od);
-            let next = update_key(&next, "CircleSize", request.cs);
+            let next = if preserve_circle_size {
+                next
+            } else {
+                update_key(&next, "CircleSize", request.cs)
+            };
             output.push(update_key(&next, "HPDrainRate", request.hp));
             continue;
         }
@@ -240,6 +265,52 @@ fn transform_beatmap(source: &str, request: &TrainerRequest) -> CommandResult<(S
         ));
     }
     Ok((output.join("\r\n") + "\r\n", included))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{TrainerRequest, transform_beatmap};
+    use crate::local_analysis::LocalClient;
+
+    fn request(rate: f64, cs: f32) -> TrainerRequest {
+        TrainerRequest {
+            client: LocalClient::Stable,
+            resource_id: "test".into(),
+            rate,
+            ar: 8.0,
+            od: 8.0,
+            cs,
+            hp: 5.0,
+            min_bpm: None,
+            max_bpm: None,
+            start_time_ms: None,
+            end_time_ms: None,
+        }
+    }
+
+    fn source(mode: u8) -> String {
+        format!(
+            "osu file format v14\n\n[General]\nMode:{mode}\n\n[Difficulty]\nHPDrainRate:5\nCircleSize:4\nOverallDifficulty:7\nApproachRate:7\n\n[TimingPoints]\n0,500,4,2,1,50,1,0\n\n[HitObjects]\n64,192,1000,1,0,0:0:0:0:"
+        )
+    }
+
+    #[test]
+    fn mania_4k_rate_change_to_1_1x_preserves_source_key_count() {
+        // Regression: with all difficulty fields left blank in the UI, changing only the rate
+        // used to submit CS 0 and turn a native 4K chart into a 1K chart.
+        let (output, included) = transform_beatmap(&source(3), &request(1.1, 0.0)).unwrap();
+
+        assert_eq!(included, 1);
+        assert!(output.contains("CircleSize:4\r\n"));
+        assert!(!output.contains("CircleSize:0"));
+    }
+
+    #[test]
+    fn standard_mode_still_allows_circle_size_changes() {
+        let (output, _) = transform_beatmap(&source(0), &request(1.0, 6.5)).unwrap();
+
+        assert!(output.contains("CircleSize:6.5\r\n"));
+    }
 }
 
 fn prepare_audio(source: &Path, destination: &Path, request: &TrainerRequest) -> CommandResult<()> {

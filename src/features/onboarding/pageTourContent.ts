@@ -118,13 +118,13 @@ const copies: Record<string, PageGuideCopy> = {
   "/local/media/render": {
     id: "replay-render",
     title: "回放渲染",
-    summary: "这个页面校验本地回放并提交给 o!rdr 生成视频；引导不会执行真实提交。",
+    summary: "这个页面可调用本机 Danser 导出视频，也可将兼容回放提交给 o!rdr；引导不会启动真实渲染。",
     modules: [
-      { title: "素材", purpose: "搜索并选择本地回放，随后检查能否匹配到已提交的 osu!standard 谱面。", example: "输入文件名关键词，选择回放，确认出现 Beatmap ID 和“已匹配”提示。", targetText: "素材" },
-      { title: "输出与音频", purpose: "设置视频分辨率以及总音量、音乐和打击音比例。", example: "选择 1920x1080，把音乐调到 80%、打击音调到 65%。", targetText: "输出与音频" },
-      { title: "高级选项", purpose: "折叠区控制计分板、PP、光标、背景、Storyboard 和播放行为。引导会临时展开，离开步骤后恢复。", example: "展开后关闭计分板、保留 PP，并把游戏背景暗度设为 80%。", targetText: "高级选项", targetTextSelector: "button", expandTarget: true },
-      { title: "提交身份与皮肤", purpose: "填写视频署名、选择官方或自定义皮肤，并可临时提供验证 Key。", example: "署名填写玩家名，选择官方皮肤；先使用开发者模拟成功模式验证流程。", targetText: "提交身份与皮肤" },
-      { title: "任务进度与导出", purpose: "提交后显示任务状态和视频链接，完成时可打开、复制或导出到本地。", example: "等待状态变为 completed，再点击“导出到本地”选择保存位置。", targetText: "等待提交" },
+      { title: "选择渲染方式", purpose: "在本地 Danser 与在线 o!rdr 两个子页面之间切换，未提交的表单不会丢失。", example: "优先使用本地 Danser；没有本地环境时切换到在线 o!rdr。", target: '[aria-label="渲染方式"]' },
+      { title: "本地运行环境", purpose: "检查 danser-cli 与 FFmpeg 是否就绪，也可以手动选择便携版程序。", example: "状态显示“已就绪”后再选择回放。", targetText: "本地运行环境" },
+      { title: "回放与输出", purpose: "选择本地 osu!standard 回放并设置统一视频导出目录。", example: "选择最近回放，确认已匹配谱面并检查输出位置。", targetText: "回放与输出" },
+      { title: "常用与高级参数", purpose: "通过表单设置 Danser 配置档、皮肤、速度、时间段、Mod 与 sPatch。", example: "保留默认配置档，只按需要调整速度或皮肤。", targetText: "常用参数" },
+      { title: "本地渲染队列", purpose: "任务会顺序执行，并显示进度、取消操作和最终视频位置。", example: "加入队列后等待完成，再点击“定位视频”。", targetText: "本地渲染队列" },
     ],
   },
   "/tosu": {
