@@ -9,6 +9,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tokio_tungstenite::{WebSocketStream, connect_async, tungstenite::Message};
 use uuid::Uuid;
 
+
 use crate::{
     error::{CommandError, CommandResult},
     state::AppState,
@@ -19,6 +20,7 @@ use crate::{
 use std::os::windows::process::CommandExt;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+use std::process::Command;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ObsStatus {

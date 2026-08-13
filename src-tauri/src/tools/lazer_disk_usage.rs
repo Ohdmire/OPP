@@ -90,7 +90,7 @@ fn hard_linked(path: &Path) -> bool {
             std::ptr::null(),
             OPEN_EXISTING,
             FILE_FLAG_BACKUP_SEMANTICS,
-            0,
+            std::ptr::null_mut(),
         );
         if handle == INVALID_HANDLE_VALUE {
             return false;

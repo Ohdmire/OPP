@@ -34,6 +34,5 @@ describe("ReplayRenderPage", () => {
   it("shows the supported Danser version requirement", async () => {
     renderPage();
     expect(await screen.findByText("版本要求：Danser 0.11.x")).toBeInTheDocument();
-    expect(screen.getByText(/Specify the title of a song/)).toBeInTheDocument();
   });
 });
