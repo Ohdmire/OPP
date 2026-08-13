@@ -145,7 +145,7 @@ impl CredentialStore {
     fn map_error(error: KeyringError) -> CommandError {
         CommandError::new(
             "CREDENTIAL_STORE_ERROR",
-            format!("Windows 凭据管理器不可用：{error}"),
+            format!("系统凭据存储不可用：{error}"),
         )
     }
 }
