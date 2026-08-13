@@ -1,4 +1,6 @@
-//! osu!lazer 数据目录占用统计：区分含硬链接的总大小与排除硬链接后的实际占用。
+//! osu!lazer 数据目录占用统计：总大小（逻辑）与排除硬链接后的实际占用。
+//! lazer 从 stable 导入的文件以硬链接形式存在（另一链接指向 stable 目录），
+//! 删除 lazer 目录不会释放这部分空间，因此实际占用不计入任何硬链接文件
 
 use std::path::Path;
 
@@ -37,7 +39,7 @@ pub async fn get_lazer_disk_usage() -> CommandResult<LazerDiskUsage> {
 }
 
 fn compute_size(root: &Path) -> (u64, u64, u64) {
-    let files: Vec<(Option<(u64, u64)>, u64)> = WalkDir::new(root)
+    let files: Vec<(u64, bool)> = WalkDir::new(root)
         .into_iter()
         .filter_map(Result::ok)
         .collect::<Vec<_>>()
@@ -48,26 +50,29 @@ fn compute_size(root: &Path) -> (u64, u64, u64) {
                 return None;
             }
             let size = std::fs::metadata(path).ok()?.len();
-            Some((file_identity(path), size))
+            Some((size, hard_linked(path)))
         })
         .collect();
-    let total_size: u64 = files.iter().map(|(_, size)| size).sum();
-    let file_count = files.len() as u64;
-    let mut seen = std::collections::HashSet::new();
-    let mut unique_size: u64 = 0;
-    for (identity, size) in &files {
-        // 同一文件的多个硬链接入口只在实际占用里计一次。
-        if identity.map_or(true, |id| seen.insert(id)) {
-            unique_size += size;
-        }
-    }
-    (total_size, unique_size, file_count)
+    let total_size: u64 = files.iter().map(|(size, _)| size).sum();
+    let unique_size: u64 = files
+        .iter()
+        .filter(|(_, linked)| !linked)
+        .map(|(size, _)| size)
+        .sum();
+    (total_size, unique_size, files.len() as u64)
 }
 
-/// 文件唯一标识，用于硬链接去重。Windows 用卷序列号 + 文件索引；类 Unix 用
-/// 设备号 + inode。无法获取时返回 None（按普通文件计入实际占用）。
+/// 文件是否存在目录外的硬链接（链接数 > 1）。
+#[cfg(not(windows))]
+fn hard_linked(path: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata(path)
+        .map(|metadata| metadata.nlink() > 1)
+        .unwrap_or(false)
+}
+
 #[cfg(windows)]
-fn file_identity(path: &Path) -> Option<(u64, u64)> {
+fn hard_linked(path: &Path) -> bool {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::Storage::FileSystem::{
@@ -88,23 +93,11 @@ fn file_identity(path: &Path) -> Option<(u64, u64)> {
             0,
         );
         if handle == INVALID_HANDLE_VALUE {
-            return None;
+            return false;
         }
         let mut info: BY_HANDLE_FILE_INFORMATION = std::mem::zeroed();
         let ok = GetFileInformationByHandle(handle, &mut info);
         CloseHandle(handle);
-        if ok == 0 {
-            return None;
-        }
-        let volume = info.dwVolumeSerialNumber as u64;
-        let index = ((info.nFileIndexHigh as u64) << 32) | (info.nFileIndexLow as u64);
-        Some((volume, index))
+        ok != 0 && info.nNumberOfLinks > 1
     }
-}
-
-#[cfg(not(windows))]
-fn file_identity(path: &Path) -> Option<(u64, u64)> {
-    use std::os::unix::fs::MetadataExt;
-    let metadata = std::fs::metadata(path).ok()?;
-    Some((metadata.dev(), metadata.ino()))
 }
