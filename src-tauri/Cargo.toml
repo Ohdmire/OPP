@@ -53,7 +53,7 @@ netease-cloud-music = { path = "crates/netease-cloud-music" }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_UI_ColorSystem"] }
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Storage_FileSystem", "Win32_UI_ColorSystem"] }
 
 [dev-dependencies]
 tempfile = "3"

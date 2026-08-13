@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -74,7 +75,9 @@ import type {
   TrainerRequest,
   TrainerResult,
   ObsRefreshResult,
+  LazerDiskUsage,
   ObsStatus,
+  PlatformCapabilities,
   NewReplaysDetected,
 } from "../types/osu";
 
@@ -130,6 +133,8 @@ async function call<T>(
 }
 
 function browserPreviewValue<T>(command: string, args?: Record<string, unknown>): T | undefined {
+  if (command === "get_capabilities") return { os: "windows", display_gamma: true, file_association: true } as T;
+  if (command === "get_lazer_disk_usage") return { path: "C:\\osu!", total_size: 1610612736, unique_size: 536870912, file_count: 4096 } as T;
   const profile = {
     id: 10001, username: "Preview User", avatar_url: "https://a.ppy.sh/10001", country_code: "CN",
     is_active: true, is_online: true, is_supporter: true, playmode: "osu", statistics: {
@@ -208,6 +213,8 @@ function browserPreviewValue<T>(command: string, args?: Record<string, unknown>)
 
 export const desktopApi = {
   getAuthStatus: () => call<AuthStatus>("get_auth_status"),
+  getCapabilities: () => call<PlatformCapabilities>("get_capabilities"),
+  getLazerDiskUsage: () => call<LazerDiskUsage>("get_lazer_disk_usage"),
   saveOAuthCredentials: (clientId: string, clientSecret: string) =>
     call<{ client_id: string; callback_url: string }>(
       "save_oauth_credentials",
@@ -433,11 +440,12 @@ export const desktopApi = {
   },
   chooseTosuExecutable: async (defaultPath?: string | null) => {
     if (!isTauri()) throw { code: "TAURI_REQUIRED", message: "文件选择器仅可在 OPP 桌面应用中使用" } satisfies CommandError;
+    const isWindows = navigator.userAgent.includes("Windows");
     const selected = await openDialog({
       multiple: false,
       defaultPath: defaultPath ?? undefined,
-      title: "选择 tosu.exe",
-      filters: [{ name: "tosu", extensions: ["exe"] }],
+      title: isWindows ? "选择 tosu.exe" : "选择 tosu 可执行文件",
+      ...(isWindows ? { filters: [{ name: "tosu", extensions: ["exe"] }] } : {}),
     });
     return typeof selected === "string" ? selected : null;
   },
@@ -542,3 +550,18 @@ export const desktopApi = {
     return listen<ObsStatus>("obs-status-changed", (event) => handler(event.payload));
   },
 };
+
+export const capabilitiesQueryKey = ["platform-capabilities"] as const;
+
+/**
+ * 平台能力（由后端 `get_capabilities` 用 `cfg` 一次性算好下发）。业务页面面向
+ * 能力判断，而非直接判断操作系统 —— 新增平台只改后端 `platform` 模块。
+ */
+export function useCapabilities() {
+  return useQuery({
+    queryKey: capabilitiesQueryKey,
+    queryFn: () => desktopApi.getCapabilities(),
+    staleTime: Infinity,
+    retry: false,
+  });
+}

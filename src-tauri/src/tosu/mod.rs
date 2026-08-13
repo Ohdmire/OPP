@@ -5,7 +5,11 @@ use std::path::PathBuf;
 
 use tauri::{AppHandle, Manager, State};
 
-use crate::{error::CommandResult, models::AppSettings, state::AppState};
+use crate::{
+    error::{CommandError, CommandResult},
+    models::AppSettings,
+    state::AppState,
+};
 
 pub use models::{TosuLogEntry, TosuStatus};
 pub use service::TosuRuntime;
@@ -26,12 +30,28 @@ async fn api_reachable(base: &str) -> bool {
 }
 
 fn current_status(state: &AppState, settings: &AppSettings, api_reachable: bool) -> TosuStatus {
-    let executable_path = settings.tosu_executable_path.clone();
+    let configured_valid = settings.tosu_executable_path.as_ref().is_some_and(|path| {
+        service::validate_executable(PathBuf::from(path).as_path()).is_ok()
+    });
+    // Linux：PATH 中能找到 tosu 即视为已安装（启动时经 pkexec/sudo 提权），
+    // 显示时也回退到 PATH 解析出的绝对路径。
+    #[cfg(not(windows))]
+    let (installed, executable_path) = {
+        let from_path = crate::platform::find_in_path("tosu")
+            .map(|path| path.display().to_string());
+        (
+            configured_valid || from_path.is_some(),
+            settings.tosu_executable_path.clone().or(from_path),
+        )
+    };
+    #[cfg(windows)]
+    let (installed, executable_path) = (
+        configured_valid,
+        settings.tosu_executable_path.clone(),
+    );
     let owned_by_opp = service::is_owned_running(&state.tosu);
     TosuStatus {
-        installed: executable_path.as_ref().is_some_and(|path| {
-            service::validate_executable(PathBuf::from(path).as_path()).is_ok()
-        }),
+        installed,
         executable_path,
         api_base_url: settings.tosu_api_base_url.clone(),
         api_reachable,
@@ -137,6 +157,10 @@ pub fn start_managed_tosu(state: &AppState, app: AppHandle) -> CommandResult<()>
 }
 
 #[tauri::command]
-pub fn stop_tosu(state: State<'_, AppState>, app: AppHandle) -> CommandResult<()> {
-    service::stop(&state.tosu, &app)
+pub async fn stop_tosu(state: State<'_, AppState>, app: AppHandle) -> CommandResult<()> {
+    // pkexec 认证会阻塞到用户在弹窗输入密码，放进 blocking 线程避免卡住 UI。
+    let runtime = state.tosu.clone();
+    tauri::async_runtime::spawn_blocking(move || service::stop(&runtime, &app))
+        .await
+        .map_err(|_| CommandError::new("TOSU_STOP_FAILED", "终止 tosu 的任务异常退出"))?
 }

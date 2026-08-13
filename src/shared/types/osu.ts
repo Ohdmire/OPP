@@ -5,6 +5,19 @@ export type Completeness = "complete" | "partial";
 export type CapabilityLevel = "full" | "partial" | "unavailable";
 export type BeatmapDownloadProvider = "hinai" | "catboy" | "nerinyan";
 
+export interface PlatformCapabilities {
+  os: "windows" | "linux";
+  display_gamma: boolean;
+  file_association: boolean;
+}
+
+export interface LazerDiskUsage {
+  path: string;
+  total_size: number;
+  unique_size: number;
+  file_count: number;
+}
+
 export interface Cached<T> {
   data: T;
   fetched_at: string;
