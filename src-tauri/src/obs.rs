@@ -1,4 +1,4 @@
-use std::{collections::HashSet, process::Command, sync::Mutex, time::Duration};
+use std::{collections::HashSet, sync::Mutex, time::Duration};
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use futures_util::{SinkExt, StreamExt};
@@ -74,11 +74,7 @@ fn process_running() -> bool {
     }
     #[cfg(not(windows))]
     {
-        Command::new("pgrep")
-            .args(["-x", "obs"])
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false)
+        crate::platform::obs_process_running()
     }
 }
 

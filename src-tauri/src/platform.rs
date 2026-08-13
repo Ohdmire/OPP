@@ -151,15 +151,8 @@ pub fn game_process_running(client: &str) -> bool {
     #[cfg(not(windows))]
     {
         match client {
-            "stable" => any_process(|comm, cmdline| {
-                comm.ends_with("osu!.exe") || cmdline.contains("osu!.exe")
-            }),
-            "lazer" => any_process(|comm, cmdline| {
-                comm == "osu!"
-                    || comm == "osu-lazer"
-                    || cmdline.contains("osu-lazer")
-                    || cmdline.contains("osu.appimage")
-            }),
+            "stable" => any_process(|comm| comm.ends_with("osu!.exe")),
+            "lazer" => any_process(|comm| comm == "osu!" || comm == "osu-lazer"),
             _ => false,
         }
     }
@@ -170,49 +163,139 @@ pub fn game_process_running(client: &str) -> bool {
     }
 }
 
-/// 遍历 `/proc` 下的进程，`comm` 与 `cmdline`（NUL 替换为空格、统一小写）任一
+/// 判断 OBS Studio 是否正在运行
+pub fn obs_process_running() -> bool {
+    #[cfg(not(windows))]
+    {
+        any_process(|comm| comm == "obs")
+    }
+    #[cfg(windows)]
+    {
+        false
+    }
+}
+
+/// 遍历 `/proc` 的进程名（comm，统一小写），命中即返回 `true`。
 #[cfg(not(windows))]
-fn any_process(predicate: impl Fn(&str, &str) -> bool) -> bool {
+fn any_process(predicate: impl Fn(&str) -> bool) -> bool {
     let Ok(entries) = fs::read_dir("/proc") else {
         return false;
     };
     for entry in entries.flatten() {
-        let name = entry.file_name();
-        let Some(name) = name.to_str() else { continue };
-        if !name.bytes().all(|byte| byte.is_ascii_digit()) {
+        if entry
+            .file_name()
+            .to_str()
+            .and_then(|value| value.parse::<u32>().ok())
+            .is_none()
+        {
             continue;
         }
-        let root = entry.path();
-        if is_zombie(&root) {
-            continue;
-        }
-        let comm = fs::read_to_string(root.join("comm"))
-            .unwrap_or_default()
-            .trim_end_matches('\n')
-            .to_ascii_lowercase();
-        let cmdline = fs::read(root.join("cmdline"))
-            .map(|bytes| {
-                String::from_utf8_lossy(&bytes)
-                    .replace('\0', " ")
-                    .to_ascii_lowercase()
-            })
-            .unwrap_or_default();
-        if predicate(&comm, &cmdline) {
+        let comm = fs::read_to_string(entry.path().join("comm")).unwrap_or_default();
+        if predicate(&comm.trim().to_ascii_lowercase()) {
             return true;
         }
     }
     false
 }
 
+/// tosu 停止标志文件。pkexec 启动的 root 看门狗脚本轮询它：OPP 创建该文件
+/// 即视为停止指令（无需再次认证）；位于 `XDG_RUNTIME_DIR`（用户可写、root 可读）。
 #[cfg(not(windows))]
-fn is_zombie(process_root: &Path) -> bool {
-    let Ok(stat) = fs::read_to_string(process_root.join("stat")) else {
-        return false;
+pub fn tosu_stop_flag() -> PathBuf {
+    env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .join("opp-tosu-stop")
+}
+
+/// 在用户 PATH 中查找命令（仅类 Unix；Windows 返回 `None`）。
+pub fn find_in_path(command: &str) -> Option<PathBuf> {
+    #[cfg(not(windows))]
+    {
+        let path = env::var_os("PATH")?;
+        env::split_paths(&path)
+            .map(|dir| dir.join(command))
+            .find(|candidate| candidate.is_file())
+    }
+    #[cfg(windows)]
+    {
+        let _ = command;
+        None
+    }
+}
+
+/// 按进程名（comm）精确匹配判断是否运行中（Windows 返回 `false`）。
+pub fn unix_process_running(name: &str) -> bool {
+    #[cfg(not(windows))]
+    {
+        !unix_process_ids(name).is_empty()
+    }
+    #[cfg(windows)]
+    {
+        let _ = name;
+        false
+    }
+}
+
+/// tosu 的 PID 列表。tosu（Node 运行时）启动后会把进程名改为 `MainThread`
+/// （内核截断后可能是 `node-MainThread`），因此按 comm 为 `tosu`，或 comm 含
+/// `mainthread` 且 cmdline 含 `tosu` 识别（后者排除同样带 tosu 字样的看门狗 bash）。
+#[cfg(not(windows))]
+pub fn tosu_process_ids() -> Vec<u32> {
+    let mut pids = Vec::new();
+    let Ok(entries) = fs::read_dir("/proc") else {
+        return pids;
     };
-    stat.rsplit(')')
-        .next()
-        .and_then(|rest| rest.trim_start().chars().next())
-        .is_some_and(|state| state == 'Z')
+    for entry in entries.flatten() {
+        let Some(pid) = entry
+            .file_name()
+            .to_str()
+            .and_then(|value| value.parse::<u32>().ok())
+        else {
+            continue;
+        };
+        let comm = fs::read_to_string(entry.path().join("comm"))
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase();
+        let matched = comm == "tosu"
+            || (comm.contains("mainthread")
+                && fs::read(entry.path().join("cmdline"))
+                    .map(|bytes| {
+                        String::from_utf8_lossy(&bytes)
+                            .to_ascii_lowercase()
+                            .contains("tosu")
+                    })
+                    .unwrap_or(false));
+        if matched {
+            pids.push(pid);
+        }
+    }
+    pids
+}
+
+/// 找出进程名（comm）等于 `name` 的 PID，name 为空时返回空。用于检测运行状态
+#[cfg(not(windows))]
+pub fn unix_process_ids(name: &str) -> Vec<u32> {
+    let name = name.to_ascii_lowercase();
+    let mut pids = Vec::new();
+    let Ok(entries) = fs::read_dir("/proc") else {
+        return pids;
+    };
+    for entry in entries.flatten() {
+        let Some(pid) = entry
+            .file_name()
+            .to_str()
+            .and_then(|value| value.parse::<u32>().ok())
+        else {
+            continue;
+        };
+        let comm = fs::read_to_string(entry.path().join("comm")).unwrap_or_default();
+        if comm.trim().eq_ignore_ascii_case(&name) {
+            pids.push(pid);
+        }
+    }
+    pids
 }
 
 #[derive(Debug, Clone, Serialize)]

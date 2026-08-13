@@ -82,17 +82,26 @@ pub fn lyrics_executable_path(settings: &AppSettings) -> CommandResult<PathBuf> 
 }
 
 pub fn validate_executable(path: &Path) -> CommandResult<PathBuf> {
-    let path = path
-        .canonicalize()
-        .map_err(|_| CommandError::new("TOSU_EXECUTABLE_NOT_FOUND", "未找到所选的 tosu.exe"))?;
+    let path = path.canonicalize().map_err(|_| {
+        CommandError::new("TOSU_EXECUTABLE_NOT_FOUND", "未找到所选的 tosu 可执行文件")
+    })?;
     let valid_name = path
         .file_name()
         .and_then(|name| name.to_str())
-        .is_some_and(|name| name.eq_ignore_ascii_case("tosu.exe"));
+        .is_some_and(|name| {
+            #[cfg(windows)]
+            {
+                name.eq_ignore_ascii_case("tosu.exe")
+            }
+            #[cfg(not(windows))]
+            {
+                name.eq_ignore_ascii_case("tosu")
+            }
+        });
     if !path.is_file() || !valid_name {
         return Err(CommandError::new(
             "INVALID_TOSU_EXECUTABLE",
-            "请选择官方发行包中的 tosu.exe",
+            "请选择官方发行包中的 tosu 可执行文件",
         ));
     }
     Ok(path)
@@ -219,7 +228,14 @@ fn is_process_running(process: &Mutex<Option<Child>>) -> bool {
 }
 
 pub fn process_running() -> bool {
-    named_process_running("tosu.exe", "tosu")
+    #[cfg(windows)]
+    {
+        named_process_running("tosu.exe", "tosu")
+    }
+    #[cfg(not(windows))]
+    {
+        !crate::platform::tosu_process_ids().is_empty()
+    }
 }
 
 pub fn lyrics_process_running() -> bool {
@@ -243,12 +259,65 @@ fn named_process_running(windows_name: &str, unix_name: &str) -> bool {
     }
     #[cfg(not(windows))]
     {
-        Command::new("pgrep")
-            .args(["-x", unix_name])
-            .output()
-            .map(|output| output.status.success())
-            .unwrap_or(false)
+        crate::platform::unix_process_running(unix_name)
     }
+}
+
+/// 把路径安全地嵌入 bash 脚本（单引号包裹，内部单引号转义）。
+#[cfg(not(windows))]
+fn shell_word(path: &Path) -> String {
+    format!("'{}'", path.display().to_string().replace('\'', r"'\''"))
+}
+
+/// 以提权方式运行 tosu（Linux 下读取 wine 进程内存需要 root）。
+///
+/// 经 `pkexec`（PolicyKit）图形弹窗输密码，后台以 root 看门狗脚本运行：脚本
+/// 轮询停止标志文件（OPP 创建即停止，无需二次认证）和 OPP 的 PID（OPP 退出
+/// 或崩溃则自动终止 tosu）。
+#[cfg(not(windows))]
+fn spawn_elevated_tosu(
+    runtime: &TosuRuntime,
+    app: &AppHandle,
+    executable: &Path,
+) -> CommandResult<()> {
+    if crate::platform::find_in_path("pkexec").is_none() {
+        return Err(CommandError::new(
+            "PKEXEC_NOT_FOUND",
+            "未找到 pkexec（PolicyKit），无法提权启动 tosu",
+        ));
+    }
+    let flag = crate::platform::tosu_stop_flag();
+    let _ = std::fs::remove_file(&flag);
+    // 看门狗：tosu 死了就退出；停止标志出现或 OPP 不在了就杀 tosu
+    // （先 TERM，1 秒后仍存活则 KILL）。
+    let script = format!(
+        "F={flag}; rm -f \"$F\"; '{exe}' & P=$!; while kill -0 \"$P\" 2>/dev/null; do \
+         if [ -e \"$F\" ] || ! kill -0 {opp} 2>/dev/null; then \
+         kill \"$P\" 2>/dev/null; sleep 1; kill -9 \"$P\" 2>/dev/null; break; fi; sleep 1; done; \
+         rm -f \"$F\"; wait \"$P\" 2>/dev/null",
+        flag = shell_word(&flag),
+        exe = executable.display().to_string(),
+        opp = std::process::id(),
+    );
+    let mut child = Command::new("pkexec")
+        .args(["bash", "-c", &script])
+        .spawn()
+        .map_err(|error| {
+            CommandError::new(
+                "TOSU_START_FAILED",
+                format!("无法通过 pkexec 启动 tosu：{error}"),
+            )
+        })?;
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    record(
+        runtime,
+        app,
+        "system",
+        "已通过 pkexec 提权启动 tosu，请在系统弹窗中输入密码。tosu 由看门狗托管：OPP 退出时自动停止，也可在页面直接终止。",
+    );
+    Ok(())
 }
 
 fn start_lyrics_if_configured(runtime: Arc<TosuRuntime>, settings: &AppSettings, app: AppHandle) {
@@ -329,32 +398,51 @@ pub fn start(
         ensure_live_connection(runtime, settings.tosu_api_base_url.clone(), app);
         return Ok(());
     }
-    let executable = executable_path(settings)?;
-    let mut command = Command::new(&executable);
-    command
-        .current_dir(executable.parent().unwrap_or(Path::new(".")))
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    // Linux 下 tosu 需要读取 wine 进程内存（root），经 pkexec 图形授权提权启动：
+    // 优先使用 PATH 中的 tosu，其次使用用户配置的路径
+    #[cfg(not(windows))]
+    {
+        let candidate =
+            crate::platform::find_in_path("tosu").or_else(|| executable_path(settings).ok());
+        let Some(executable) = candidate else {
+            return Err(CommandError::new(
+                "TOSU_NOT_IN_PATH",
+                "未在 PATH 中找到 tosu，且未配置有效的 tosu 路径",
+            ));
+        };
+        spawn_elevated_tosu(&runtime, &app, &executable)?;
+        start_lyrics_if_configured(runtime.clone(), settings, app.clone());
+        ensure_live_connection(runtime, settings.tosu_api_base_url.clone(), app);
+        return Ok(());
+    }
     #[cfg(windows)]
-    command.creation_flags(CREATE_NO_WINDOW);
-    let mut child = command.spawn().map_err(|error| {
-        CommandError::new("TOSU_START_FAILED", format!("无法启动 tosu：{error}"))
-    })?;
-    if let Some(stdout) = child.stdout.take() {
-        read_output(stdout, "stdout", runtime.clone(), app.clone());
+    {
+        let executable = executable_path(settings)?;
+        let mut command = Command::new(&executable);
+        command
+            .current_dir(executable.parent().unwrap_or(Path::new(".")))
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        command.creation_flags(CREATE_NO_WINDOW);
+        let mut child = command.spawn().map_err(|error| {
+            CommandError::new("TOSU_START_FAILED", format!("无法启动 tosu：{error}"))
+        })?;
+        if let Some(stdout) = child.stdout.take() {
+            read_output(stdout, "stdout", runtime.clone(), app.clone());
+        }
+        if let Some(stderr) = child.stderr.take() {
+            read_output(stderr, "stderr", runtime.clone(), app.clone());
+        }
+        *runtime
+            .tosu_process
+            .lock()
+            .map_err(|_| CommandError::new("TOSU_PROCESS_LOCKED", "tosu 进程状态不可用"))? =
+            Some(child);
+        record(&runtime, &app, "system", "tosu 已由 OPP 在后台启动。");
+        start_lyrics_if_configured(runtime.clone(), settings, app.clone());
+        ensure_live_connection(runtime, settings.tosu_api_base_url.clone(), app);
+        Ok(())
     }
-    if let Some(stderr) = child.stderr.take() {
-        read_output(stderr, "stderr", runtime.clone(), app.clone());
-    }
-    *runtime
-        .tosu_process
-        .lock()
-        .map_err(|_| CommandError::new("TOSU_PROCESS_LOCKED", "tosu 进程状态不可用"))? =
-        Some(child);
-    record(&runtime, &app, "system", "tosu 已由 OPP 在后台启动。");
-    start_lyrics_if_configured(runtime.clone(), settings, app.clone());
-    ensure_live_connection(runtime, settings.tosu_api_base_url.clone(), app);
-    Ok(())
 }
 
 pub fn stop(runtime: &TosuRuntime, app: &AppHandle) -> CommandResult<()> {
@@ -363,11 +451,22 @@ pub fn stop(runtime: &TosuRuntime, app: &AppHandle) -> CommandResult<()> {
         .lock()
         .map_err(|_| CommandError::new("TOSU_PROCESS_LOCKED", "tosu 进程状态不可用"))?;
     let Some(mut child) = guard.take() else {
-        return Err(CommandError::new(
-            "TOSU_NOT_OWNED",
-            "OPP 只能停止由自身启动的 tosu",
-        ));
+        drop(guard);
+        // Linux 上经 pkexec 提权启动的 tosu 不归 OPP 管理，需再次提权终止。
+        #[cfg(not(windows))]
+        {
+            return stop_external_tosu(runtime, app);
+        }
+        #[cfg(windows)]
+        {
+            let _ = app;
+            return Err(CommandError::new(
+                "TOSU_NOT_OWNED",
+                "OPP 只能停止由自身启动的 tosu",
+            ));
+        }
     };
+    drop(guard);
     let _ = child.kill();
     let _ = child.wait();
     if let Ok(mut lyrics) = runtime.lyrics_process.lock()
@@ -383,6 +482,71 @@ pub fn stop(runtime: &TosuRuntime, app: &AppHandle) -> CommandResult<()> {
         );
     }
     record(runtime, app, "system", "已停止由 OPP 启动的 tosu。");
+    Ok(())
+}
+
+/// 终止外部（提权）运行的 tosu。优先写停止标志——pkexec 看门狗脚本 1 秒内
+/// 轮询到即杀 tosu，无需再次认证；超时（非看门狗托管或脚本失效）才回退
+/// `pkexec kill` 图形授权。
+#[cfg(not(windows))]
+fn stop_external_tosu(runtime: &TosuRuntime, app: &AppHandle) -> CommandResult<()> {
+    let pids = crate::platform::tosu_process_ids();
+    if pids.is_empty() {
+        return Err(CommandError::new(
+            "TOSU_NOT_RUNNING",
+            "未检测到正在运行的 tosu",
+        ));
+    }
+    let flag = crate::platform::tosu_stop_flag();
+    if std::fs::write(&flag, b"").is_ok() {
+        for _ in 0..40 {
+            if crate::platform::tosu_process_ids().is_empty() {
+                record(
+                    runtime,
+                    app,
+                    "system",
+                    "已通过停止标志终止 tosu（无需再次认证）。",
+                );
+                return Ok(());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        let _ = std::fs::remove_file(&flag);
+    }
+    let pid_args = pids.iter().map(u32::to_string).collect::<Vec<_>>();
+    if crate::platform::find_in_path("pkexec").is_none() {
+        return Err(CommandError::new(
+            "PKEXEC_NOT_FOUND",
+            "未找到 pkexec（PolicyKit），无法提权终止 tosu",
+        ));
+    }
+    // pkexec 用绝对路径更稳；pkexec 会弹图形授权框，等待期间不阻塞 UI
+    // （stop_tosu 命令在 blocking 线程中调用此处）。
+    let kill = crate::platform::find_in_path("kill")
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|| "kill".into());
+    let output = Command::new("pkexec")
+        .arg(&kill)
+        .args(&pid_args)
+        .output()
+        .map_err(|error| {
+            CommandError::new("TOSU_STOP_FAILED", format!("无法执行 pkexec kill：{error}"))
+        })?;
+    if !output.status.success() {
+        return Err(CommandError::new(
+            "TOSU_STOP_FAILED",
+            format!(
+                "终止 tosu 失败：{}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            ),
+        ));
+    }
+    record(
+        runtime,
+        app,
+        "system",
+        format!("已终止外部运行的 tosu（PID：{}）。", pid_args.join("、")),
+    );
     Ok(())
 }
 

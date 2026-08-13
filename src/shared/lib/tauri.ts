@@ -410,11 +410,12 @@ export const desktopApi = {
   },
   chooseTosuExecutable: async (defaultPath?: string | null) => {
     if (!isTauri()) throw { code: "TAURI_REQUIRED", message: "文件选择器仅可在 OPP 桌面应用中使用" } satisfies CommandError;
+    const isWindows = navigator.userAgent.includes("Windows");
     const selected = await openDialog({
       multiple: false,
       defaultPath: defaultPath ?? undefined,
-      title: "选择 tosu.exe",
-      filters: [{ name: "tosu", extensions: ["exe"] }],
+      title: isWindows ? "选择 tosu.exe" : "选择 tosu 可执行文件",
+      ...(isWindows ? { filters: [{ name: "tosu", extensions: ["exe"] }] } : {}),
     });
     return typeof selected === "string" ? selected : null;
   },
