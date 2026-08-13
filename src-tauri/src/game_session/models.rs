@@ -12,14 +12,10 @@ pub struct UserSnapshot {
     pub captured_at: DateTime<Utc>,
     pub username: String,
     pub pp: Option<f64>,
-    pub global_rank: Option<u64>,
+    pub ranked_score: Option<u64>,
     pub hit_accuracy: Option<f64>,
-    pub play_count: Option<u64>,
-    pub play_time: Option<u64>,
     pub total_hits: Option<u64>,
-    pub maximum_combo: Option<u64>,
-    pub best_pp: Option<f64>,
-    pub best_count: usize,
+    pub total_score: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

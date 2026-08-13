@@ -23,7 +23,7 @@ use crate::{
     account::ensure_access_token,
     error::{CommandError, CommandResult},
     local_analysis::LocalClient,
-    models::{Ruleset, Score},
+    models::Ruleset,
     state::AppState,
     tosu::start_managed_tosu,
 };
@@ -54,23 +54,14 @@ async fn snapshot(state: &AppState, ruleset: Ruleset) -> CommandResult<UserSnaps
         .statistics
         .as_ref()
         .unwrap_or(&serde_json::Value::Null);
-    let scores: Vec<Score> = state
-        .api
-        .get_best_scores(&token, profile.id, ruleset)
-        .await
-        .unwrap_or_default();
     Ok(UserSnapshot {
         captured_at: Utc::now(),
         username: profile.username,
         pp: decimal(stats, "pp"),
-        global_rank: number(stats, "global_rank"),
+        ranked_score: number(stats, "ranked_score"),
         hit_accuracy: decimal(stats, "hit_accuracy"),
-        play_count: number(stats, "play_count"),
-        play_time: number(stats, "play_time"),
         total_hits: number(stats, "total_hits"),
-        maximum_combo: number(stats, "maximum_combo"),
-        best_pp: scores.iter().filter_map(|s| s.pp).reduce(f64::max),
-        best_count: scores.len(),
+        total_score: number(stats, "total_score"),
     })
 }
 

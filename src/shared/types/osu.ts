@@ -316,14 +316,10 @@ export interface UserSnapshot {
   captured_at: string;
   username: string;
   pp: number | null;
-  global_rank: number | null;
+  ranked_score: number | null;
   hit_accuracy: number | null;
-  play_count: number | null;
-  play_time: number | null;
   total_hits: number | null;
-  maximum_combo: number | null;
-  best_pp: number | null;
-  best_count: number;
+  total_score: number | null;
 }
 
 export interface GameSessionSummary {
