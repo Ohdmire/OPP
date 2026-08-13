@@ -94,17 +94,18 @@ fn running_executables() -> Vec<PathBuf> {
     }
     #[cfg(not(windows))]
     {
-        Command::new("pgrep")
-            .args(["-a", "-x", "osu!"])
-            .output()
-            .map(|output| {
-                String::from_utf8_lossy(&output.stdout)
-                    .lines()
-                    .filter_map(|line| line.split_whitespace().nth(1))
-                    .map(PathBuf::from)
-                    .collect()
-            })
-            .unwrap_or_default()
+        let mut running = Vec::new();
+        for name in crate::platform::game_commands() {
+            let is_running = Command::new("pgrep")
+                .args(["-x", name])
+                .output()
+                .map(|output| output.status.success())
+                .unwrap_or(false);
+            if is_running {
+                running.push(PathBuf::from(*name));
+            }
+        }
+        running
     }
 }
 
@@ -118,32 +119,47 @@ fn executable_running(executable: &Path, running: &[PathBuf]) -> bool {
 }
 
 pub(crate) fn executable(client: LocalClient, root: &str) -> Option<PathBuf> {
-    let root = Path::new(root);
-    let names = if client == LocalClient::Lazer {
-        vec![root.join("current").join("osu!.exe"), root.join("osu!.exe")]
-    } else {
-        vec![
-            root.join("osu!.exe"),
-            root.join("osu!.app/Contents/MacOS/osu!"),
-            root.join("osu!"),
-        ]
-    };
-    names.into_iter().find(|path| path.is_file())
+    #[cfg(not(windows))]
+    {
+        let _ = root;
+        crate::platform::game_command(&client.to_string()).map(PathBuf::from)
+    }
+    #[cfg(windows)]
+    {
+        let root = Path::new(root);
+        let names = if client == LocalClient::Lazer {
+            vec![root.join("current").join("osu!.exe"), root.join("osu!.exe")]
+        } else {
+            vec![root.join("osu!.exe")]
+        };
+        names.into_iter().find(|path| path.is_file())
+    }
 }
 
 fn scan_game_status(
     local_analysis: &crate::local_analysis::LocalAnalysisService,
 ) -> GameStatusSnapshot {
+    #[cfg(not(windows))]
+    let _ = local_analysis;
     let running = running_executables();
     let detected_at = Utc::now();
     let clients = [LocalClient::Stable, LocalClient::Lazer]
         .into_iter()
         .map(|client| {
-            let executable = local_analysis
-                .source_status(client)
-                .ok()
-                .and_then(|source| source.install_root)
-                .and_then(|root| executable(client, &root));
+            let executable = {
+                #[cfg(windows)]
+                {
+                    local_analysis
+                        .source_status(client)
+                        .ok()
+                        .and_then(|source| source.install_root)
+                        .and_then(|root| executable(client, &root))
+                }
+                #[cfg(not(windows))]
+                {
+                    executable(client, "")
+                }
+            };
             GameClientStatus {
                 client,
                 running: executable
@@ -230,6 +246,39 @@ pub fn get_game_status(state: State<'_, AppState>) -> CommandResult<GameStatusSn
         .map_err(|_| CommandError::new("GAME_STATUS_LOCKED", "游戏状态不可用"))
 }
 
+struct LaunchTarget {
+    exe: PathBuf,
+    working_dir: Option<PathBuf>,
+}
+
+/// 解析要启动/识别的客户端可执行文件。Windows 用安装目录内的 exe（并记录工作目录）；
+/// Linux 用系统命令名（`osu-wine` / `osu-lazer`），无需安装目录。
+fn game_launch_target(client: LocalClient, state: &AppState) -> CommandResult<LaunchTarget> {
+    #[cfg(windows)]
+    {
+        let source = state.local_analysis.source_status(client)?;
+        let root = source
+            .install_root
+            .ok_or_else(|| CommandError::new("GAME_NOT_FOUND", format!("未找到 osu! {client} 安装目录")))?;
+        let exe = executable(client, &root)
+            .ok_or_else(|| CommandError::new("GAME_NOT_FOUND", "安装目录中未找到 osu! 可执行文件"))?;
+        Ok(LaunchTarget {
+            exe,
+            working_dir: Some(PathBuf::from(root)),
+        })
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = state;
+        let exe = executable(client, "")
+            .ok_or_else(|| CommandError::new("GAME_NOT_FOUND", format!("未找到 osu! {client} 启动命令")))?;
+        Ok(LaunchTarget {
+            exe,
+            working_dir: None,
+        })
+    }
+}
+
 #[tauri::command]
 pub async fn start_game_session(
     ruleset: Ruleset,
@@ -238,21 +287,18 @@ pub async fn start_game_session(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> CommandResult<GameSessionSummary> {
-    let source = state.local_analysis.source_status(client)?;
-    let root = source.install_root.ok_or_else(|| {
-        CommandError::new("GAME_NOT_FOUND", format!("未找到 osu! {client} 安装目录"))
-    })?;
-    let exe = executable(client, &root)
-        .ok_or_else(|| CommandError::new("GAME_NOT_FOUND", "安装目录中未找到 osu! 可执行文件"))?;
-    if executable_running(&exe, &running_executables()) {
+    let target = game_launch_target(client, &state)?;
+    if executable_running(&target.exe, &running_executables()) {
         return Err(CommandError::new("GAME_ALREADY_RUNNING", "osu! 已经在运行"));
     }
     if launch_tosu.unwrap_or(false) {
         start_managed_tosu(&state, app)?;
     }
     let start = snapshot(&state, ruleset).await?;
-    let mut launch = Command::new(&exe);
-    launch.current_dir(&root);
+    let mut launch = Command::new(&target.exe);
+    if let Some(dir) = &target.working_dir {
+        launch.current_dir(dir);
+    }
     #[cfg(windows)]
     launch.creation_flags(CREATE_NO_WINDOW);
     launch
@@ -263,7 +309,7 @@ pub async fn start_game_session(
         ended_at: None,
         ruleset,
         client: client.to_string(),
-        executable: exe.display().to_string(),
+        executable: target.exe.display().to_string(),
         start,
         end: None,
         running: true,
@@ -286,12 +332,7 @@ pub async fn start_detected_game_session(
     client: LocalClient,
     state: State<'_, AppState>,
 ) -> CommandResult<GameSessionSummary> {
-    let source = state.local_analysis.source_status(client)?;
-    let root = source.install_root.ok_or_else(|| {
-        CommandError::new("GAME_NOT_FOUND", format!("未找到 osu! {client} 安装目录"))
-    })?;
-    let exe = executable(client, &root)
-        .ok_or_else(|| CommandError::new("GAME_NOT_FOUND", "安装目录中未找到 osu! 可执行文件"))?;
+    let exe = game_launch_target(client, &state)?.exe;
     if !executable_running(&exe, &running_executables()) {
         return Err(CommandError::new(
             "GAME_NOT_RUNNING",

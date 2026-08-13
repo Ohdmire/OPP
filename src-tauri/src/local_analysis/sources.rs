@@ -1,5 +1,5 @@
 use std::{
-    env, fs,
+    fs,
     path::{Path, PathBuf},
     sync::Mutex,
     time::SystemTime,
@@ -186,9 +186,11 @@ fn resolve_stable(configured_path: Option<&Path>) -> ResolvedSource {
     } else {
         SourceMode::Auto
     };
-    let detected = configured_path
-        .map(Path::to_path_buf)
-        .or_else(detect_stable_install);
+    let detected = configured_path.map(Path::to_path_buf).or_else(|| {
+        crate::platform::stable_install_candidates()
+            .into_iter()
+            .find(|path| path.exists())
+    });
     let configured_path = configured_path.map(display_path);
     let mut errors = Vec::new();
 
@@ -260,8 +262,10 @@ fn resolve_lazer(configured_path: Option<&Path>) -> ResolvedSource {
     } else {
         SourceMode::Auto
     };
-    let registry_install = detect_lazer_install();
-    let default_data = roaming_osu_root();
+    let registry_install = crate::platform::lazer_install_candidates()
+        .into_iter()
+        .find(|path| looks_like_lazer_install(path));
+    let default_data = crate::platform::lazer_data_root();
     let configured_path_string = configured_path.map(display_path);
 
     let (install_root, data_candidate) = match configured_path {
@@ -374,12 +378,6 @@ fn looks_like_lazer_install(path: &Path) -> bool {
             || path.join("current").join("sq.version").is_file())
 }
 
-fn roaming_osu_root() -> Option<PathBuf> {
-    env::var_os("APPDATA")
-        .map(PathBuf::from)
-        .map(|path| path.join("osu"))
-}
-
 fn read_lazer_version(root: &Path) -> Option<String> {
     let text = fs::read_to_string(root.join("current").join("sq.version")).ok()?;
     let (_, after) = text.split_once("<version>")?;
@@ -398,106 +396,9 @@ fn display_path(path: &Path) -> String {
     }
 }
 
-fn detect_stable_install() -> Option<PathBuf> {
-    registry_install(|name| name.eq_ignore_ascii_case("osu!"))
-        .or_else(|| {
-            env::var_os("LOCALAPPDATA")
-                .map(PathBuf::from)
-                .map(|path| path.join("osu!"))
-        })
-        .filter(|path| path.exists())
-}
-
-fn detect_lazer_install() -> Option<PathBuf> {
-    let registry = registry_install(|name| {
-        let name = name.to_ascii_lowercase();
-        name.contains("osu!") && (name.contains("lazer") || name == "osu!")
-    })
-    .filter(|path| looks_like_lazer_install(path));
-    let mut local_candidates = env::var_os("LOCALAPPDATA")
-        .map(PathBuf::from)
-        .into_iter()
-        .flat_map(|root| [root.join("osu"), root.join("osu!"), root.join("osulazer")]);
-    registry.or_else(|| local_candidates.find(|path| looks_like_lazer_install(path)))
-}
-
-#[cfg(windows)]
-fn registry_install(matches_name: impl Fn(&str) -> bool) -> Option<PathBuf> {
-    use winreg::{
-        RegKey,
-        enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE},
-    };
-
-    const KEYS: [&str; 2] = [
-        r"Software\Microsoft\Windows\CurrentVersion\Uninstall",
-        r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
-    ];
-
-    for hive in [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE] {
-        let hive = RegKey::predef(hive);
-        for key_name in KEYS {
-            let Ok(uninstall) = hive.open_subkey(key_name) else {
-                continue;
-            };
-            for subkey_name in uninstall.enum_keys().flatten() {
-                let Ok(subkey) = uninstall.open_subkey(subkey_name) else {
-                    continue;
-                };
-                let Ok(display_name) = subkey.get_value::<String, _>("DisplayName") else {
-                    continue;
-                };
-                if !matches_name(&display_name) {
-                    continue;
-                }
-                if let Ok(path) = subkey.get_value::<String, _>("InstallLocation")
-                    && !path.trim().is_empty()
-                {
-                    return Some(PathBuf::from(path.trim().trim_matches('"')));
-                }
-                if let Ok(command) = subkey.get_value::<String, _>("UninstallString")
-                    && let Some(path) = executable_parent(&command)
-                {
-                    return Some(path);
-                }
-            }
-        }
-    }
-    None
-}
-
-#[cfg(not(windows))]
-fn registry_install(_matches_name: impl Fn(&str) -> bool) -> Option<PathBuf> {
-    None
-}
-
-fn executable_parent(command: &str) -> Option<PathBuf> {
-    let command = command.trim();
-    let executable = if let Some(rest) = command.strip_prefix('"') {
-        let end = rest.find('"')?;
-        &rest[..end]
-    } else {
-        let lowercase = command.to_ascii_lowercase();
-        let end = lowercase.find(".exe")? + 4;
-        &command[..end]
-    };
-    Path::new(executable.trim()).parent().map(Path::to_path_buf)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn parses_quoted_and_unquoted_uninstall_commands() {
-        assert_eq!(
-            executable_parent(r#""D:\Games\osu!\osu!.exe" -uninstall"#),
-            Some(PathBuf::from(r"D:\Games\osu!"))
-        );
-        assert_eq!(
-            executable_parent(r"D:\osu!\osu!.exe -uninstall"),
-            Some(PathBuf::from(r"D:\osu!"))
-        );
-    }
 
     #[test]
     fn resolves_relative_and_absolute_beatmap_directories() {

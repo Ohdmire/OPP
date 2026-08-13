@@ -292,14 +292,7 @@ pub fn update_settings(
 }
 
 fn default_download_directory() -> Option<String> {
-    std::env::var_os("USERPROFILE")
-        .or_else(|| std::env::var_os("HOME"))
-        .map(|home| {
-            std::path::PathBuf::from(home)
-                .join("Downloads")
-                .display()
-                .to_string()
-        })
+    crate::platform::default_download_dir().map(|path| path.display().to_string())
 }
 
 #[tauri::command]

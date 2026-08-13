@@ -8,6 +8,7 @@ mod netease_music;
 mod obs;
 mod online_beatmaps;
 mod osu_api;
+mod platform;
 mod pp_calc;
 mod replay_render;
 mod similarity;
@@ -52,6 +53,7 @@ use online_beatmaps::{
     get_online_beatmap, get_online_beatmap_provider_status, get_online_beatmapset,
     open_downloaded_path, search_online_beatmapsets,
 };
+use platform::get_capabilities;
 use pp_calc::calculate_beatmap_pp;
 use replay_render::submit_replay_render;
 use similarity::{
@@ -65,8 +67,8 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 use tools::{
-    convert_mania_beatmaps, get_default_file_clients, open_local_resource_in_explorer,
-    set_default_file_client, set_display_gamma,
+    convert_mania_beatmaps, get_default_file_clients, get_lazer_disk_usage,
+    open_local_resource_in_explorer, set_default_file_client, set_display_gamma,
 };
 use tosu::{
     get_tosu_logs, get_tosu_status, set_tosu_executable, set_tosu_lyrics_executable, start_tosu,
@@ -138,6 +140,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_auth_status,
+            get_capabilities,
             list_collections,
             get_collection_sync_status,
             refresh_collections,
@@ -211,6 +214,7 @@ pub fn run() {
             get_default_file_clients,
             set_default_file_client,
             set_display_gamma,
+            get_lazer_disk_usage,
             open_netease_music_search,
             convert_mania_beatmaps,
             generate_trainer_beatmap,
