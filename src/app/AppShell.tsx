@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowUp, CheckCircle2, ChevronDown, ChevronUp, FolderOpen, Loader2, Play, X } from "lucide-react";
+import { AlertTriangle, ArrowUp, CheckCircle2, ChevronDown, ChevronUp, FolderOpen, Loader2, Play, Settings2, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Outlet, useLocation } from "react-router-dom";
-import type { AppSettings, BeatmapDownloadProgress, CollectionTaskProgress, CommandError, Ruleset } from "../shared/types/osu";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import type { AppSettings, BeatmapDownloadProgress, CollectionTaskProgress, CommandError, NewReplaysDetected, Ruleset } from "../shared/types/osu";
 import { authQueryKey } from "../features/auth/api";
 import { useOwnProfile } from "../features/profile/api";
 import { useMode } from "./ModeContext";
@@ -26,6 +26,7 @@ import {
   type PageGuide,
 } from "../features/onboarding/pageTourContent";
 import { START_ONBOARDING_EVENT, START_PAGE_ONBOARDING_EVENT } from "../shared/lib/onboardingEvents";
+import { UpdateCenter } from "../features/updates/UpdateCenter";
 
 const validRulesets: Ruleset[] = ["osu", "taiko", "fruits", "mania"];
 
@@ -231,11 +232,29 @@ function DownloadCompletedPlaylist() {
   </>;
 }
 
-function GameCompletionOverlay({ session, onClose }: { session: GameSessionSummary; onClose: () => void }) {
-  const end = session.end;
-  if (!end) return null;
+export function GameCompletionOverlay({ session, discovery, settings, onClose, onNavigate }: { session: GameSessionSummary | null; discovery: NewReplaysDetected | null; settings: AppSettings | undefined; onClose: () => void; onNavigate: (path: string) => void }) {
+  const [selected, setSelected] = useState<string[]>(() => settings?.auto_export_new_replays_with_danser
+    ? discovery?.replays.filter((item) => item.renderable).map((item) => item.path) ?? []
+    : []);
+  const [danserReady, setDanserReady] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [renderError, setRenderError] = useState<string | null>(null);
+  const end = session?.end;
+  useEffect(() => { void desktopApi.getDanserStatus().then((status) => setDanserReady(status.available && status.ffmpeg_available)).catch(() => setDanserReady(false)); }, []);
+  if (!end && !discovery) return null;
+  const renderablePaths = discovery?.replays.filter((item) => item.renderable).map((item) => item.path) ?? [];
   const change = (before: number | null, after: number | null) => before === null || after === null ? "—" : `${after - before >= 0 ? "+" : ""}${(after - before).toFixed(2)}`;
-  return <div className="fixed inset-0 z-[100] grid place-items-center bg-black/65 p-6 backdrop-blur-sm"><Card className="w-full max-w-xl p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><Badge tone="success">游戏已结束</Badge><h2 className="mt-3 text-2xl font-semibold text-white">本次游戏总结</h2><p className="mt-1 text-sm text-slate-500">{dateTime(session.started_at)} → {dateTime(session.ended_at)}</p></div><Button onClick={onClose} size="sm">关闭</Button></div><div className="mt-5"><DataLine label="PP" value={`${end.pp?.toFixed(2) ?? "—"} (${change(session.start.pp, end.pp)})`} /><DataLine label="BP 最高 PP" value={`${end.best_pp?.toFixed(2) ?? "—"} (${change(session.start.best_pp, end.best_pp)})`} /><DataLine label="BP 数量" value={`${end.best_count} (${end.best_count - session.start.best_count >= 0 ? "+" : ""}${end.best_count - session.start.best_count})`} /><DataLine label="准确率" value={`${percent(end.hit_accuracy)} (${change(session.start.hit_accuracy, end.hit_accuracy)}%)`} /><DataLine label="游玩次数" value={`${fullNumber(end.play_count)} (${end.play_count !== null && session.start.play_count !== null ? end.play_count - session.start.play_count : "—"})`} /><DataLine label="总命中数" value={`${fullNumber(end.total_hits)} (${end.total_hits !== null && session.start.total_hits !== null ? end.total_hits - session.start.total_hits : "—"})`} /><DataLine label="最大连击" value={`${fullNumber(end.maximum_combo)} (${end.maximum_combo !== null && session.start.maximum_combo !== null ? end.maximum_combo - session.start.maximum_combo : "—"})`} /></div></Card></div>;
+  const enqueueSelected = async () => {
+    if (!discovery || !settings?.danser_render_preferences || !selected.length) return;
+    setBusy(true); setRenderError(null);
+    try { await desktopApi.enqueueDanserRenders({ client: discovery.client, replay_paths: selected, preferences: settings.danser_render_preferences }); onClose(); onNavigate("/local/media/render"); }
+    catch (error) { setRenderError((error as { message?: string }).message ?? String(error)); }
+    finally { setBusy(false); }
+  };
+  return <div className="fixed inset-0 z-[100] grid place-items-center overflow-y-auto bg-black/65 p-6 backdrop-blur-sm"><Card className="my-6 w-full max-w-2xl p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><Badge tone="success">游戏已结束</Badge><h2 className="mt-3 text-2xl font-semibold text-white">本次游戏总结</h2><p className="mt-1 text-sm text-slate-500">{dateTime(session?.started_at ?? discovery?.started_at ?? null)} → {dateTime(session?.ended_at ?? discovery?.detected_at ?? null)}</p></div><Button onClick={onClose} size="sm">关闭</Button></div>
+    {end && session ? <div className="mt-5"><DataLine label="PP" value={`${end.pp?.toFixed(2) ?? "—"} (${change(session.start.pp, end.pp)})`} /><DataLine label="BP 最高 PP" value={`${end.best_pp?.toFixed(2) ?? "—"} (${change(session.start.best_pp, end.best_pp)})`} /><DataLine label="BP 数量" value={`${end.best_count} (${end.best_count - session.start.best_count >= 0 ? "+" : ""}${end.best_count - session.start.best_count})`} /><DataLine label="准确率" value={`${percent(end.hit_accuracy)} (${change(session.start.hit_accuracy, end.hit_accuracy)}%)`} /><DataLine label="游玩次数" value={`${fullNumber(end.play_count)} (${end.play_count !== null && session.start.play_count !== null ? end.play_count - session.start.play_count : "—"})`} /><DataLine label="总命中数" value={`${fullNumber(end.total_hits)} (${end.total_hits !== null && session.start.total_hits !== null ? end.total_hits - session.start.total_hits : "—"})`} /><DataLine label="最大连击" value={`${fullNumber(end.maximum_combo)} (${end.maximum_combo !== null && session.start.maximum_combo !== null ? end.maximum_combo - session.start.maximum_combo : "—"})`} /></div> : null}
+    {discovery ? <section className="mt-6 border-t border-white/[0.08] pt-5"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-white">发现 {discovery.replays.length} 个新回放</h3><p className="mt-1 text-xs text-slate-500">勾选本次要处理的回放并加入 Danser 队列；任务不会立即开始渲染。</p></div><Badge tone="cyan">{discovery.client}</Badge></div><div className="mt-3 flex items-center justify-between gap-3"><span className="text-xs text-slate-500">已选 {selected.length} / {renderablePaths.length}</span><div className="flex gap-2"><Button disabled={busy || !renderablePaths.length} onClick={() => setSelected(renderablePaths)} size="sm" variant="ghost">全选可渲染</Button><Button disabled={busy || !selected.length} onClick={() => setSelected([])} size="sm" variant="ghost">清空</Button></div></div><div className="mt-3 max-h-64 space-y-2 overflow-y-auto">{discovery.replays.map((item) => <label className={`flex items-start gap-3 rounded-xl border p-3 ${item.renderable ? "border-white/[0.08] bg-black/15" : "border-amber-300/15 bg-amber-300/[0.04]"}`} key={item.path}><input aria-label={`选择 ${item.beatmap_title ?? item.file_name}`} checked={selected.includes(item.path)} className="mt-1 accent-cyan-300" disabled={!item.renderable || busy} onChange={(event) => setSelected((current) => event.target.checked ? [...current, item.path] : current.filter((path) => path !== item.path))} type="checkbox" /><span className="min-w-0"><span className="block truncate text-sm font-medium text-slate-200">{item.beatmap_title ?? item.file_name}</span><span className="mt-1 block text-xs text-slate-500">{item.renderable ? item.username ?? "可使用 Danser 渲染" : item.reason}</span></span></label>)}</div>{renderError ? <p className="mt-3 text-sm text-rose-200">{renderError}</p> : null}<div className="mt-4 flex justify-end gap-2">{!danserReady || !settings?.replay_export_directory || !settings.danser_render_preferences ? <Button onClick={() => { onClose(); onNavigate("/settings"); }}><Settings2 className="size-4" />配置 Danser</Button> : <Button disabled={!selected.length} loading={busy} onClick={() => void enqueueSelected()} variant="primary"><Play className="size-4" />加入渲染队列</Button>}</div></section> : null}
+  </Card></div>;
 }
 
 function TosuLaunchPrompt({ settings, onClose }: { settings: AppSettings; onClose: () => void }) {
@@ -251,18 +270,26 @@ export function AppShell() {
   const profileQuery = useOwnProfile(ruleset);
   const settingsQuery = useSettings();
   const location = useLocation();
+  const navigate = useNavigate();
   const initializedMode = useRef(hasRulesetPreference);
   const onboardingChecked = useRef(false);
   const checkedPageGuides = useRef(new Set<string>());
   const queryClient = useQueryClient();
   const [showBackToTop, setShowBackToTop] = useState(false);
   const [completedSession, setCompletedSession] = useState<GameSessionSummary | null>(null);
+  const [newReplays, setNewReplays] = useState<NewReplaysDetected | null>(null);
   const [dismissedSession, setDismissedSession] = useState<string | null>(null);
   const [tosuPromptSettings, setTosuPromptSettings] = useState<AppSettings | null>(null);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [overallOnboardingReady, setOverallOnboardingReady] = useState(false);
   const [pageGuide, setPageGuide] = useState<PageGuide | null>(null);
   const analysisEnabled = true;
+
+  useEffect(() => {
+    let off: () => void = () => undefined;
+    void desktopApi.onNewReplaysDetected(setNewReplays).then((unlisten) => { off = unlisten; });
+    return () => off();
+  }, []);
 
   useEffect(() => {
     const settings = settingsQuery.data;
@@ -414,14 +441,14 @@ export function AppShell() {
       {showBackToTop ? (
         <button
           aria-label="回到顶部"
-          className="fixed bottom-7 right-7 z-[70] grid size-11 place-items-center rounded-lg border border-white/10 bg-[var(--surface-panel)] text-[var(--theme-primary)] shadow-xl transition-colors hover:border-[var(--theme-primary-soft)] hover:bg-[var(--theme-primary-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]"
+          className="fixed bottom-24 right-7 z-[70] grid size-11 place-items-center rounded-lg border border-white/10 bg-[var(--surface-panel)] text-[var(--theme-primary)] shadow-xl transition-colors hover:border-[var(--theme-primary-soft)] hover:bg-[var(--theme-primary-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)]"
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
           type="button"
         >
           <ArrowUp className="size-5" />
         </button>
       ) : null}
-      {completedSession ? <><GameCompletionOverlay session={completedSession} onClose={() => { setDismissedSession(completedSession.started_at); setCompletedSession(null); }} /><div className="fixed bottom-8 left-1/2 z-[110] -translate-x-1/2 rounded-xl border border-cyan-300/15 bg-[#0b101b]/95 px-4 py-2 text-xs text-slate-400 shadow-xl">Tips：嘛，如果拘泥于数据就会让游戏本来的乐趣消失哦</div></> : null}
+      {completedSession || newReplays ? <><GameCompletionOverlay key={newReplays?.detected_at ?? completedSession?.started_at} session={completedSession} discovery={newReplays} settings={settingsQuery.data} onNavigate={(path) => navigate(path)} onClose={() => { if (completedSession) setDismissedSession(completedSession.started_at); setCompletedSession(null); setNewReplays(null); }} /><div className="fixed bottom-8 left-1/2 z-[110] -translate-x-1/2 rounded-xl border border-cyan-300/15 bg-[#0b101b]/95 px-4 py-2 text-xs text-slate-400 shadow-xl">Tips：嘛，如果拘泥于数据就会让游戏本来的乐趣消失哦</div></> : null}
       {tosuPromptSettings ? <TosuLaunchPrompt settings={tosuPromptSettings} onClose={() => setTosuPromptSettings(null)} /> : null}
       {onboardingOpen ? (
         <OnboardingTour
@@ -444,6 +471,10 @@ export function AppShell() {
       <CollectionTaskToast />
       <DownloadCompletedPlaylist />
       <CollectionAddDialog defaultCreator={profileQuery.data?.data.username ?? ""} />
+      <UpdateCenter
+        autoCheckReady={Boolean(settingsQuery.data) && overallOnboardingReady && !onboardingOpen && !pageGuide}
+        ignoredVersion={settingsQuery.data?.ignored_update_version}
+      />
     </div>
   );
 }

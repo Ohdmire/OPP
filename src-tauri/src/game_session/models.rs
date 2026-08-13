@@ -1,6 +1,6 @@
 //! Data contracts returned by the game-session Tauri commands.
 
-use std::sync::Mutex;
+use std::{collections::HashMap, sync::Mutex};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -58,6 +58,36 @@ pub struct GameMediaItem {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NewReplayItem {
+    pub path: String,
+    pub file_name: String,
+    pub beatmap_title: Option<String>,
+    pub username: Option<String>,
+    pub renderable: bool,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NewReplaysDetected {
+    pub client: LocalClient,
+    pub started_at: DateTime<Utc>,
+    pub detected_at: DateTime<Utc>,
+    pub replays: Vec<NewReplayItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReplayFingerprint {
+    pub path: String,
+    pub size: u64,
+    pub modified_at_millis: u128,
+}
+
+pub struct ReplayWatchSession {
+    pub started_at: DateTime<Utc>,
+    pub before: HashMap<String, ReplayFingerprint>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameReplayPayload {
     pub path: String,
     pub file_name: String,
@@ -94,6 +124,7 @@ pub struct GameSessionRuntime {
 /// session/account data so externally launched games are represented safely.
 pub struct GameMonitorRuntime {
     pub current: Mutex<GameStatusSnapshot>,
+    pub replay_sessions: Mutex<HashMap<LocalClient, ReplayWatchSession>>,
 }
 
 impl Default for GameMonitorRuntime {
@@ -102,6 +133,7 @@ impl Default for GameMonitorRuntime {
             current: Mutex::new(GameStatusSnapshot {
                 clients: Vec::new(),
             }),
+            replay_sessions: Mutex::new(HashMap::new()),
         }
     }
 }

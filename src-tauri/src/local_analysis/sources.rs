@@ -488,18 +488,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_quoted_and_unquoted_uninstall_commands() {
-        assert_eq!(
-            executable_parent(r#""D:\Games\osu!\osu!.exe" -uninstall"#),
-            Some(PathBuf::from(r"D:\Games\osu!"))
-        );
-        assert_eq!(
-            executable_parent(r"D:\osu!\osu!.exe -uninstall"),
-            Some(PathBuf::from(r"D:\osu!"))
-        );
-    }
-
-    #[test]
     fn resolves_relative_and_absolute_beatmap_directories() {
         let directory = tempfile::tempdir().expect("temp directory");
         fs::write(

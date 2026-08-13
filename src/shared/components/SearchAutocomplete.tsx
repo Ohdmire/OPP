@@ -130,6 +130,7 @@ export function SearchAutocomplete({
         }}
         placeholder={placeholder}
         role="combobox"
+        style={{ paddingInlineStart: "2.75rem" }}
         value={value}
       />
       {open && matches.length && menuStyle && typeof document !== "undefined" ? createPortal(

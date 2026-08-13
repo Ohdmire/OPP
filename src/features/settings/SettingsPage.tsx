@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import * as Switch from "@radix-ui/react-switch";
 import {
   Check,
   ExternalLink,
+  Film,
   FolderOpen,
   Gamepad2,
   LogOut,
@@ -23,19 +24,20 @@ import {
   SectionTitle,
 } from "../../shared/components/ui";
 import { desktopApi } from "../../shared/lib/tauri";
-import type { UpdateCheckResult } from "../../shared/lib/tauri";
 import type {
   AppSettings,
   BeatmapDownloadProvider,
   OsuClient,
   Ruleset,
   ThemeColor,
+  DanserStatus,
 } from "../../shared/types/osu";
 import { authQueryKey, useAuthStatus } from "../auth/api";
 import { localSourcesKey, useLocalSources } from "../local-analysis/api";
 import { useSettings, settingsQueryKey } from "./api";
 import { defaultSimilarityPreferences } from "../similar-beatmaps/defaults";
 import { START_ONBOARDING_EVENT } from "../../shared/lib/onboardingEvents";
+import { requestManualUpdateCheck } from "../updates/events";
 
 const colors: Array<[ThemeColor, string, string]> = [
   ["cyan", "青色", "#67e8f9"],
@@ -61,12 +63,23 @@ const clients: Array<[OsuClient, string]> = [
 const base: AppSettings = {
   onboarding_version: 0,
   page_onboarding_versions: {},
+  ignored_update_version: null,
   reduce_motion: false,
   similarity_index_directory: null,
   beatmap_download_directory: null,
   default_beatmap_download_provider: "hinai",
   open_downloaded_beatmaps_after_download: false,
   replay_export_directory: null,
+  danser_executable_path: null,
+  auto_export_new_replays_with_danser: false,
+  danser_render_preferences: {
+    settings_profile: "default", skin: "", skip: true, quickstart: false,
+    start: null, end: null, speed: 1, pitch: 1, offset: 0, mods: "", mods2: "",
+    cs: null, ar: null, od: null, hp: null, no_db_check: true,
+    no_update_check: true, debug: false, settings_patch: "",
+    frame_width: 1920, frame_height: 1080, fps: 60, encoder: "libx264",
+    quality: 14, motion_blur: false, motion_blur_oversample: 16,
+  },
   tosu_executable_path: null,
   tosu_api_base_url: "http://127.0.0.1:24050",
   launch_tosu_with_game: false,
@@ -125,8 +138,8 @@ export function SettingsPage() {
   const [accountError, setAccountError] = useState<string | null>(null);
   const [sourceBusy, setSourceBusy] = useState<OsuClient | null>(null);
   const [updateBusy, setUpdateBusy] = useState(false);
-  const [updateResult, setUpdateResult] = useState<UpdateCheckResult | null>(null);
-  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [danserStatus, setDanserStatus] = useState<DanserStatus | null>(null);
+  const [danserBusy, setDanserBusy] = useState(false);
   const settings: AppSettings = {
     ...base,
     ...stored.data,
@@ -141,6 +154,26 @@ export function SettingsPage() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const refreshDanser = async () => {
+    try { setDanserStatus(await desktopApi.getDanserStatus()); } catch { setDanserStatus(null); }
+  };
+
+  useEffect(() => { const timer = window.setTimeout(() => void refreshDanser(), 0); return () => window.clearTimeout(timer); }, [settings.danser_executable_path]);
+
+  const chooseDanser = async () => {
+    setDanserBusy(true);
+    try {
+      const selected = await desktopApi.chooseDanserExecutable(settings.danser_executable_path);
+      if (selected) await save({ ...settings, danser_executable_path: selected });
+      await refreshDanser();
+    } finally { setDanserBusy(false); }
+  };
+
+  const chooseReplayExportDirectory = async () => {
+    const selected = await desktopApi.chooseLocalDirectory(settings.replay_export_directory);
+    if (selected) await save({ ...settings, replay_export_directory: selected });
   };
 
   const chooseSource = async (client: OsuClient) => {
@@ -209,16 +242,9 @@ export function SettingsPage() {
     }
   };
 
-  const checkForUpdates = async () => {
+  const checkForUpdates = () => {
     setUpdateBusy(true);
-    setUpdateError(null);
-    try {
-      setUpdateResult(await desktopApi.checkForUpdates());
-    } catch (error) {
-      setUpdateError((error as { message?: string }).message ?? String(error));
-    } finally {
-      setUpdateBusy(false);
-    }
+    requestManualUpdateCheck(() => setUpdateBusy(false));
   };
 
   const palette = () => (
@@ -370,6 +396,24 @@ export function SettingsPage() {
           </Card>
 
           <Card className="p-6">
+            <div className="flex items-start justify-between gap-4">
+              <SectionTitle title="回放渲染" description="配置本地 Danser、统一视频导出位置和游戏结束后的新回放处理方式。" />
+              <Badge tone={danserStatus?.available && danserStatus.ffmpeg_available ? "success" : "warning"}>
+                {danserStatus?.available && danserStatus.ffmpeg_available ? "已就绪" : "需配置"}
+              </Badge>
+            </div>
+            <div className="mt-5 space-y-3">
+              <div className="rounded-xl border border-white/[0.1] bg-white/[0.035] p-4">
+                <div className="flex items-start gap-3"><Film className="mt-0.5 size-5 text-[var(--theme-primary)]" /><div className="min-w-0 flex-1"><p className="font-semibold text-slate-100">Danser CLI</p><p className="mt-1 break-all text-xs text-slate-400">{danserStatus?.executable_path ?? "未检测到 danser-cli.exe"}</p><p className="mt-1 text-xs text-slate-500">{danserStatus?.message ?? "可自动检测 PATH，或手动选择便携版程序。"}</p></div></div>
+                <div className="mt-3 flex flex-wrap gap-2"><Button loading={danserBusy} onClick={() => void chooseDanser()} size="sm" variant="secondary"><FolderOpen className="size-4" />选择程序</Button><Button disabled={danserBusy} onClick={() => void save({ ...settings, danser_executable_path: null }).then(refreshDanser)} size="sm" variant="ghost"><RotateCcw className="size-4" />自动检测</Button><Button disabled={danserBusy} onClick={() => void refreshDanser()} size="sm" variant="ghost"><RefreshCw className="size-4" />刷新状态</Button></div>
+              </div>
+              <div className="rounded-xl border border-white/[0.1] bg-white/[0.035] p-4"><p className="text-sm font-semibold text-slate-100">统一回放导出目录</p><p className="mt-1 break-all text-xs text-slate-400">{settings.replay_export_directory ?? "尚未选择；首次本地渲染前必须设置"}</p><div className="mt-3"><Button onClick={() => void chooseReplayExportDirectory()} size="sm" variant="secondary"><FolderOpen className="size-4" />{settings.replay_export_directory ? "修改位置" : "选择位置"}</Button></div></div>
+              <Toggle checked={Boolean(settings.auto_export_new_replays_with_danser)} description="游戏退出后的总结面板仍会让你确认；开启后，可渲染的新回放会默认全部选中。" label="总结中默认选中新回放" onChange={(value) => void save({ ...settings, auto_export_new_replays_with_danser: value })} />
+              <p className="text-xs leading-5 text-amber-200/80">Danser 仅支持 osu!standard；本地导出还需要 Danser 能访问 FFmpeg。</p>
+            </div>
+          </Card>
+
+          <Card className="p-6">
             <SectionTitle title="工具与缓存" />
             <div className="mt-5 space-y-3">
               <Toggle
@@ -384,6 +428,25 @@ export function SettingsPage() {
                   },
                 })}
               />
+              <label className="block rounded-xl border border-white/[0.1] bg-white/[0.035] p-4">
+                <span className="block text-sm font-semibold text-slate-100">相似谱面每页数量</span>
+                <span className="mt-1 block text-xs leading-5 text-slate-500">控制相似结果列表每一批展示的谱面数量，同时影响“下载本批”。</span>
+                <select
+                  aria-label="相似谱面每页数量"
+                  className="opp-input mt-3 w-36"
+                  disabled={busy}
+                  onChange={(event) => void save({
+                    ...settings,
+                    similarity_preferences: {
+                      ...settings.similarity_preferences,
+                      results_per_page: Number(event.target.value),
+                    },
+                  })}
+                  value={settings.similarity_preferences.results_per_page}
+                >
+                  {[5, 10, 15, 20].map((count) => <option key={count} value={count}>{count} 张 / 页</option>)}
+                </select>
+              </label>
               <div className="flex flex-wrap gap-3">
               <Button disabled={busy} onClick={() => void desktopApi.clearProfileCache()}>
                 <Trash2 className="size-4" />清除缓存
@@ -469,19 +532,6 @@ export function SettingsPage() {
                   <Gamepad2 className="size-4 text-[var(--theme-primary)]" />
                   OPP v{__APP_VERSION__}
                 </p>
-                {updateResult ? (
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <Badge tone={updateResult.is_latest ? "success" : "warning"}>
-                      {updateResult.is_latest ? "已是最新版本" : `发现新版本 ${updateResult.latest_tag}`}
-                    </Badge>
-                    {!updateResult.is_latest ? (
-                      <Button onClick={() => void desktopApi.openExternal(updateResult.release_url)} size="sm" variant="ghost">
-                        <ExternalLink className="size-4" />查看 Release
-                      </Button>
-                    ) : null}
-                  </div>
-                ) : null}
-                {updateError ? <p className="mt-3 max-w-md text-xs text-rose-200">{updateError}</p> : null}
               </div>
               <div className="flex flex-wrap justify-end gap-2">
                 <Button disabled={updateBusy} loading={updateBusy} onClick={() => void checkForUpdates()} size="sm" variant="secondary">

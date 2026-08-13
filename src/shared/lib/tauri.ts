@@ -25,6 +25,9 @@ import type {
   CollectedBeatmapsets,
   CommandError,
   DisconnectResult,
+  DanserEnqueueRequest,
+  DanserRenderJob,
+  DanserStatus,
   BeatmapQuery,
   LocalBeatmapDetail,
   LocalBeatmapSetSummary,
@@ -72,6 +75,7 @@ import type {
   TrainerResult,
   ObsRefreshResult,
   ObsStatus,
+  NewReplaysDetected,
 } from "../types/osu";
 
 export const isTauri = () => "__TAURI_INTERNALS__" in window;
@@ -84,6 +88,7 @@ export interface UpdateCheckResult {
   release_name: string | null;
   release_url: string;
   published_at: string | null;
+  release_notes: string | null;
 }
 
 function normalizeError(error: unknown): CommandError {
@@ -152,6 +157,7 @@ function browserPreviewValue<T>(command: string, args?: Record<string, unknown>)
     release_name: `OPP v${__APP_VERSION__}`,
     release_url: "https://github.com/osuplusplus/OPP/releases/latest",
     published_at: null,
+    release_notes: "当前为浏览器预览版本。",
   } as T;
   if (command === "get_similarity_index_status") return {
     state: "unconfigured",
@@ -192,6 +198,10 @@ function browserPreviewValue<T>(command: string, args?: Record<string, unknown>)
     return { target: { ...target, source: "index", analyzer_version: 3, normalization_version: 1 }, results, dynamic_profile: dynamicProfile } as T;
   }
   if (command === "update_settings") return args?.settings as T;
+  if (command === "ignore_update_version") return {
+    ...(browserPreviewValue<AppSettings>("get_settings") ?? {}),
+    ignored_update_version: args?.version,
+  } as T;
   if (["clear_profile_cache", "set_default_file_client", "set_display_gamma", "open_netease_music_search", "set_local_source", "reset_local_source", "start_tosu", "stop_tosu", "set_tosu_executable", "set_tosu_lyrics_executable", "cancel_online_beatmap_download", "begin_collection_task", "cancel_collection_task", "exit_app"].includes(command)) return null as T;
   return undefined;
 }
@@ -262,6 +272,8 @@ export const desktopApi = {
   exitApp: () => call<void>("exit_app"),
   clearProfileCache: () => call<void>("clear_profile_cache"),
   checkForUpdates: () => call<UpdateCheckResult>("check_for_updates"),
+  ignoreUpdateVersion: (version: string) =>
+    call<AppSettings>("ignore_update_version", { version }),
   getSettings: () => call<AppSettings>("get_settings"),
   updateSettings: (settings: AppSettings) =>
     call<AppSettings>("update_settings", { settings }),
@@ -287,6 +299,14 @@ export const desktopApi = {
     call<GameScreenshotPayload>("read_game_screenshot", { client, path }),
   submitReplayRender: (request: ReplayRenderRequest) =>
     call<ReplayRenderJob>("submit_replay_render", { request }),
+  getDanserStatus: () => call<DanserStatus>("get_danser_status"),
+  listDanserProfiles: () => call<string[]>("list_danser_profiles"),
+  enqueueDanserRenders: (request: DanserEnqueueRequest) =>
+    call<DanserRenderJob[]>("enqueue_danser_renders", { request }),
+  startDanserRenderQueue: () => call<void>("start_danser_render_queue"),
+  getDanserRenderQueue: () => call<DanserRenderJob[]>("get_danser_render_queue"),
+  cancelDanserRender: (id: string) => call<void>("cancel_danser_render", { id }),
+  openDanserOutput: (path: string) => call<void>("open_danser_output", { path }),
   openMediaInExplorer: (client: OsuClient, path: string) =>
     call<void>("open_media_in_explorer", { client, path }),
   openLocalResourceInExplorer: (client: OsuClient, logicalPath: string) =>
@@ -385,6 +405,16 @@ export const desktopApi = {
     });
     return typeof selected === "string" ? selected : null;
   },
+  chooseDanserExecutable: async (defaultPath?: string | null) => {
+    if (!isTauri()) return null;
+    const selected = await openDialog({
+      directory: false,
+      multiple: false,
+      defaultPath: defaultPath ?? undefined,
+      filters: [{ name: "Danser CLI", extensions: ["exe"] }],
+    });
+    return typeof selected === "string" ? selected : null;
+  },
   chooseDirectory: async (title: string, defaultPath?: string | null) => {
     if (!isTauri()) {
       return defaultPath ?? "C:/OPP-preview";
@@ -480,6 +510,18 @@ export const desktopApi = {
     return listen<ReplayRenderProgress>("ordr-render-progress", (event) =>
       handler(event.payload),
     );
+  },
+  onDanserRenderProgress: async (
+    handler: (progress: DanserRenderJob) => void,
+  ): Promise<UnlistenFn> => {
+    if (!isTauri()) return () => undefined;
+    return listen<DanserRenderJob>("danser-render-progress", (event) => handler(event.payload));
+  },
+  onNewReplaysDetected: async (
+    handler: (payload: NewReplaysDetected) => void,
+  ): Promise<UnlistenFn> => {
+    if (!isTauri()) return () => undefined;
+    return listen<NewReplaysDetected>("new-replays-detected", (event) => handler(event.payload));
   },
   onGameStatusChanged: async (
     handler: (status: GameStatusSnapshot) => void,

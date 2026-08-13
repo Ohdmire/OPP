@@ -84,8 +84,9 @@ impl OnlineBeatmapSearchQuery {
         }
 
         let status = self.status.trim();
-        if !status.is_empty() && status != "any" {
+        if !status.is_empty() {
             const STATUSES: &[&str] = &[
+                "any",
                 "leaderboard",
                 "ranked",
                 "qualified",
@@ -452,6 +453,19 @@ mod tests {
                 .to_api_parameters()
                 .expect("parameters")
                 .contains(&("sort".into(), "relevance_desc".into()))
+        );
+    }
+
+    #[test]
+    fn forwards_any_status_to_include_graveyard_results() {
+        let mut query = query();
+        query.status = "any".into();
+
+        assert!(
+            query
+                .to_api_parameters()
+                .expect("parameters")
+                .contains(&("s".into(), "any".into()))
         );
     }
 

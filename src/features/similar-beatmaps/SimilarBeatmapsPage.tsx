@@ -57,7 +57,8 @@ import {
   type RecommendationHistoryEntry,
 } from "./recommendationHistory";
 
-const RESULTS_PER_BATCH = 5;
+const DEFAULT_RESULTS_PER_PAGE = 5;
+const ALLOWED_RESULTS_PER_PAGE = [5, 10, 15, 20] as const;
 
 function manualWeighting() {
   return manualWeightingFromPreferences();
@@ -161,6 +162,9 @@ export function SimilarBeatmapsPage() {
       ...settings.data?.similarity_preferences?.manual_weights,
     },
   }), [settings.data?.similarity_preferences]);
+  const resultsPerPage = ALLOWED_RESULTS_PER_PAGE.includes(
+    preferences.results_per_page as (typeof ALLOWED_RESULTS_PER_PAGE)[number],
+  ) ? preferences.results_per_page : DEFAULT_RESULTS_PER_PAGE;
 
   const filteredResults = useMemo(
     () => (recommendationResponse?.results ?? response?.results ?? []).filter(
@@ -168,30 +172,30 @@ export function SimilarBeatmapsPage() {
     ),
     [recommendationResponse, request.filters, response],
   );
-  const resultBatchCount = Math.max(1, Math.ceil(filteredResults.length / RESULTS_PER_BATCH));
+  const resultBatchCount = Math.max(1, Math.ceil(filteredResults.length / resultsPerPage));
   const activeResultBatch = resultBatch % resultBatchCount;
   const visibleResults = useMemo(
     () => filteredResults.slice(
-      activeResultBatch * RESULTS_PER_BATCH,
-      (activeResultBatch + 1) * RESULTS_PER_BATCH,
+      activeResultBatch * resultsPerPage,
+      (activeResultBatch + 1) * resultsPerPage,
     ),
-    [activeResultBatch, filteredResults],
+    [activeResultBatch, filteredResults, resultsPerPage],
   );
 
   useEffect(() => {
-    if (!recommendationResponse || visibleResults.length !== RESULTS_PER_BATCH) return;
+    if (!recommendationResponse || visibleResults.length !== resultsPerPage) return;
     recordDisplayedRecommendationBatch(visibleResults as SimilarityRecommendationResult[]);
-  }, [recommendationResponse, visibleResults]);
+  }, [recommendationResponse, resultsPerPage, visibleResults]);
 
   const selected = useMemo(() => {
-    if (!filteredResults.length) return null;
-    if (!selectedResultId) return filteredResults[0];
+    if (!visibleResults.length) return null;
+    if (!selectedResultId) return visibleResults[0];
     return (
-      filteredResults.find(
+      visibleResults.find(
         (result) => result.beatmap_id === selectedResultId,
-      ) ?? filteredResults[0]
+      ) ?? visibleResults[0]
     );
-  }, [filteredResults, selectedResultId]);
+  }, [selectedResultId, visibleResults]);
   const recommendedBy = selected
     ? recommendationResponse?.results.find(
         (result) => result.beatmap_id === selected.beatmap_id,
@@ -546,7 +550,7 @@ export function SimilarBeatmapsPage() {
   function showNextBatch() {
     const nextBatch = (activeResultBatch + 1) % resultBatchCount;
     setResultBatch(nextBatch);
-    setSelectedResultId(filteredResults[nextBatch * RESULTS_PER_BATCH]?.beatmap_id ?? null);
+    setSelectedResultId(filteredResults[nextBatch * resultsPerPage]?.beatmap_id ?? null);
   }
 
   if (statusQuery.isLoading) {
@@ -575,7 +579,7 @@ export function SimilarBeatmapsPage() {
               <div>
                 <Dialog.Title className="text-lg font-semibold text-white">今日推荐历史</Dialog.Title>
                 <Dialog.Description className="mt-1 text-sm text-slate-400">
-                  仅记录今天曾以完整 5 张一批展示的推荐谱面，共 {recommendationHistory.length} 张。
+                  仅记录今天曾完整展示过的推荐谱面，共 {recommendationHistory.length} 张。
                 </Dialog.Description>
               </div>
               <Dialog.Close aria-label="关闭今日推荐历史" className="text-slate-500 transition hover:text-white">
@@ -604,7 +608,7 @@ export function SimilarBeatmapsPage() {
                   ))}
                 </div>
               ) : (
-                <EmptyState title="今天还没有完整推荐记录" description="当一批 5 张推荐谱面完整展示后，会自动出现在这里。" />
+                <EmptyState title="今天还没有完整推荐记录" description="当一页推荐谱面完整展示后，会自动出现在这里。" />
               )}
             </div>
           </Dialog.Content>
@@ -856,7 +860,7 @@ export function SimilarBeatmapsPage() {
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     <span className="text-sm text-slate-500">第 {activeResultBatch + 1} / {resultBatchCount} 批</span>
-                    {filteredResults.length > RESULTS_PER_BATCH ? <Button disabled={quickDownloadId !== null} onClick={showNextBatch} size="sm"><RefreshCw className="size-3.5" />换一批</Button> : null}
+                    {filteredResults.length > resultsPerPage ? <Button disabled={quickDownloadId !== null} onClick={showNextBatch} size="sm"><RefreshCw className="size-3.5" />换一批</Button> : null}
                     <Button disabled={!visibleResults.length || quickDownloadId !== null} loading={quickDownloadId === -1} onClick={() => void downloadResults(visibleResults)} size="sm" variant="primary"><Download className="size-3.5" />下载本批</Button>
                   </div>
                 </div>

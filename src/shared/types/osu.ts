@@ -40,12 +40,16 @@ export interface OAuthResult {
 export interface AppSettings {
   onboarding_version: number;
   page_onboarding_versions: Record<string, number>;
+  ignored_update_version?: string | null;
   reduce_motion: boolean;
   similarity_index_directory: string | null;
   beatmap_download_directory: string | null;
   default_beatmap_download_provider: BeatmapDownloadProvider;
   open_downloaded_beatmaps_after_download: boolean;
   replay_export_directory: string | null;
+  danser_executable_path?: string | null;
+  auto_export_new_replays_with_danser?: boolean;
+  danser_render_preferences?: DanserRenderPreferences;
   tosu_executable_path: string | null;
   tosu_api_base_url: string;
   launch_tosu_with_game: boolean;
@@ -75,6 +79,7 @@ export interface SimilarityPreferences {
   lower_sections: number;
   upper_sections: number;
   manual_weights: SimilarityManualWeights;
+  results_per_page: number;
 }
 
 export interface ObsStatus {
@@ -402,6 +407,75 @@ export interface ReplayRenderRequest {
 
 export interface ReplayRenderJob { render_id: number; status: string; description: string; }
 export interface ReplayRenderProgress { render_id: number; status: string; description: string; video_url: string | null; }
+
+export interface DanserRenderPreferences {
+  settings_profile: string;
+  skin: string;
+  skip: boolean;
+  quickstart: boolean;
+  start: number | null;
+  end: number | null;
+  speed: number;
+  pitch: number;
+  offset: number;
+  mods: string;
+  mods2: string;
+  cs: number | null;
+  ar: number | null;
+  od: number | null;
+  hp: number | null;
+  no_db_check: boolean;
+  no_update_check: boolean;
+  debug: boolean;
+  settings_patch: string;
+  frame_width: number;
+  frame_height: number;
+  fps: number;
+  encoder: "libx264" | "h264_nvenc" | "h264_qsv";
+  quality: number;
+  motion_blur: boolean;
+  motion_blur_oversample: number;
+}
+
+export interface DanserStatus {
+  available: boolean;
+  executable_path: string | null;
+  ffmpeg_available: boolean;
+  profiles: string[];
+  message: string;
+}
+
+export interface DanserRenderJob {
+  id: string;
+  replay_path: string;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  progress: number;
+  description: string;
+  output_path: string | null;
+  queue_position: number | null;
+}
+
+export interface DanserEnqueueRequest {
+  client: OsuClient;
+  replay_paths: string[];
+  preferences: DanserRenderPreferences;
+}
+
+export interface NewReplayItem {
+  path: string;
+  file_name: string;
+  beatmap_title: string | null;
+  username: string | null;
+  renderable: boolean;
+  reason: string | null;
+}
+
+export interface NewReplaysDetected {
+  client: OsuClient;
+  started_at: string;
+  detected_at: string;
+  replays: NewReplayItem[];
+}
 
 export interface GameScreenshotPayload {
   path: string;

@@ -8,6 +8,7 @@ use tokio::sync::{Mutex as AsyncMutex, oneshot};
 use crate::{
     account::{AvatarCache, CredentialStore},
     collections::CollectionService,
+    danser::DanserRuntime,
     error::CommandResult,
     game_session::{GameMonitorRuntime, GameSessionRuntime},
     local_analysis::LocalAnalysisService,
@@ -40,6 +41,7 @@ pub struct AppState {
     pub token_refresh: AsyncMutex<()>,
     pub game_session: GameSessionRuntime,
     pub game_monitor: Arc<GameMonitorRuntime>,
+    pub danser: Arc<DanserRuntime>,
     pub tosu: Arc<TosuRuntime>,
     pub obs: Arc<ObsRuntime>,
 }
@@ -65,6 +67,7 @@ impl AppState {
             token_refresh: AsyncMutex::new(()),
             game_session: GameSessionRuntime::default(),
             game_monitor: Arc::new(GameMonitorRuntime::default()),
+            danser: Arc::new(DanserRuntime::default()),
             tosu: Arc::new(TosuRuntime::default()),
             obs: Arc::new(ObsRuntime::default()),
         })

@@ -1,11 +1,12 @@
 mod models;
 
 use std::{
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
     process::Command,
     sync::Arc,
-    time::Duration,
+    time::{Duration, UNIX_EPOCH},
 };
 
 #[cfg(windows)]
@@ -29,7 +30,8 @@ use crate::{
 
 use models::{
     GameClientStatus, GameMediaItem, GameReplayPayload, GameScreenshotPayload, GameSessionSummary,
-    GameStatusSnapshot, ReplayMapInfo, UserSnapshot,
+    GameStatusSnapshot, NewReplayItem, NewReplaysDetected, ReplayFingerprint, ReplayMapInfo,
+    ReplayWatchSession, UserSnapshot,
 };
 pub use models::{GameMonitorRuntime, GameSessionRuntime};
 
@@ -167,6 +169,173 @@ fn any_client_started(previous: &GameStatusSnapshot, next: &GameStatusSnapshot) 
     })
 }
 
+fn replay_snapshot(
+    state: &AppState,
+    client: LocalClient,
+) -> CommandResult<HashMap<String, ReplayFingerprint>> {
+    let mut snapshot = HashMap::new();
+    for root in media_roots(state, client)? {
+        for entry in walkdir::WalkDir::new(root)
+            .follow_links(false)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_type().is_file())
+        {
+            let path = entry.path();
+            if !path
+                .extension()
+                .and_then(|value| value.to_str())
+                .is_some_and(|value| value.eq_ignore_ascii_case("osr"))
+            {
+                continue;
+            }
+            let Ok(path) = path.canonicalize() else {
+                continue;
+            };
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
+            let modified_at_millis = metadata
+                .modified()
+                .ok()
+                .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+                .map(|value| value.as_millis())
+                .unwrap_or_default();
+            snapshot.insert(
+                path.to_string_lossy().to_ascii_lowercase(),
+                ReplayFingerprint {
+                    path: path.display().to_string(),
+                    size: metadata.len(),
+                    modified_at_millis,
+                },
+            );
+        }
+    }
+    Ok(snapshot)
+}
+
+fn describe_new_replay(state: &AppState, client: LocalClient, path: &str) -> NewReplayItem {
+    let file_name = Path::new(path)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or(path)
+        .to_string();
+    let result = (|| -> CommandResult<(Option<String>, Option<String>)> {
+        let bytes = load_game_replay_file(client, path, state)?;
+        if bytes.first().copied() != Some(0) {
+            return Err(CommandError::new(
+                "DANSER_RULESET_UNSUPPORTED",
+                "Danser 仅支持 osu!standard 回放",
+            ));
+        }
+        let (hash, username) = parse_replay_metadata(&bytes)?;
+        let beatmap = state
+            .local_analysis
+            .find_beatmap_by_md5(client, &hash)?
+            .ok_or_else(|| {
+                CommandError::new(
+                    "REPLAY_BEATMAP_NOT_INDEXED",
+                    "未在本地谱面索引中找到对应谱面",
+                )
+            })?;
+        Ok((
+            Some(format!(
+                "{} — {} [{}]",
+                beatmap.artist_unicode, beatmap.title_unicode, beatmap.difficulty_name
+            )),
+            Some(username),
+        ))
+    })();
+    match result {
+        Ok((beatmap_title, username)) => NewReplayItem {
+            path: path.into(),
+            file_name,
+            beatmap_title,
+            username,
+            renderable: true,
+            reason: None,
+        },
+        Err(error) => NewReplayItem {
+            path: path.into(),
+            file_name,
+            beatmap_title: None,
+            username: None,
+            renderable: false,
+            reason: Some(error.message),
+        },
+    }
+}
+
+fn changed_replay_paths(
+    before: &HashMap<String, ReplayFingerprint>,
+    current: &HashMap<String, ReplayFingerprint>,
+) -> Vec<String> {
+    let mut paths: Vec<String> = current
+        .iter()
+        .filter(|(path, fingerprint)| before.get(*path) != Some(*fingerprint))
+        .map(|(_, fingerprint)| fingerprint.path.clone())
+        .collect();
+    paths.sort();
+    paths
+}
+
+fn handle_replay_transition(
+    previous: &GameStatusSnapshot,
+    next: &GameStatusSnapshot,
+    monitor: &GameMonitorRuntime,
+    state: &AppState,
+    app: &AppHandle,
+) {
+    for after in &next.clients {
+        let was_running = previous
+            .clients
+            .iter()
+            .find(|before| before.client == after.client)
+            .is_some_and(|before| before.running);
+        if after.running && !was_running {
+            if let Ok(before) = replay_snapshot(state, after.client)
+                && let Ok(mut sessions) = monitor.replay_sessions.lock()
+            {
+                sessions.insert(
+                    after.client,
+                    ReplayWatchSession {
+                        started_at: Utc::now(),
+                        before,
+                    },
+                );
+            }
+        } else if !after.running && was_running {
+            let session = monitor
+                .replay_sessions
+                .lock()
+                .ok()
+                .and_then(|mut sessions| sessions.remove(&after.client));
+            let Some(session) = session else {
+                continue;
+            };
+            let Ok(current) = replay_snapshot(state, after.client) else {
+                continue;
+            };
+            let paths = changed_replay_paths(&session.before, &current);
+            let replays: Vec<NewReplayItem> = paths
+                .iter()
+                .map(|path| describe_new_replay(state, after.client, path))
+                .collect();
+            if !replays.is_empty() {
+                let _ = app.emit(
+                    "new-replays-detected",
+                    NewReplaysDetected {
+                        client: after.client,
+                        started_at: session.started_at,
+                        detected_at: Utc::now(),
+                        replays,
+                    },
+                );
+            }
+        }
+    }
+}
+
 /// Launch the app-lifetime monitor. The event is emitted only when a client
 /// changes state; the command always returns the most recent snapshot.
 pub fn start_game_monitor(
@@ -182,10 +351,11 @@ pub fn start_game_monitor(
                 .unwrap_or_else(|_| GameStatusSnapshot {
                     clients: Vec::new(),
                 });
-            let (changed, game_started) = monitor
+            let (changed, game_started, previous) = monitor
                 .current
                 .lock()
                 .map(|mut current| {
+                    let previous = current.clone();
                     let changed = current.clients.len() != next.clients.len()
                         || current
                             .clients
@@ -198,10 +368,18 @@ pub fn start_game_monitor(
                             });
                     let game_started = any_client_started(&current, &next);
                     *current = next.clone();
-                    (changed, game_started)
+                    (changed, game_started, previous)
                 })
-                .unwrap_or((false, false));
+                .unwrap_or((
+                    false,
+                    false,
+                    GameStatusSnapshot {
+                        clients: Vec::new(),
+                    },
+                ));
             if changed {
+                let state = app.state::<AppState>();
+                handle_replay_transition(&previous, &next, &monitor, &state, &app);
                 if game_started
                     && app
                         .state::<AppState>()
@@ -665,9 +843,9 @@ pub fn read_game_screenshot(
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::{collections::HashMap, path::Path};
 
-    use super::same_executable;
+    use super::{ReplayFingerprint, changed_replay_paths, same_executable};
 
     #[test]
     fn matches_windows_executables_without_case_sensitivity() {
@@ -675,6 +853,28 @@ mod tests {
             Path::new("C:/Games/osu!/osu!.exe"),
             Path::new("c:/games/OSU!/OSU!.EXE")
         ));
+    }
+
+    #[test]
+    fn replay_diff_includes_new_and_modified_files_only() {
+        let fingerprint = |path: &str, size, modified_at_millis| ReplayFingerprint {
+            path: path.into(),
+            size,
+            modified_at_millis,
+        };
+        let before = HashMap::from([
+            ("same.osr".into(), fingerprint("same.osr", 10, 1)),
+            ("changed.osr".into(), fingerprint("changed.osr", 10, 1)),
+        ]);
+        let current = HashMap::from([
+            ("same.osr".into(), fingerprint("same.osr", 10, 1)),
+            ("changed.osr".into(), fingerprint("changed.osr", 20, 2)),
+            ("new.osr".into(), fingerprint("new.osr", 30, 3)),
+        ]);
+        assert_eq!(
+            changed_replay_paths(&before, &current),
+            vec!["changed.osr", "new.osr"]
+        );
     }
 }
 

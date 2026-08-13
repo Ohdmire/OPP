@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleDot,
+  ExternalLink,
   FolderSearch,
   Gauge,
   Heart,
@@ -226,6 +227,19 @@ function BeatmapSetCard({
           <FolderSearch className="size-3.5" />
           打开文件
         </Button>
+        {set.beatmap_set_id ? (
+          <Button
+            aria-label="在 osu! 官网打开谱面"
+            onClick={() => void desktopApi.openExternal(
+              `https://osu.ppy.sh/beatmapsets/${set.beatmap_set_id}`,
+            )}
+            size="sm"
+            variant="secondary"
+          >
+            <ExternalLink className="size-3.5" />
+            打开官网
+          </Button>
+        ) : null}
         <Button
           aria-label="在浏览器中搜索网易云音乐"
           onClick={() => {
