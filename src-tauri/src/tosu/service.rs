@@ -72,11 +72,20 @@ pub fn executable_path(settings: &AppSettings) -> CommandResult<PathBuf> {
 }
 
 pub fn lyrics_executable_path(settings: &AppSettings) -> CommandResult<PathBuf> {
+    // 与 tosu 一致：Linux 优先使用 PATH 中的 tosu-proxy，回退用户配置；Windows
+    // 仅使用用户配置。
+    #[cfg(not(windows))]
+    if let Some(found) = crate::platform::find_in_path("tosu-proxy") {
+        return Ok(found);
+    }
     let raw = settings
         .tosu_lyrics_executable_path
         .as_deref()
         .ok_or_else(|| {
-            CommandError::new("TOSU_LYRICS_NOT_CONFIGURED", "请先选择 tosu-proxy.exe")
+            CommandError::new(
+                "TOSU_LYRICS_NOT_CONFIGURED",
+                "请先选择 tosu-proxy 可执行文件",
+            )
         })?;
     validate_lyrics_executable(Path::new(raw))
 }
@@ -111,17 +120,26 @@ pub fn validate_lyrics_executable(path: &Path) -> CommandResult<PathBuf> {
     let path = path.canonicalize().map_err(|_| {
         CommandError::new(
             "TOSU_LYRICS_EXECUTABLE_NOT_FOUND",
-            "未找到所选的 tosu-proxy.exe",
+            "未找到所选的 tosu-lyrics 代理可执行文件",
         )
     })?;
     let valid_name = path
         .file_name()
         .and_then(|name| name.to_str())
-        .is_some_and(|name| name.eq_ignore_ascii_case("tosu-proxy.exe"));
+        .is_some_and(|name| {
+            #[cfg(windows)]
+            {
+                name.eq_ignore_ascii_case("tosu-proxy.exe")
+            }
+            #[cfg(not(windows))]
+            {
+                name.eq_ignore_ascii_case("tosu-proxy")
+            }
+        });
     if !path.is_file() || !valid_name {
         return Err(CommandError::new(
             "INVALID_TOSU_LYRICS_EXECUTABLE",
-            "请选择 tosu-lyrics 发行包中的 tosu-proxy.exe",
+            "请选择 tosu-lyrics 发行包中的 tosu-proxy 可执行文件",
         ));
     }
     Ok(path)

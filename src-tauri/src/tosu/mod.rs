@@ -30,26 +30,47 @@ async fn api_reachable(base: &str) -> bool {
 }
 
 fn current_status(state: &AppState, settings: &AppSettings, api_reachable: bool) -> TosuStatus {
-    let configured_valid = settings.tosu_executable_path.as_ref().is_some_and(|path| {
-        service::validate_executable(PathBuf::from(path).as_path()).is_ok()
-    });
+    let configured_valid = settings
+        .tosu_executable_path
+        .as_ref()
+        .is_some_and(|path| service::validate_executable(PathBuf::from(path).as_path()).is_ok());
     // Linux：PATH 中能找到 tosu 即视为已安装（启动时经 pkexec/sudo 提权），
     // 显示时也回退到 PATH 解析出的绝对路径。
     #[cfg(not(windows))]
     let (installed, executable_path) = {
-        let from_path = crate::platform::find_in_path("tosu")
-            .map(|path| path.display().to_string());
+        let from_path =
+            crate::platform::find_in_path("tosu").map(|path| path.display().to_string());
         (
             configured_valid || from_path.is_some(),
             settings.tosu_executable_path.clone().or(from_path),
         )
     };
     #[cfg(windows)]
-    let (installed, executable_path) = (
-        configured_valid,
-        settings.tosu_executable_path.clone(),
-    );
+    let (installed, executable_path) = (configured_valid, settings.tosu_executable_path.clone());
     let owned_by_opp = service::is_owned_running(&state.tosu);
+    let lyrics_configured_valid =
+        settings
+            .tosu_lyrics_executable_path
+            .as_ref()
+            .is_some_and(|path| {
+                service::validate_lyrics_executable(PathBuf::from(path).as_path()).is_ok()
+            });
+    // Linux：PATH 中能找到 tosu-proxy 即视为已安装，显示时也回退到 PATH 解析出的
+    // 绝对路径（与 tosu 自身一致）。
+    #[cfg(not(windows))]
+    let (lyrics_installed, lyrics_executable_path) = {
+        let from_path =
+            crate::platform::find_in_path("tosu-proxy").map(|path| path.display().to_string());
+        (
+            lyrics_configured_valid || from_path.is_some(),
+            settings.tosu_lyrics_executable_path.clone().or(from_path),
+        )
+    };
+    #[cfg(windows)]
+    let (lyrics_installed, lyrics_executable_path) = (
+        lyrics_configured_valid,
+        settings.tosu_lyrics_executable_path.clone(),
+    );
     TosuStatus {
         installed,
         executable_path,
@@ -60,13 +81,8 @@ fn current_status(state: &AppState, settings: &AppSettings, api_reachable: bool)
         dashboard_url: settings.tosu_api_base_url.clone(),
         last_error: service::last_error(&state.tosu),
         lyrics: models::TosuLyricsStatus {
-            installed: settings
-                .tosu_lyrics_executable_path
-                .as_ref()
-                .is_some_and(|path| {
-                    service::validate_lyrics_executable(PathBuf::from(path).as_path()).is_ok()
-                }),
-            executable_path: settings.tosu_lyrics_executable_path.clone(),
+            installed: lyrics_installed,
+            executable_path: lyrics_executable_path,
             running: service::is_lyrics_owned_running(&state.tosu)
                 || service::lyrics_process_running(),
             owned_by_opp: service::is_lyrics_owned_running(&state.tosu),

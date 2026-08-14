@@ -30,7 +30,7 @@ use crate::{
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-use discovery::{ffmpeg_available, find_danser, list_profiles_for};
+use discovery::{ffmpeg_available, find_danser, list_profiles_for, resolve_danser_path};
 pub use models::DanserRuntime;
 use models::{
     DanserEnqueueRequest, DanserRenderJob, DanserRenderProgress, DanserStatus, DanserTask,
@@ -42,10 +42,10 @@ fn command_error(code: &str, message: impl Into<String>) -> CommandError {
 
 fn resolve_danser(state: &AppState) -> CommandResult<PathBuf> {
     let saved = state.store.snapshot()?.settings.danser_executable_path;
-    find_danser(saved.as_deref()).ok_or_else(|| {
+    resolve_danser_path(saved.as_deref()).ok_or_else(|| {
         command_error(
             "DANSER_NOT_FOUND",
-            "未找到 danser-cli.exe，请在设置中选择 Danser 程序",
+            "未找到 danser，请在 PATH 中提供或在设置中选择 Danser 程序",
         )
     })
 }

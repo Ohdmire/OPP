@@ -9,7 +9,16 @@ fn is_danser_executable(path: &Path) -> bool {
         && path
             .file_name()
             .and_then(|name| name.to_str())
-            .is_some_and(|name| name.eq_ignore_ascii_case("danser-cli.exe"))
+            .is_some_and(|name| {
+                #[cfg(windows)]
+                {
+                    name.eq_ignore_ascii_case("danser-cli.exe")
+                }
+                #[cfg(not(windows))]
+                {
+                    name.eq_ignore_ascii_case("danser") || name.eq_ignore_ascii_case("danser-cli")
+                }
+            })
 }
 
 fn path_command(name: &str) -> Option<PathBuf> {
@@ -23,11 +32,28 @@ fn path_command(name: &str) -> Option<PathBuf> {
     })?
 }
 
-pub(super) fn find_danser(saved: Option<&str>) -> Option<PathBuf> {
+/// PATH 中查找 danser（仅类 Unix 生效；Windows 上 `find_in_path` 返回 `None`）。
+fn danser_in_path() -> Option<PathBuf> {
+    crate::platform::find_in_path("danser")
+        .or_else(|| crate::platform::find_in_path("danser-cli"))
+        .filter(|path| is_danser_executable(path))
+}
+
+fn saved_danser(saved: Option<&str>) -> Option<PathBuf> {
     saved
         .filter(|value| !value.trim().is_empty())
         .map(PathBuf::from)
         .filter(|path| is_danser_executable(path))
+}
+
+/// 状态展示：用户配置优先，回退 PATH（与 tosu 状态一致）。
+pub(super) fn find_danser(saved: Option<&str>) -> Option<PathBuf> {
+    saved_danser(saved).or_else(danser_in_path)
+}
+
+/// 启动解析：PATH 优先，回退用户配置（与 tosu 启动一致）。
+pub(super) fn resolve_danser_path(saved: Option<&str>) -> Option<PathBuf> {
+    danser_in_path().or_else(|| saved_danser(saved))
 }
 
 pub(super) fn list_profiles_for(executable: &Path) -> Vec<String> {
@@ -58,7 +84,14 @@ pub(super) fn list_profiles_for(executable: &Path) -> Vec<String> {
 }
 
 pub(super) fn ffmpeg_available(executable: &Path) -> bool {
-    executable.parent().is_some_and(|root| {
-        root.join("ffmpeg.exe").is_file() || root.join("ffmpeg").join("ffmpeg.exe").is_file()
-    }) || path_command("ffmpeg.exe").is_some()
+    // Danser 发行包可能自带 ffmpeg（同级或 ffmpeg/ 子目录），名称随平台不同；
+    // 此外 Linux 可直接使用 PATH 中的系统 ffmpeg，Windows 回退 `where.exe`。
+    let bundled = executable.parent().is_some_and(|root| {
+        ["ffmpeg.exe", "ffmpeg"]
+            .iter()
+            .any(|name| root.join(name).is_file() || root.join("ffmpeg").join(name).is_file())
+    });
+    bundled
+        || crate::platform::find_in_path("ffmpeg").is_some()
+        || path_command("ffmpeg.exe").is_some()
 }
