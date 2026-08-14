@@ -1,13 +1,13 @@
 import { Check, Download, Headphones, Heart, Info, ListPlus, Pause } from "lucide-react";
 import { Badge, Button, Card } from "../../shared/components/ui";
 import { BeatmapDifficultyStrip, BeatmapInfoBar } from "../../shared/components/BeatmapSetVisuals";
-import { fullNumber } from "../../shared/lib/format";
+import { APP_TIME_ZONE, fullNumber } from "../../shared/lib/format";
 import type { OnlineBeatmapset } from "../../shared/types/osu";
 import { durationLabel, normalizePreviewUrl } from "./filters";
 
 function dateLabel(value?: string | null) {
   if (!value) return "未定";
-  return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value));
+  return new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: APP_TIME_ZONE }).format(new Date(value));
 }
 
 function statusTone(status: string): "success" | "pink" | "cyan" | "warning" {

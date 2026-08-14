@@ -12,6 +12,7 @@ import {
 
 import { settingsQueryKey } from "../settings/api";
 import { Badge, Button } from "../../shared/components/ui";
+import { APP_TIME_ZONE } from "../../shared/lib/format";
 import { desktopApi, type UpdateCheckResult } from "../../shared/lib/tauri";
 import type { AppSettings, CommandError } from "../../shared/types/osu";
 import {
@@ -41,6 +42,7 @@ function publishedDate(value: string | null) {
     year: "numeric",
     month: "long",
     day: "numeric",
+    timeZone: APP_TIME_ZONE,
   }).format(date);
 }
 

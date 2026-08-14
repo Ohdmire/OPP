@@ -1,5 +1,8 @@
 import type { Ruleset, Score } from "../types/osu";
 
+/** All user-facing dates and times in OPP use China Standard Time (UTC+8). */
+export const APP_TIME_ZONE = "Asia/Shanghai";
+
 export const rulesetLabels: Record<Ruleset, string> = {
   osu: "osu!",
   taiko: "taiko",
@@ -40,6 +43,7 @@ export function dateTime(value?: string | null): string {
   return new Intl.DateTimeFormat("zh-CN", {
     dateStyle: "medium",
     timeStyle: "short",
+    timeZone: APP_TIME_ZONE,
   }).format(parsed);
 }
 
@@ -47,7 +51,7 @@ export function dateOnly(value?: string | null): string {
   if (!value) return "—";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium" }).format(parsed);
+  return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeZone: APP_TIME_ZONE }).format(parsed);
 }
 
 export function scoreMods(score: Score): string[] {
