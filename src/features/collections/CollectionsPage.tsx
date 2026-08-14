@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { Button, Card, EmptyState } from "../../shared/components/ui";
+import { APP_TIME_ZONE } from "../../shared/lib/format";
 import { PageHeader } from "../../shared/components/PageHeader";
 import { desktopApi } from "../../shared/lib/tauri";
 import type {
@@ -53,7 +54,7 @@ function ImportPreviewDialog({
                 <div>
                   <Dialog.Title className="text-lg font-semibold text-white">导入预览：{preview.name}</Dialog.Title>
                   <Dialog.Description className="mt-1 text-sm text-slate-400">
-                    创建者 {preview.creator || "未署名"} · {new Date(preview.created_at).toLocaleString()}
+                    创建者 {preview.creator || "未署名"} · {new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short", timeZone: APP_TIME_ZONE }).format(new Date(preview.created_at))}
                   </Dialog.Description>
                 </div>
                 <Dialog.Close className="text-slate-500 hover:text-white"><X className="size-5" /></Dialog.Close>

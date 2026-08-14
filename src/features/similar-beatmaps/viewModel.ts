@@ -9,6 +9,7 @@ import {
   defaultDynamicWeighting,
   manualWeightingFromPreferences,
 } from "./defaults";
+import { APP_TIME_ZONE } from "../../shared/lib/format";
 
 export const similarityIndexStateCopy: Record<
   Exclude<SimilarityIndexStatus["state"], "ready">,
@@ -84,6 +85,6 @@ export function formatDataCutoff(value: number | null) {
   return new Intl.DateTimeFormat("zh-CN", {
     dateStyle: "long",
     timeStyle: "short",
-    timeZone: "UTC",
+    timeZone: APP_TIME_ZONE,
   }).format(new Date(value * 1000));
 }
