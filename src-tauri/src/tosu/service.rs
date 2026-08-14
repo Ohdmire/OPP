@@ -72,11 +72,20 @@ pub fn executable_path(settings: &AppSettings) -> CommandResult<PathBuf> {
 }
 
 pub fn lyrics_executable_path(settings: &AppSettings) -> CommandResult<PathBuf> {
+    // 与 tosu 一致：Linux 优先使用 PATH 中的 tosu-proxy，回退用户配置；Windows
+    // 仅使用用户配置。
+    #[cfg(not(windows))]
+    if let Some(found) = crate::platform::find_in_path("tosu-proxy") {
+        return Ok(found);
+    }
     let raw = settings
         .tosu_lyrics_executable_path
         .as_deref()
         .ok_or_else(|| {
-            CommandError::new("TOSU_LYRICS_NOT_CONFIGURED", "请先选择 tosu-proxy.exe")
+            CommandError::new(
+                "TOSU_LYRICS_NOT_CONFIGURED",
+                "请先选择 tosu-proxy 可执行文件",
+            )
         })?;
     validate_lyrics_executable(Path::new(raw))
 }
@@ -111,17 +120,26 @@ pub fn validate_lyrics_executable(path: &Path) -> CommandResult<PathBuf> {
     let path = path.canonicalize().map_err(|_| {
         CommandError::new(
             "TOSU_LYRICS_EXECUTABLE_NOT_FOUND",
-            "未找到所选的 tosu-proxy.exe",
+            "未找到所选的 tosu-lyrics 代理可执行文件",
         )
     })?;
     let valid_name = path
         .file_name()
         .and_then(|name| name.to_str())
-        .is_some_and(|name| name.eq_ignore_ascii_case("tosu-proxy.exe"));
+        .is_some_and(|name| {
+            #[cfg(windows)]
+            {
+                name.eq_ignore_ascii_case("tosu-proxy.exe")
+            }
+            #[cfg(not(windows))]
+            {
+                name.eq_ignore_ascii_case("tosu-proxy")
+            }
+        });
     if !path.is_file() || !valid_name {
         return Err(CommandError::new(
             "INVALID_TOSU_LYRICS_EXECUTABLE",
-            "请选择 tosu-lyrics 发行包中的 tosu-proxy.exe",
+            "请选择 tosu-lyrics 发行包中的 tosu-proxy 可执行文件",
         ));
     }
     Ok(path)
@@ -345,6 +363,7 @@ fn start_lyrics_if_configured(runtime: Arc<TosuRuntime>, settings: &AppSettings,
             return;
         }
     };
+    // 找到就跟着 tosu 直接以普通子进程启动，不额外管理生命周期/权限。
     let mut command = Command::new(&executable);
     command
         .current_dir(executable.parent().unwrap_or(Path::new(".")))
@@ -445,6 +464,32 @@ pub fn start(
     }
 }
 
+/// 停止由 OPP 启动的 tosu-lyrics 代理（普通子进程，直接 kill）
+fn stop_owned_lyrics(runtime: &TosuRuntime, app: &AppHandle) {
+    if let Ok(mut lyrics) = runtime.lyrics_process.lock()
+        && let Some(mut child) = lyrics.take()
+    {
+        let _ = child.kill();
+        let _ = child.wait();
+        record(
+            runtime,
+            app,
+            "lyrics:system",
+            "已停止由 OPP 启动的 tosu-lyrics 代理。",
+        );
+    }
+}
+
+/// OPP 退出时清理：终止由 OPP 启动的 tosu-lyrics 子进程
+pub fn cleanup_on_exit(runtime: &TosuRuntime) {
+    if let Ok(mut lyrics) = runtime.lyrics_process.lock()
+        && let Some(mut child) = lyrics.take()
+    {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+}
+
 pub fn stop(runtime: &TosuRuntime, app: &AppHandle) -> CommandResult<()> {
     let mut guard = runtime
         .tosu_process
@@ -452,9 +497,11 @@ pub fn stop(runtime: &TosuRuntime, app: &AppHandle) -> CommandResult<()> {
         .map_err(|_| CommandError::new("TOSU_PROCESS_LOCKED", "tosu 进程状态不可用"))?;
     let Some(mut child) = guard.take() else {
         drop(guard);
-        // Linux 上经 pkexec 提权启动的 tosu 不归 OPP 管理，需再次提权终止。
+        // Linux 上经 pkexec 提权启动的 tosu 不归 OPP 管理，需再次提权终止；
+        // 歌词代理是 OPP 的普通子进程，先直接停掉
         #[cfg(not(windows))]
         {
+            stop_owned_lyrics(runtime, app);
             return stop_external_tosu(runtime, app);
         }
         #[cfg(windows)]
@@ -469,18 +516,7 @@ pub fn stop(runtime: &TosuRuntime, app: &AppHandle) -> CommandResult<()> {
     drop(guard);
     let _ = child.kill();
     let _ = child.wait();
-    if let Ok(mut lyrics) = runtime.lyrics_process.lock()
-        && let Some(mut child) = lyrics.take()
-    {
-        let _ = child.kill();
-        let _ = child.wait();
-        record(
-            runtime,
-            app,
-            "lyrics:system",
-            "已停止由 OPP 启动的 tosu-lyrics 代理。",
-        );
-    }
+    stop_owned_lyrics(runtime, app);
     record(runtime, app, "system", "已停止由 OPP 启动的 tosu。");
     Ok(())
 }

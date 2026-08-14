@@ -6,7 +6,7 @@ import { useMode } from "../../app/ModeContext";
 import { ErrorPanel } from "../../shared/components/ErrorPanel";
 import { Badge, Button, Card, EmptyState, SectionTitle } from "../../shared/components/ui";
 import { SearchAutocomplete } from "../../shared/components/SearchAutocomplete";
-import { desktopApi } from "../../shared/lib/tauri";
+import { desktopApi, useCapabilities } from "../../shared/lib/tauri";
 import type { DanserRenderJob, DanserRenderPreferences, DanserStatus, GameMediaItem, ReplayMapInfo } from "../../shared/types/osu";
 import { settingsQueryKey, useSettings } from "../settings/api";
 
@@ -48,6 +48,7 @@ export function DanserRenderPanel() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const isLinux = useCapabilities().data?.os === "linux";
 
   useEffect(() => { settingsRef.current = stored.data; }, [stored.data]);
 
@@ -205,7 +206,7 @@ export function DanserRenderPanel() {
         <Card className="p-5">
           <div className="flex items-start justify-between gap-4"><SectionTitle title="本地运行环境" description="OPP 直接调用 danser-cli.exe；程序和 FFmpeg 均不会由 OPP 下载或修改。" /><Badge tone={status?.available && status.ffmpeg_available ? "success" : "warning"}>{status?.available && status.ffmpeg_available ? "已就绪" : "需配置"}</Badge></div>
           <div className="mt-4 rounded-xl border border-amber-300/20 bg-amber-300/[0.06] px-4 py-3 text-sm leading-6 text-amber-100"><strong>版本要求：Danser 0.11.x</strong></div>
-          <div className="mt-4 rounded-xl border border-white/[0.08] bg-black/15 p-4"><p className="break-all font-mono text-xs text-slate-300">{status?.executable_path ?? "未找到 danser-cli.exe"}</p><p className="mt-2 text-xs text-slate-500">{status?.message ?? "正在检测本地环境…"}</p><div className="mt-3 flex gap-2"><Button onClick={() => void chooseExecutable()} size="sm"><FolderOpen className="size-4" />选择程序</Button><Button disabled={loading} onClick={() => void refresh()} size="sm"><RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />重新检测</Button></div></div>
+          <div className="mt-4 rounded-xl border border-white/[0.08] bg-black/15 p-4"><p className="break-all font-mono text-xs text-slate-300">{status?.executable_path ?? (isLinux ? "未在 PATH 中找到 danser" : "未找到 danser-cli.exe")}</p><p className="mt-2 text-xs text-slate-500">{status?.message ?? "正在检测本地环境…"}</p><div className="mt-3 flex gap-2"><Button onClick={() => void chooseExecutable()} size="sm"><FolderOpen className="size-4" />选择程序</Button><Button disabled={loading} onClick={() => void refresh()} size="sm"><RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />重新检测</Button></div></div>
         </Card>
 
         <Card className="p-5"><SectionTitle title="回放与输出" description="搜索回放并点击条目即可加入待渲染队列；Danser 只支持 osu!standard。" />

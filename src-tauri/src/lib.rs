@@ -244,6 +244,12 @@ pub fn run() {
             ignore_update_version,
             exit_app,
         ])
-        .run(tauri::generate_context!())
-        .expect("failed to run OPP");
+        .build(tauri::generate_context!())
+        .expect("failed to build OPP")
+        .run(|app, event| {
+            // 退出时终止 OPP 自己启动的 tosu-lyrics 子进程，避免孤儿代理残留。
+            if let tauri::RunEvent::Exit = event {
+                tosu::cleanup_on_exit(&app.state::<AppState>().tosu);
+            }
+        });
 }

@@ -224,6 +224,65 @@ pub fn find_in_path(command: &str) -> Option<PathBuf> {
     }
 }
 
+/// 在系统文件管理器中定位（尽量选中）给定文件或目录：Windows 走 `explorer.exe
+/// /select,`；类 Unix 经 freedesktop FileManager1 D-Bus 接口打开并选中文件，桌面
+/// 不支持时回退 `xdg-open` 打开所在目录。
+pub fn reveal_path(path: &Path) -> io::Result<()> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new("explorer.exe")
+            .args(["/select,", &path.to_string_lossy()])
+            .creation_flags(0x0800_0000)
+            .spawn()?;
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        let located = std::process::Command::new("dbus-send")
+            .args([
+                "--session",
+                "--print-reply",
+                "--dest=org.freedesktop.FileManager1",
+                "/org/freedesktop/FileManager1",
+                "org.freedesktop.FileManager1.ShowItems",
+                &format!("array:string:file://{}", path.display()),
+                "string:",
+            ])
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false);
+        if located {
+            return Ok(());
+        }
+        let target = if path.is_dir() {
+            path
+        } else {
+            path.parent().unwrap_or_else(|| Path::new("/"))
+        };
+        std::process::Command::new("xdg-open")
+            .arg(target)
+            .spawn()?;
+        Ok(())
+    }
+}
+
+/// danser-go 在类 Unix 上把 settings 存在 XDG 配置目录（`~/.config/danser`），而非
+/// 可执行文件旁边。Windows 返回 `None`（沿用可执行文件目录的旧逻辑）。
+pub fn danser_config_dir() -> Option<PathBuf> {
+    #[cfg(not(windows))]
+    {
+        env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .or_else(|| home_dir().map(|home| home.join(".config")))
+            .map(|config| config.join("danser"))
+    }
+    #[cfg(windows)]
+    {
+        None
+    }
+}
+
 /// 按进程名（comm）精确匹配判断是否运行中（Windows 返回 `false`）。
 pub fn unix_process_running(name: &str) -> bool {
     #[cfg(not(windows))]
