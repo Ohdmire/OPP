@@ -12,7 +12,7 @@ use crate::{
 };
 
 pub use models::{TosuLogEntry, TosuStatus};
-pub use service::TosuRuntime;
+pub use service::{TosuRuntime, cleanup_on_exit};
 
 fn settings(state: &AppState) -> CommandResult<AppSettings> {
     Ok(state.store.snapshot()?.settings)
