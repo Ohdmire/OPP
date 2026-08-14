@@ -5,45 +5,52 @@
 
   **一站式 osu! 工具集合**
 
-  [![Version](https://img.shields.io/badge/version-0.4.0-ff6aa7?style=for-the-badge)](./src-tauri/tauri.conf.json)
-  [![Platform](https://img.shields.io/badge/platform-Windows-5ce1e6?style=for-the-badge&logo=windows11&logoColor=white)](#运行要求)
+  [![Version](https://img.shields.io/badge/version-0.4.2-ff6aa7?style=for-the-badge)](./src-tauri/tauri.conf.json)
+  [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-5ce1e6?style=for-the-badge&logo=linux&logoColor=white)](#平台支持)
   [![Tauri](https://img.shields.io/badge/Tauri-2-a673ff?style=for-the-badge&logo=tauri&logoColor=white)](https://tauri.app/)
   [![Vibe Coding](https://img.shields.io/badge/Vibe_Coding-AI_Collaborative-8b5cf6?style=for-the-badge)](#vibe-coding)
 
-  [功能](#功能概览) · [开始使用](#开始使用) · [开发](#本地开发) · [快速入门](./docs/快速入门.md) · [架构](./docs/架构与开发.md)
+  [功能](#功能概览) · [开始使用](#开始使用) · [开发](#本地开发) · [文档中心](./docs/README.md) · [版本记录](./docs/版本变更记录.md)
 </div>
 
 ---
 
-OPP 是一个使用 Tauri、Rust 与 React 构建的 Windows 桌面应用。它集成了你游玩osu！时可能需要的工具。
-
-用户操作见 [快速入门](./docs/快速入门.md)，代码模块、数据流与开发约定见 [架构与开发](./docs/架构与开发.md)。
+OPP 是一个使用 Tauri、Rust 与 React 构建的跨平台 osu! 桌面工具，支持 Windows x64 与 Linux。
 
 > [!IMPORTANT]
 > OPP 是独立的社区项目，与 ppy Pty Ltd 或 osu! 官方无隶属关系。osu! 是 ppy Pty Ltd 的商标。
 
 **创了一个交流吹水群： 1059437719 有任何问题或者功能上的建议欢迎来群中吹水**
 
-
+## 功能概览
 
 - 通过官方 osu! API v2 OAuth 登录，查看玩家资料与成绩数据
 - 提供谱面镜像批量下载、筛选队列与多镜像自动回退
+- 管理 Stable 收藏夹、导入分享码，并自动补齐缺失谱面
 - 根据本地索引查找相似谱面，并可基于最近成绩或 BP 生成推荐
 - 内置 pp calculator，支持不同模式与 Mod
 - 支持本地谱面、Skin、截图和回放的预览与管理
 - 支持启动 Stable 与 Lazer，并记录一次游戏会话的数据变化
+- 支持 o!rdr 在线渲染，以及 Windows 上的 Danser 本地回放渲染队列
 - 支持 tosu、tosu-lyrics 与 OBS 直播工作流
 - 支持 Trainer 练习谱面生成和网易云音乐客户端搜索
-- 内置各种实用小工具
+- 内置 osu!lazer 占用统计、文件关联、手速测试等实用工具
 
 当前算法口径为 [`rosu-pp 4.0.1`](https://github.com/MaxOhn/rosu-pp/tree/v4.0.1)，对应
 [`ppy/osu@28c846b`](https://github.com/ppy/osu/commit/28c846b4d9366484792e27f4729cd1afa2cdeb66)
-（2025-10-13）算法快照。PP 表示谱面原生模式下 `NoMod`、满分、最大连击、零 miss
-的理论值，不代表某一次实际成绩。
+（2025-10-13）算法快照。
 
 ## 开始使用
 
-从仓库的 [Releases](https://github.com/osuplusplus/OPP/releases/latest) 页面下载最新的 Windows x64 EXE。Release 中的 `OPP-vX.Y.Z-windows-x64.exe` 无需安装，可直接运行；首次启动仍需要系统已安装 WebView2 Runtime。
+### Windows
+
+从仓库的 [Releases](https://github.com/osuplusplus/OPP/releases/latest) 页面下载最新的 Windows x64 EXE。`OPP-vX.Y.Z-windows-x64.exe` 无需安装，可直接运行；首次启动需要系统已安装 WebView2 Runtime。
+
+### Linux
+
+Release 提供对应的 Linux 构建，可直接下载使用，也可以参考 [Linux 使用与构建](./docs/Linux.md) 。桌面环境需要 WebKitGTK 4.1 和可用的 Secret Service（例如 GNOME Keyring 或 KWallet）。
+
+OPP 在 Linux 上通过 PATH 中的 `osu-wine` 与 `osu-lazer` 命令启动客户端。使用自定义安装方式时，请在“设置”中手动选择数据目录，并确保相应启动命令可用。
 
 ### 配置 OAuth
 
@@ -74,17 +81,18 @@ OPP 是一个使用 Tauri、Rust 与 React 构建的 Windows 桌面应用。它�
 
 - Node.js 22+
 - pnpm 11+
-- Rust stable MSVC toolchain
-- Windows SDK 与 WebView2
+- Rust stable toolchain
+- Windows：MSVC toolchain、Windows SDK 与 WebView2
+- Linux：WebKitGTK 4.1、OpenSSL、libappindicator、librsvg、libxdo 与 D-Bus 开发库；安装命令见 [Linux 使用与构建](./docs/Linux.md)
 
-```powershell
+```text
 pnpm install
 pnpm tauri dev
 ```
 
 ### 质量检查
 
-```powershell
+```text
 pnpm lint
 pnpm test
 pnpm build
@@ -96,11 +104,26 @@ cargo test --manifest-path src-tauri/Cargo.toml
 pnpm tauri build
 ```
 
-生成的 NSIS 安装包位于：
+构建产物默认位于 `src-tauri/target/release/`。Windows 打包后的 NSIS 文件位于：
 
 ```text
 src-tauri/target/release/bundle/nsis/
 ```
+
+Linux 当前默认生成 `src-tauri/target/release/opp`；发行打包策略见 [Linux 使用与构建](./docs/Linux.md)。
+
+## 平台支持
+
+| 能力 | Windows | Linux |
+| --- | :---: | :---: |
+| OAuth、在线数据、相似谱面、Trainer | ✓ | ✓ |
+| Stable/lazer 本地资源与游戏会话 | ✓ | ✓，需配置数据目录及启动命令 |
+| 收藏夹、o!rdr、tosu/OBS、lazer 占用统计 | ✓ | ✓ |
+| 系统安全凭据 | Credential Manager | Secret Service |
+| `.osz` / `.osk` 文件关联、显示器伽马 | ✓ | — |
+| Danser 本地回放渲染 | ✓ | 暂不支持 |
+
+更完整的 Linux 环境要求、目录约定和已知限制见 [Linux 使用与构建](./docs/Linux.md)。
 
 ## 项目结构
 
@@ -114,6 +137,8 @@ OPP/
 │  ├─ crates/                  # 可独立复用的 Rust 运行时
 │  └─ src/
 │     ├─ account/              # OAuth、凭据和账号缓存
+│     ├─ collections/          # 收藏夹同步、分享和缺失谱面补齐
+│     ├─ danser/               # 本地回放渲染队列
 │     ├─ local_analysis/       # 路径检测、扫描、缓存与资源分析
 │     ├─ online_beatmaps/      # 在线谱面查询与下载
 │     └─ similarity/           # 相似度数据集、查询和推荐
@@ -139,6 +164,7 @@ OPP/
 - [MaxOhn/rosu-pp](https://github.com/MaxOhn/rosu-pp)
 - [MaxOhn/rosu-map](https://github.com/MaxOhn/rosu-map)
 - [Tauri](https://github.com/tauri-apps/tauri)
+- [Ohdmire/osu-lazer-space-statistics](https://github.com/Ohdmire/osu-lazer-space-statistics)
 
 ## 特别鸣谢
 
