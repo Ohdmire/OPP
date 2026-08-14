@@ -9,6 +9,7 @@ pub use models::{
     BeatmapQuery, LocalBeatmapDetail, LocalBeatmapSetSummary, LocalBeatmapSummary, LocalClient,
     LocalIndexLoadStatus, LocalLibrarySummary, LocalScanProgress, LocalSkinAssetPayload,
     LocalSkinDetail, LocalSkinPreview, LocalSkinSummary, LocalSourceStatus, Page, SkinQuery,
+    StrainAnalysis,
 };
 pub use service::LocalAnalysisService;
 use tauri::{AppHandle, Emitter, State};
