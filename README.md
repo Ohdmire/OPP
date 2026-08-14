@@ -52,6 +52,9 @@ Release 提供对应的 Linux 构建，可直接下载使用，也可以参考 [
 
 OPP 在 Linux 上通过 PATH 中的 `osu-wine` 与 `osu-lazer` 命令启动客户端。使用自定义安装方式时，请在“设置”中手动选择数据目录，并确保相应启动命令可用。
 
+> [!TIP]
+> 在 Wayland 下若出现无法启动、黑屏或渲染异常，可在启动前设置环境变量 `WEBKIT_DISABLE_DMABUF_RENDERER=1`
+
 ### 配置 OAuth
 
 1. 打开 [osu! 账户设置](https://osu.ppy.sh/home/account/edit)。
