@@ -57,10 +57,19 @@ pub(super) fn resolve_danser_path(saved: Option<&str>) -> Option<PathBuf> {
 }
 
 pub(super) fn list_profiles_for(executable: &Path) -> Vec<String> {
-    let Some(root) = executable.parent() else {
+    // Linux：danser-go 的 settings 在 XDG 配置目录（~/.config/danser/*.json）；
+    // Windows：发行包自带的 settings/ 子目录。
+    #[cfg(not(windows))]
+    let settings_dir = {
+        let _ = executable;
+        crate::platform::danser_config_dir()
+    };
+    #[cfg(windows)]
+    let settings_dir = executable.parent().map(|root| root.join("settings"));
+    let Some(settings_dir) = settings_dir else {
         return Vec::new();
     };
-    let Ok(entries) = fs::read_dir(root.join("settings")) else {
+    let Ok(entries) = fs::read_dir(settings_dir) else {
         return Vec::new();
     };
     let mut profiles: Vec<String> = entries

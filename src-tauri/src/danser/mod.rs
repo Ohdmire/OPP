@@ -254,6 +254,12 @@ fn build_arguments(task: &DanserTask, output: &Path) -> CommandResult<Vec<String
         "-preciseprogress".into(),
         format!("-out={}", output.display()),
     ];
+    // Linux：录制输出目录只能写进 settings 文件（见 ensure_opp_profile），统一用
+    // OPP 维护的 opp.json 启动；用户选择的 profile 作为其内容来源。Windows 沿用
+    // 发行包自带 profile。
+    #[cfg(not(windows))]
+    args.push("-settings=opp".into());
+    #[cfg(windows)]
     if !input.settings_profile.trim().is_empty() {
         args.push(format!("-settings={}", input.settings_profile.trim()));
     }
@@ -353,6 +359,11 @@ fn export_output(source: &Path, directory: &Path) -> CommandResult<PathBuf> {
         .file_name()
         .ok_or_else(|| command_error("DANSER_OUTPUT_NOT_FOUND", "Danser 输出文件名无效"))?;
     let target = directory.join(file_name);
+    // Linux 上 OutputDir 就指向导出目录，产物已在目标位置，无需转存（同路径的
+    // rename/copy 反而可能损坏文件）。
+    if target == source {
+        return Ok(target);
+    }
     match fs::rename(source, &target) {
         Ok(()) => Ok(target),
         Err(_) => {
@@ -429,6 +440,50 @@ fn remove_cancelled_job(runtime: &DanserRuntime, app: &AppHandle, id: &str) {
     }
 }
 
+/// Linux：danser-go 的 settings 在 XDG 配置目录（`~/.config/danser`）。录制输出
+/// 目录 `Recording.OutputDir` 无法经 `-sPatch` 传入、`-out` 只给文件名，只能写进
+/// settings 文件：把用户当前 profile 复制成专用 `opp.json` 并写入绝对 OutputDir，
+/// 启动时用 `-settings=opp`，不改动用户自己的配置。
+#[cfg(not(windows))]
+fn ensure_opp_profile(
+    preferences: &DanserRenderPreferences,
+    output_dir: &Path,
+) -> CommandResult<()> {
+    let config_dir = crate::platform::danser_config_dir()
+        .ok_or_else(|| command_error("DANSER_CONFIG_DIR_NOT_FOUND", "无法确定 danser 配置目录"))?;
+    fs::create_dir_all(&config_dir)?;
+    let requested = preferences.settings_profile.trim();
+    let requested = if requested.is_empty() {
+        "default"
+    } else {
+        requested
+    };
+    // 首选用户选择的 profile，缺失时回退 default.json，再缺失用空对象（danser 按
+    // 内置默认值补全其余字段）。
+    let mut value = fs::read(config_dir.join(format!("{requested}.json")))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+        .or_else(|| {
+            fs::read(config_dir.join("default.json"))
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+        })
+        .unwrap_or_else(|| serde_json::json!({}));
+    merge_json(
+        &mut value,
+        serde_json::json!({ "Recording": { "OutputDir": output_dir.display().to_string() } }),
+    );
+    let serialized = serde_json::to_vec_pretty(&value)
+        .map_err(|error| command_error("DANSER_PROFILE_WRITE_FAILED", error.to_string()))?;
+    fs::write(config_dir.join("opp.json"), serialized).map_err(|error| {
+        command_error(
+            "DANSER_PROFILE_WRITE_FAILED",
+            format!("无法写入 danser 配置文件：{error}"),
+        )
+    })?;
+    Ok(())
+}
+
 fn execute_task(
     runtime: &DanserRuntime,
     app: &AppHandle,
@@ -437,8 +492,15 @@ fn execute_task(
     export_directory: &Path,
 ) {
     let output_name = unique_output_name(export_directory, &task.replay_path);
-    // Danser 0.11 resolves -out relative to its own videos directory. Passing an
-    // absolute Windows path makes it try to create a directory named `C:` there.
+    // Linux：danser 的输出目录由 settings 的 Recording.OutputDir 决定
+    #[cfg(not(windows))]
+    if let Err(error) = ensure_opp_profile(&task.preferences, export_directory) {
+        update_job(runtime, app, &task.id, |job| {
+            job.status = "failed".into();
+            job.description = error.message;
+        });
+        return;
+    }
     let args = match build_arguments(task, Path::new(&output_name)) {
         Ok(args) => args,
         Err(error) => {
@@ -456,10 +518,15 @@ fn execute_task(
         job.description = "Danser 正在准备渲染".into();
     });
     let started = SystemTime::now();
+    // 避免 danser 向只读的系统安装目录写入。
+    #[cfg(not(windows))]
+    let working_dir = export_directory.to_path_buf();
+    #[cfg(windows)]
+    let working_dir = executable.parent().unwrap_or(Path::new(".")).to_path_buf();
     let mut command = Command::new(executable);
     command
         .args(args)
-        .current_dir(executable.parent().unwrap_or(Path::new(".")))
+        .current_dir(working_dir)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     #[cfg(windows)]
@@ -512,6 +579,11 @@ fn execute_task(
         }
         match child.try_wait() {
             Ok(Some(status)) if status.success() => {
+                // Linux：OutputDir 已指向导出目录，产物直接落在这里；
+                // Windows：danser 发行包的 videos/ 子目录。
+                #[cfg(not(windows))]
+                let render_stem = export_directory.join(&output_name);
+                #[cfg(windows)]
                 let render_stem = executable
                     .parent()
                     .unwrap_or(Path::new("."))

@@ -224,6 +224,22 @@ pub fn find_in_path(command: &str) -> Option<PathBuf> {
     }
 }
 
+/// danser-go 在类 Unix 上把 settings 存在 XDG 配置目录（`~/.config/danser`），而非
+/// 可执行文件旁边。Windows 返回 `None`（沿用可执行文件目录的旧逻辑）。
+pub fn danser_config_dir() -> Option<PathBuf> {
+    #[cfg(not(windows))]
+    {
+        env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .or_else(|| home_dir().map(|home| home.join(".config")))
+            .map(|config| config.join("danser"))
+    }
+    #[cfg(windows)]
+    {
+        None
+    }
+}
+
 /// 按进程名（comm）精确匹配判断是否运行中（Windows 返回 `false`）。
 pub fn unix_process_running(name: &str) -> bool {
     #[cfg(not(windows))]
