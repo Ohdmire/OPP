@@ -73,6 +73,14 @@ command -v pkexec
 
 OBS WebSocket 默认地址仍为 `ws://127.0.0.1:4455`。桌面会话必须提供可解锁的 Secret Service，否则 OPP 无法安全保存密码和 OAuth 凭据。
 
+## Wayland 渲染问题
+
+在 Wayland 下若出现窗口无法启动、黑屏或渲染异常，通常与 WebKitGTK 的 DMA-BUF 渲染器有关，可在启动前关闭它：
+
+```bash
+WEBKIT_DISABLE_DMABUF_RENDERER=1 ./opp
+```
+
 ## 已知平台限制
 
 - Danser 本地渲染当前只识别 Windows 的 `danser-cli.exe` 与 `ffmpeg.exe`；Linux 请使用 o!rdr 在线渲染。

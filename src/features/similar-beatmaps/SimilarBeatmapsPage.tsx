@@ -6,7 +6,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { PageHeader } from "../../shared/components/PageHeader";
 import { Button, Card, EmptyState, InfoTip } from "../../shared/components/ui";
-import { errorMessage } from "../../shared/lib/format";
+import { APP_TIME_ZONE, errorMessage } from "../../shared/lib/format";
 import { settingsQueryKey, useSettings } from "../settings/api";
 import { desktopApi } from "../../shared/lib/tauri";
 import type {
@@ -603,7 +603,7 @@ export function SimilarBeatmapsPage() {
                         <p className="truncate text-sm font-medium text-slate-100">{result.artist} - {result.title}</p>
                         <p className="mt-1 truncate text-xs text-slate-500">[{result.version}] · {result.creator} · {result.star_rating == null ? "星数未知" : `${result.star_rating.toFixed(2)}★`}</p>
                       </div>
-                      <time className="shrink-0 text-xs text-slate-500">{new Date(displayed_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
+                      <time className="shrink-0 text-xs text-slate-500">{new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit", timeZone: APP_TIME_ZONE }).format(new Date(displayed_at))}</time>
                     </button>
                   ))}
                 </div>

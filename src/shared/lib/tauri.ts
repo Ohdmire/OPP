@@ -414,11 +414,13 @@ export const desktopApi = {
   },
   chooseDanserExecutable: async (defaultPath?: string | null) => {
     if (!isTauri()) return null;
+    const isWindows = navigator.userAgent.includes("Windows");
     const selected = await openDialog({
       directory: false,
       multiple: false,
       defaultPath: defaultPath ?? undefined,
-      filters: [{ name: "Danser CLI", extensions: ["exe"] }],
+      title: isWindows ? "选择 danser-cli.exe" : "选择 danser 可执行文件",
+      ...(isWindows ? { filters: [{ name: "Danser CLI", extensions: ["exe"] }] } : {}),
     });
     return typeof selected === "string" ? selected : null;
   },
@@ -451,7 +453,13 @@ export const desktopApi = {
   },
   chooseTosuLyricsExecutable: async (defaultPath?: string | null) => {
     if (!isTauri()) throw { code: "TAURI_REQUIRED", message: "文件选择器仅可在 OPP 桌面应用中使用" } satisfies CommandError;
-    const selected = await openDialog({ multiple: false, defaultPath: defaultPath ?? undefined, title: "选择 tosu-proxy.exe", filters: [{ name: "tosu-lyrics", extensions: ["exe"] }] });
+    const isWindows = navigator.userAgent.includes("Windows");
+    const selected = await openDialog({
+      multiple: false,
+      defaultPath: defaultPath ?? undefined,
+      title: isWindows ? "选择 tosu-proxy.exe" : "选择 tosu-proxy 可执行文件",
+      ...(isWindows ? { filters: [{ name: "tosu-lyrics", extensions: ["exe"] }] } : {}),
+    });
     return typeof selected === "string" ? selected : null;
   },
   chooseManiaBeatmaps: async () => {
