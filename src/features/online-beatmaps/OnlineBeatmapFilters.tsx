@@ -52,7 +52,12 @@ const gradeOptions = [["", "全部"], ["XH", "银 SS"], ["X", "SS"], ["SH", "银
 const playedOptions = [["", "全部"], ["played", "玩过"], ["unplayed", "没玩过"]] as const;
 
 export function OnlineBeatmapFilters({ query, loading, onChange, onReset, onSubmit, suggestions = [] }: { query: OnlineBeatmapSearchQuery; loading: boolean; onChange: (query: OnlineBeatmapSearchQuery) => void; onReset: () => void; onSubmit: () => void; suggestions?: SearchSuggestion[] }) {
-  const patch = (value: Partial<OnlineBeatmapSearchQuery>) => onChange({ ...query, ...value, cursor_string: null });
+  const patch = (value: Partial<OnlineBeatmapSearchQuery>) => {
+    const sort = Object.prototype.hasOwnProperty.call(value, "query")
+      ? value.query?.trim() ? "relevance_desc" : "ranked_desc"
+      : value.sort ?? query.sort;
+    onChange({ ...query, ...value, sort, cursor_string: null });
+  };
   const count = activeFilterCount(query);
   const toggleExtra = (extra: "video" | "storyboard") => patch({ extras: query.extras.includes(extra) ? query.extras.filter((item) => item !== extra) : [...query.extras, extra] });
 
