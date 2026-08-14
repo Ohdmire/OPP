@@ -834,12 +834,7 @@ pub fn open_danser_output(path: String, state: State<'_, AppState>) -> CommandRe
             "输出文件不在回放导出目录中",
         ));
     }
-    let mut command = Command::new("explorer.exe");
-    command.arg("/select,").arg(&target);
-    #[cfg(windows)]
-    command.creation_flags(CREATE_NO_WINDOW);
-    command
-        .spawn()
+    crate::platform::reveal_path(&target)
         .map_err(|error| command_error("OPEN_OUTPUT_FAILED", error.to_string()))?;
     Ok(())
 }

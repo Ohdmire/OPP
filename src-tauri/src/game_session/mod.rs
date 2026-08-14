@@ -946,20 +946,7 @@ pub fn open_media_in_explorer(
         ));
     }
 
-    #[cfg(windows)]
-    {
-        Command::new("explorer.exe")
-            .args(["/select,", &candidate.to_string_lossy()])
-            .spawn()
-            .map_err(|e| CommandError::new("EXPLORER_OPEN_FAILED", e.to_string()))?;
-        Ok(())
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = candidate;
-        Err(CommandError::new(
-            "EXPLORER_UNSUPPORTED",
-            "当前平台不支持在资源管理器中定位文件",
-        ))
-    }
+    crate::platform::reveal_path(&candidate)
+        .map_err(|error| CommandError::new("EXPLORER_OPEN_FAILED", error.to_string()))?;
+    Ok(())
 }

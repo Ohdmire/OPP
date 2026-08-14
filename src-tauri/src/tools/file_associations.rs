@@ -1,6 +1,5 @@
 use std::{
     path::{Path, PathBuf},
-    process::Command,
 };
 
 use serde::{Deserialize, Serialize};
@@ -20,24 +19,8 @@ pub struct DefaultFileClients {
 }
 
 fn explorer_select(path: &Path) -> CommandResult<()> {
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        Command::new("explorer.exe")
-            .args(["/select,", &path.to_string_lossy()])
-            .creation_flags(0x08000000)
-            .spawn()
-            .map_err(|error| CommandError::new("EXPLORER_OPEN_FAILED", error.to_string()))?;
-        Ok(())
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = path;
-        Err(CommandError::new(
-            "EXPLORER_UNSUPPORTED",
-            "当前平台不支持在资源管理器中定位文件",
-        ))
-    }
+    crate::platform::reveal_path(path)
+        .map_err(|error| CommandError::new("EXPLORER_OPEN_FAILED", error.to_string()))
 }
 
 fn safe_candidate(base: &Path, relative: &str) -> Option<PathBuf> {
