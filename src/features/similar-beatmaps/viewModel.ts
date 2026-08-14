@@ -24,7 +24,7 @@ export const similarityIndexStateCopy: Record<
   },
   invalid: {
     title: "本地索引校验失败",
-    description: "目录中的必要文件缺失、校验值不一致，或索引内容已损坏。",
+    description: "目录中的必要文件缺失、校验值不一致，或索引内容已损坏。请点击上方按钮跳转Release页面下载最新版本的索引，或重新校验。",
   },
   incompatible: {
     title: "本地索引版本不兼容",

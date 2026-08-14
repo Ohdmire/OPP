@@ -4,30 +4,46 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (for example: v0.4.2)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
 
 jobs:
-  publish-tauri:
-    permissions:
-      contents: write
-
+  build-and-release:
+    name: Build ${{ matrix.name }}
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - windows-latest
-          - ubuntu-22.04
+        include:
+          - name: Linux (AppImage + deb)
+            platform: ubuntu-22.04
+            args: "--bundles appimage,deb"
+            upload_plain_binary: false
+            asset_name: "OPP_[version]_linux_[arch][ext]"
+          - name: Windows (portable exe)
+            platform: windows-latest
+            args: "--no-bundle"
+            upload_plain_binary: true
+            asset_name: "OPP_[version]_windows_[arch]_portable[ext]"
 
     runs-on: ${{ matrix.platform }}
 
     steps:
-      - uses: actions/checkout@v7
+      - name: Checkout repository
+        uses: actions/checkout@v7
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 11
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -36,7 +52,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Rust cache
+      - name: Cache Rust build
         uses: swatinem/rust-cache@v2
         with:
           workspaces: "./src-tauri -> target"
@@ -55,13 +71,22 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build and release
+      - name: Build and upload release assets
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "OPP ${{ github.ref_name }}"
-          releaseBody: "See the assets below to download OPP."
+          tagName: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          releaseName: "OPP ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+          releaseBody: "Download AppImage or deb for Linux, or the portable exe for Windows."
           releaseDraft: false
           prerelease: false
+          generateReleaseNotes: true
+          args: ${{ matrix.args }}
+          uploadPlainBinary: ${{ matrix.upload_plain_binary }}
+          uploadWorkflowArtifacts: true
+          uploadUpdaterJson: false
+          uploadUpdaterSignatures: false
+          releaseAssetNamePattern: ${{ matrix.asset_name }}
+          workflowArtifactNamePattern: "OPP-[version]-[platform]-[arch]-[bundle]"
+          retryAttempts: 3
