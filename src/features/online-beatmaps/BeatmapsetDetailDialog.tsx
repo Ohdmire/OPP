@@ -11,7 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { Badge, Button, DataLine } from "../../shared/components/ui";
-import { fullNumber } from "../../shared/lib/format";
+import { APP_TIME_ZONE, fullNumber } from "../../shared/lib/format";
 import { desktopApi } from "../../shared/lib/tauri";
 import type { OnlineBeatmapset } from "../../shared/types/osu";
 import { useOnlineBeatmapsetDetail } from "./api";
@@ -163,7 +163,7 @@ export function BeatmapsetDetailDialog({
                     label="Rank 日期"
                     value={
                       beatmapset.ranked_date
-                        ? new Date(beatmapset.ranked_date).toLocaleDateString("zh-CN")
+                        ? new Intl.DateTimeFormat("zh-CN", { timeZone: APP_TIME_ZONE }).format(new Date(beatmapset.ranked_date))
                         : "—"
                     }
                   />

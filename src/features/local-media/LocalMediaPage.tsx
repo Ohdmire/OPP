@@ -7,6 +7,7 @@ import { PageHeader } from "../../shared/components/PageHeader";
 import { Badge, Button, Card, EmptyState, SectionTitle } from "../../shared/components/ui";
 import { SearchAutocomplete } from "../../shared/components/SearchAutocomplete";
 import { desktopApi } from "../../shared/lib/tauri";
+import { APP_TIME_ZONE } from "../../shared/lib/format";
 import type { GameMediaItem, GameReplayPayload, GameScreenshotPayload } from "../../shared/types/osu";
 
 function formatBytes(value: number) {
@@ -21,7 +22,7 @@ function fileName(path: string) {
 
 function formatDate(value: string | null) {
   if (!value) return "未知时间";
-  return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short", timeZone: APP_TIME_ZONE }).format(new Date(value));
 }
 
 function base64ToBlob(base64: string, mimeType: string) {
