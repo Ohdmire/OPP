@@ -338,6 +338,53 @@ fn spawn_elevated_tosu(
     Ok(())
 }
 
+/// 以看门狗方式在后台启动 tosu-lyrics 代理（Linux，无需提权）。
+#[cfg(not(windows))]
+fn spawn_lyrics_watchdog(
+    runtime: &Arc<TosuRuntime>,
+    app: &AppHandle,
+    executable: &Path,
+) -> CommandResult<()> {
+    let exe = shell_word(executable);
+    // 后台启动代理并记下 PID；只要代理还活着就每秒检查 OPP 是否仍在——不在则
+    // 先 TERM、1 秒后 KILL，与 tosu 看门狗一致。
+    let script = format!(
+        "{exe} & P=$!; while kill -0 \"$P\" 2>/dev/null; do \
+         kill -0 {opp} 2>/dev/null || {{ kill \"$P\" 2>/dev/null; sleep 1; kill -9 \"$P\" 2>/dev/null; break; }}; \
+         sleep 1; done; wait \"$P\" 2>/dev/null",
+        exe = exe,
+        opp = std::process::id(),
+    );
+    let mut child = Command::new("bash")
+        .args(["-c", &script])
+        .current_dir(executable.parent().unwrap_or(Path::new(".")))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| {
+            CommandError::new(
+                "TOSU_LYRICS_START_FAILED",
+                format!("无法启动 tosu-lyrics 代理：{error}"),
+            )
+        })?;
+    if let Some(stdout) = child.stdout.take() {
+        read_output(stdout, "lyrics:stdout", runtime.clone(), app.clone());
+    }
+    if let Some(stderr) = child.stderr.take() {
+        read_output(stderr, "lyrics:stderr", runtime.clone(), app.clone());
+    }
+    if let Ok(mut process) = runtime.lyrics_process.lock() {
+        *process = Some(child);
+    }
+    record(
+        runtime,
+        app,
+        "lyrics:system",
+        "tosu-lyrics 代理已由 OPP 在后台启动，OPP 退出时会自动停止。访问 http://127.0.0.1:41280/lyrics/",
+    );
+    Ok(())
+}
+
 fn start_lyrics_if_configured(runtime: Arc<TosuRuntime>, settings: &AppSettings, app: AppHandle) {
     if !settings.launch_tosu_lyrics_with_tosu || is_lyrics_owned_running(&runtime) {
         return;
@@ -363,37 +410,52 @@ fn start_lyrics_if_configured(runtime: Arc<TosuRuntime>, settings: &AppSettings,
             return;
         }
     };
-    let mut command = Command::new(&executable);
-    command
-        .current_dir(executable.parent().unwrap_or(Path::new(".")))
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    #[cfg(windows)]
-    command.creation_flags(CREATE_NO_WINDOW);
-    match command.spawn() {
-        Ok(mut child) => {
-            if let Some(stdout) = child.stdout.take() {
-                read_output(stdout, "lyrics:stdout", runtime.clone(), app.clone());
-            }
-            if let Some(stderr) = child.stderr.take() {
-                read_output(stderr, "lyrics:stderr", runtime.clone(), app.clone());
-            }
-            if let Ok(mut process) = runtime.lyrics_process.lock() {
-                *process = Some(child);
-            }
+
+    #[cfg(not(windows))]
+    {
+        if let Err(error) = spawn_lyrics_watchdog(&runtime, &app, &executable) {
             record(
                 &runtime,
                 &app,
                 "lyrics:system",
-                "tosu-lyrics 代理已由 OPP 在后台启动。访问 http://127.0.0.1:41280/lyrics/",
+                format!("无法启动 tosu-lyrics 代理：{error}"),
             );
         }
-        Err(error) => record(
-            &runtime,
-            &app,
-            "lyrics:system",
-            format!("无法启动 tosu-lyrics 代理：{error}"),
-        ),
+        return;
+    }
+    #[cfg(windows)]
+    {
+        let mut command = Command::new(&executable);
+        command
+            .current_dir(executable.parent().unwrap_or(Path::new(".")))
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        command.creation_flags(CREATE_NO_WINDOW);
+        match command.spawn() {
+            Ok(mut child) => {
+                if let Some(stdout) = child.stdout.take() {
+                    read_output(stdout, "lyrics:stdout", runtime.clone(), app.clone());
+                }
+                if let Some(stderr) = child.stderr.take() {
+                    read_output(stderr, "lyrics:stderr", runtime.clone(), app.clone());
+                }
+                if let Ok(mut process) = runtime.lyrics_process.lock() {
+                    *process = Some(child);
+                }
+                record(
+                    &runtime,
+                    &app,
+                    "lyrics:system",
+                    "tosu-lyrics 代理已由 OPP 在后台启动。访问 http://127.0.0.1:41280/lyrics/",
+                );
+            }
+            Err(error) => record(
+                &runtime,
+                &app,
+                "lyrics:system",
+                format!("无法启动 tosu-lyrics 代理：{error}"),
+            ),
+        }
     }
 }
 
