@@ -82,9 +82,9 @@ export function createDefaultSearchQuery(
     language: null,
     extras: [],
     include_nsfw: false,
-    // Free-text searches should surface the closest title/artist/tag matches first.
-    // Chronological ranking is still available as an explicit user-selected sort.
-    sort: "relevance_desc",
+    // Browse default Ranked results in the same order as the official site:
+    // newest rank date first. Entering a free-text search switches to relevance.
+    sort: "ranked_desc",
     artist: "",
     title: "",
     source: "",

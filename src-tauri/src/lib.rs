@@ -72,9 +72,10 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 use tools::{
-    cancel_lazer_dedupe, convert_mania_beatmaps, dedupe_lazer_files, get_default_file_clients,
-    get_lazer_disk_usage, open_local_resource_in_explorer, set_default_file_client,
-    set_display_gamma,
+    convert_mania_beatmaps, generate_beatmap_preview, get_default_file_clients,
+    get_lazer_disk_usage, inspect_beatmap_preview, open_beatmap_preview_output,
+    open_local_resource_in_explorer, read_beatmap_preview_output, save_beatmap_preview_output,
+    set_default_file_client, set_display_gamma,
 };
 use tosu::{
     get_tosu_logs, get_tosu_status, set_tosu_executable, set_tosu_lyrics_executable, start_tosu,
@@ -232,6 +233,11 @@ pub fn run() {
             cancel_lazer_dedupe,
             open_netease_music_search,
             convert_mania_beatmaps,
+            inspect_beatmap_preview,
+            generate_beatmap_preview,
+            read_beatmap_preview_output,
+            save_beatmap_preview_output,
+            open_beatmap_preview_output,
             generate_trainer_beatmap,
             get_tosu_status,
             get_tosu_logs,

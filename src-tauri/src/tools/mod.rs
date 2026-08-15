@@ -1,3 +1,4 @@
+mod beatmap_preview;
 mod file_associations;
 mod gamma;
 mod lazer_dedupe;
@@ -5,6 +6,10 @@ mod lazer_disk_usage;
 mod mania_converter;
 mod models;
 
+pub use beatmap_preview::{
+    generate_beatmap_preview, inspect_beatmap_preview, open_beatmap_preview_output,
+    read_beatmap_preview_output, save_beatmap_preview_output,
+};
 pub use file_associations::{
     get_default_file_clients, open_local_resource_in_explorer, set_default_file_client,
 };

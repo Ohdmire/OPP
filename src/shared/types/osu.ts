@@ -819,6 +819,31 @@ export interface StrainAnalysis {
   series: StrainSeries[];
 }
 
+export interface BeatmapPreviewInspection {
+  bid: number;
+  title: string;
+  title_unicode: string;
+  artist: string;
+  artist_unicode: string;
+  creator: string;
+  difficulty_name: string;
+  ruleset: Ruleset;
+  length_ms: number;
+  strains?: StrainAnalysis | null;
+}
+
+export interface BeatmapPreviewRequest {
+  bid: number;
+  start_seconds: number | null;
+  end_seconds: number | null;
+}
+
+export interface BeatmapPreviewResult {
+  output_path: string;
+  file_name: string;
+  mime_type: "image/gif" | "image/png";
+}
+
 export interface LocalBeatmapDetail {
   summary: LocalBeatmapSummary;
   source: string;
