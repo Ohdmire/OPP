@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Area, AreaChart, CartesianGrid, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Database, Download, FileCog, FolderOpen, ImageIcon, Info, Keyboard, MonitorCog, RefreshCw, RotateCcw, Save, Square, Wrench } from "lucide-react";
+import { AlertTriangle, Database, Download, FileCog, FolderOpen, HardDrive, ImageIcon, Info, Keyboard, Link2, MonitorCog, RefreshCw, RotateCcw, Save, Square, Wrench } from "lucide-react";
 
 import { useMode } from "../../app/ModeContext";
 import { ClientSwitch } from "../../shared/components/ClientSwitch";
@@ -11,8 +11,16 @@ import { PageHeader } from "../../shared/components/PageHeader";
 import { Badge, Button, Card, SectionTitle } from "../../shared/components/ui";
 import { desktopApi, useCapabilities } from "../../shared/lib/tauri";
 
-import type { DefaultFileClients, LazerDiskUsage, ManiaConversionItem, OsuClient } from "../../shared/types/osu";
+import type { DefaultFileClients, LazerDedupeProgress, LazerDedupeResult, LazerDiskUsage, ManiaConversionItem, OsuClient } from "../../shared/types/osu";
 import type { BeatmapPreviewInspection, BeatmapPreviewResult } from "../../shared/types/osu";
+
+function formatByteSize(bytes: number) {
+  const units = ["B", "K", "M", "G", "T"];
+  let value = bytes;
+  let index = 0;
+  while (value >= 1024 && index < units.length - 1) { value /= 1024; index += 1; }
+  return `${value.toFixed(value >= 100 || index === 0 ? 0 : 1)}${units[index]}`;
+}
 
 const previewModeLabels = { osu: "osu!standard", taiko: "osu!taiko", fruits: "osu!catch", mania: "osu!mania" } as const;
 

@@ -221,6 +221,9 @@ export const desktopApi = {
   getAuthStatus: () => call<AuthStatus>("get_auth_status"),
   getCapabilities: () => call<PlatformCapabilities>("get_capabilities"),
   getLazerDiskUsage: () => call<LazerDiskUsage>("get_lazer_disk_usage"),
+  dedupeLazerFiles: (dryRun: boolean) =>
+    call<LazerDedupeResult>("dedupe_lazer_files", { dryRun }),
+  cancelLazerDedupe: () => call<void>("cancel_lazer_dedupe"),
 
   inspectBeatmapPreview: (bid: number) =>
     call<BeatmapPreviewInspection>("inspect_beatmap_preview", { bid }),
