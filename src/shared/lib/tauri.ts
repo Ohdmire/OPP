@@ -67,6 +67,14 @@ import type {
   ReplayRenderRequest,
   Score,
   SkinQuery,
+  SkinConfigDocument,
+  SkinPartPreview,
+  SkinTree,
+  SkinWorkshopAction,
+  SkinWorkshopAssetPayload,
+  SkinWorkshopMutationResult,
+  SkinWorkshopPreset,
+  SkinWorkshopWriteMode,
   SimilarityIndexStatus,
   SimilarityQueryRequest,
   SimilarityQueryResponse,
@@ -418,6 +426,25 @@ export const desktopApi = {
     const selected = await openDialog({ multiple: false, title: `选择 .${extension} 替换文件`, filters: [{ name: `${extension.toUpperCase()} 文件`, extensions: [extension] }] });
     return typeof selected === "string" ? selected : null;
   },
+  openSkinWorkshopPackage: (path: string) =>
+    call<LocalSkinSummary>("open_skin_workshop_package", { path }),
+  chooseSkinWorkshopPackage: async () => {
+    if (!isTauri()) return null;
+    const selected = await openDialog({ multiple: false, title: "打开 Skin 安装包", filters: [{ name: "osu! Skin", extensions: ["osk"] }] });
+    return typeof selected === "string" ? selected : null;
+  },
+  getSkinWorkshopTree: (client: OsuClient, skinResourceId: string) =>
+    call<SkinTree>("get_skin_workshop_tree", { client, skinResourceId }),
+  getSkinWorkshopPartPreview: (client: OsuClient, skinResourceId: string, partKey: string) =>
+    call<SkinPartPreview>("get_skin_workshop_part_preview", { client, skinResourceId, partKey }),
+  getSkinWorkshopAsset: (client: OsuClient, skinResourceId: string, assetId: string) =>
+    call<SkinWorkshopAssetPayload>("get_skin_workshop_asset", { client, skinResourceId, assetId }),
+  getSkinWorkshopConfig: (client: OsuClient, skinResourceId: string) =>
+    call<SkinConfigDocument>("get_skin_workshop_config", { client, skinResourceId }),
+  executeSkinWorkshopAction: (targetSkinResourceId: string, mode: SkinWorkshopWriteMode, action: SkinWorkshopAction) =>
+    call<SkinWorkshopMutationResult>("execute_skin_workshop_action", { targetSkinResourceId, mode, action }),
+  executeSkinWorkshopPreset: (targetSkinResourceId: string, mode: SkinWorkshopWriteMode, preset: SkinWorkshopPreset) =>
+    call<SkinWorkshopMutationResult>("execute_skin_workshop_preset", { targetSkinResourceId, mode, preset }),
   chooseLocalDirectory: async (defaultPath?: string | null) => {
     if (!isTauri()) {
       throw {

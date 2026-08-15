@@ -13,6 +13,7 @@ mod platform;
 mod pp_calc;
 mod replay_render;
 mod similarity;
+mod skin_workshop;
 mod state;
 mod storage;
 mod tools;
@@ -64,6 +65,11 @@ use replay_render::submit_replay_render;
 use similarity::{
     configure_similarity_index, get_similarity_index_status, query_similar_beatmaps,
     recommend_similar_beatmaps,
+};
+use skin_workshop::{
+    execute_skin_workshop_action, execute_skin_workshop_preset, get_skin_workshop_asset,
+    get_skin_workshop_config, get_skin_workshop_part_preview, get_skin_workshop_tree,
+    open_skin_workshop_package,
 };
 use state::AppState;
 use tauri::{
@@ -224,6 +230,13 @@ pub fn run() {
             get_local_skin_preview,
             get_local_skin_asset,
             replace_local_skin_asset,
+            open_skin_workshop_package,
+            execute_skin_workshop_action,
+            execute_skin_workshop_preset,
+            get_skin_workshop_tree,
+            get_skin_workshop_part_preview,
+            get_skin_workshop_asset,
+            get_skin_workshop_config,
             open_local_resource_in_explorer,
             get_default_file_clients,
             set_default_file_client,

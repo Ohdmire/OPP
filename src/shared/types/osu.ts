@@ -1301,6 +1301,89 @@ export interface LocalSkinAssetPayload {
   data_url: string;
 }
 
+export type WorkshopAssetKind = "image" | "audio";
+
+export interface SkinAssetVariant {
+  asset_id: string;
+  kind: WorkshopAssetKind;
+  name: string;
+  logical_path: string;
+  extension: string;
+  size: number;
+  scale: number;
+  frame: number | null;
+}
+
+export interface SkinTreeNode {
+  part_id: string;
+  part_key: string;
+  label: string;
+  path_segments: string[];
+  asset_count: number;
+  image_count: number;
+  audio_count: number;
+  children: SkinTreeNode[];
+}
+
+export interface SkinTree {
+  skin_resource_id: string;
+  roots: SkinTreeNode[];
+}
+
+export interface SkinPartPreview {
+  skin_resource_id: string;
+  part_key: string;
+  assets: SkinAssetVariant[];
+}
+
+export interface SkinWorkshopAssetPayload {
+  asset_id: string;
+  kind: WorkshopAssetKind;
+  mime_type: string;
+  data_url: string;
+}
+
+export interface SkinWorkshopConfigEntry {
+  key: string;
+  value: string;
+  occurrence: number;
+  line: number;
+}
+
+export interface SkinWorkshopConfigSection {
+  name: string;
+  entries: SkinWorkshopConfigEntry[];
+}
+
+export interface SkinConfigDocument {
+  source: string;
+  sections: SkinWorkshopConfigSection[];
+  errors: Array<{ line: number; message: string }>;
+  encoding: string;
+  newline: string;
+}
+
+export type SkinWorkshopAction =
+  | { type: "replace_component"; target_logical_path: string; replacement_path: string }
+  | { type: "replace_part"; target_part_key: string; source_skin_resource_id: string }
+  | { type: "copy_component"; target_logical_path: string; source_skin_resource_id: string; source_logical_path: string }
+  | { type: "copy_config_entry"; source_skin_resource_id: string; section: string; key: string; occurrence: number }
+  | { type: "update_config_source"; source: string }
+  | { type: "update_config_entry"; section: string; key: string; occurrence: number; value: string };
+
+export type SkinWorkshopWriteMode =
+  | { mode: "overwrite" }
+  | { mode: "create_copy"; name: string };
+
+export type SkinWorkshopPreset =
+  | { type: "migrate_mania"; source_skin_resource_id: string };
+
+export interface SkinWorkshopMutationResult {
+  name: string;
+  path: string;
+  created_copy: boolean;
+}
+
 export interface Page<T> {
   items: T[];
   total: number;
