@@ -3,7 +3,7 @@ export type ScoreCategory = "best" | "pinned";
 export type OsuClient = "stable" | "lazer";
 export type Completeness = "complete" | "partial";
 export type CapabilityLevel = "full" | "partial" | "unavailable";
-export type BeatmapDownloadProvider = "hinai" | "catboy" | "nerinyan";
+export type BeatmapDownloadProvider = "sayobot" | "hinai" | "catboy" | "nerinyan";
 
 export interface PlatformCapabilities {
   os: "windows" | "linux";

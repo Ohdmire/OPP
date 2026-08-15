@@ -14,7 +14,7 @@ export function useSettings() {
       reduce_motion: false,
       similarity_index_directory: null,
       beatmap_download_directory: null,
-      default_beatmap_download_provider: "hinai" as const,
+      default_beatmap_download_provider: "sayobot" as const,
       open_downloaded_beatmaps_after_download: false,
       replay_export_directory: null,
       danser_executable_path: null,

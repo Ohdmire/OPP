@@ -72,9 +72,9 @@ export function OnlineBeatmapFilters({ query, loading, onChange, onReset, onSubm
         </div>
 
         <div className="px-5 pb-2">
-          <div className="relative py-5"><SearchAutocomplete ariaLabel="搜索在线谱面" className="w-full" inputClassName={`${inputClass} py-3 pl-11 pr-10`} onChange={(value) => patch({ query: value })} placeholder="搜索标题、艺术家、mapper、标签或 ID" suggestions={suggestions} value={query.query} /><span className="absolute right-3 top-1/2 z-20 -translate-y-1/2"><InfoTip text="自动补全只基于当前已加载的搜索结果。输入后点击“应用筛选”进行完整的在线搜索。" /></span></div>
+          <div className="relative py-5" data-page-guide-online-search="true"><SearchAutocomplete ariaLabel="搜索在线谱面" className="w-full" inputClassName={`${inputClass} py-3 pl-11 pr-10`} onChange={(value) => patch({ query: value })} placeholder="搜索标题、艺术家、mapper、标签或 ID" suggestions={suggestions} value={query.query} /><span className="absolute right-3 top-1/2 z-20 -translate-y-1/2"><InfoTip text="自动补全只基于当前已加载的搜索结果。输入后点击“应用筛选”进行完整的在线搜索。" /></span></div>
 
-          <div className="border-y border-white/[0.08]">
+          <div className="border-y border-white/[0.08]" data-page-guide-online-core-filters="true">
             <FilterRow label="模式">{rulesetOptions.map((option) => <TextOption active={query.ruleset === option.value} key={option.value ?? "all"} onClick={() => patch({ ruleset: option.value })}>{option.label}</TextOption>)}</FilterRow>
             <FilterRow label="状态">{statusOptions.map((option) => <TextOption active={query.status === option.value} key={option.value} onClick={() => patch({ status: option.value })}>{option.value === "any" ? "全部" : option.label}</TextOption>)}</FilterRow>
             <FilterRow label="流派">{genreOptions.map((option) => <TextOption active={query.genre === option.value} key={option.value ?? "all"} onClick={() => patch({ genre: option.value })}>{option.value === null ? "全部" : option.label}</TextOption>)}</FilterRow>
@@ -87,7 +87,7 @@ export function OnlineBeatmapFilters({ query, loading, onChange, onReset, onSubm
             <FilterRow label="排序">{sortOptions.map((option) => <TextOption active={query.sort === option.value} key={option.value} onClick={() => patch({ sort: option.value })}>{option.label}</TextOption>)}</FilterRow>
           </div>
 
-          <details className="group">
+          <details className="group" data-page-guide-online-advanced="true">
             <summary className="flex cursor-pointer list-none items-center gap-2 py-4 text-sm font-semibold text-slate-400 transition hover:text-white">
               <ChevronRight className="size-4 transition-transform group-open:rotate-90" />
               更多筛选

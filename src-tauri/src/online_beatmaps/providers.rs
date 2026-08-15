@@ -12,6 +12,7 @@ use crate::error::{CommandError, CommandResult};
 pub const NERINYAN_BASE_URL: &str = "https://api.nerinyan.moe";
 pub const CATBOY_BASE_URL: &str = "https://catboy.best";
 pub const HINAI_BASE_URL: &str = "https://mirror.hinamizawa.ai";
+pub const SAYOBOT_BASE_URL: &str = "https://dl.sayobot.cn";
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ProviderStatus {
@@ -80,6 +81,11 @@ impl ProviderRegistry {
         F: FnMut(u64, Option<u64>),
     {
         let (url, code, fallback_name) = match provider {
+            "sayobot" => (
+                format!("{SAYOBOT_BASE_URL}/beatmaps/download/full/{id}"),
+                "SAYOBOT_DOWNLOAD_FAILED",
+                Some(format!("{id}.osz")),
+            ),
             "hinai" => (
                 format!("{HINAI_BASE_URL}/api/v1/hinai/d/{id}"),
                 "HINAI_DOWNLOAD_FAILED",
@@ -196,10 +202,12 @@ impl ProviderRegistry {
     }
 
     pub async fn statuses(&self) -> Vec<ProviderStatus> {
+        let sayobot_health = "https://api.sayobot.cn/beatmaplist?L=1&O=0&T=1";
         let nerinyan_health = format!("{NERINYAN_BASE_URL}/health");
         let catboy_health = format!("{CATBOY_BASE_URL}/health");
         let hinai_health = format!("{HINAI_BASE_URL}/docs/beatmap-download");
-        let (nerinyan, catboy, hinai) = tokio::join!(
+        let (sayobot, nerinyan, catboy, hinai) = tokio::join!(
+            self.health("sayobot", sayobot_health),
             self.health("nerinyan", &nerinyan_health),
             self.health("catboy", &catboy_health),
             self.health("hinai", &hinai_health),
@@ -216,6 +224,17 @@ impl ProviderRegistry {
                 retry_after_seconds: None,
                 message: Some("官方筛选与信息基准".into()),
             },
+            sayobot.unwrap_or_else(|error| ProviderStatus {
+                id: "sayobot".into(),
+                label: "小夜（Sayobot）".into(),
+                online: false,
+                supports_search: true,
+                supports_metadata: true,
+                supports_osu_download: false,
+                supports_osz_download: true,
+                retry_after_seconds: error.retry_after_seconds,
+                message: Some(error.message),
+            }),
             nerinyan.unwrap_or_else(|error| ProviderStatus {
                 id: "nerinyan".into(),
                 label: "Nerinyan".into(),
@@ -263,9 +282,16 @@ impl ProviderRegistry {
         if response.status().is_success() {
             Ok(ProviderStatus {
                 id: id.into(),
-                label: id.into(),
+                label: match id {
+                    "sayobot" => "小夜（Sayobot）",
+                    "hinai" => "Hinai Mirror",
+                    "catboy" => "Catboy",
+                    "nerinyan" => "Nerinyan",
+                    _ => id,
+                }
+                .into(),
                 online: true,
-                supports_search: id == "nerinyan",
+                supports_search: id == "nerinyan" || id == "sayobot",
                 supports_metadata: id != "hinai",
                 supports_osu_download: id == "catboy",
                 supports_osz_download: true,
