@@ -18,6 +18,38 @@ export interface LazerDiskUsage {
   file_count: number;
 }
 
+export interface LazerDedupeProgress {
+  phase: string;
+  processed: number;
+  total: number;
+  percent: number;
+}
+
+export interface LazerDedupeFailure {
+  path: string;
+  message: string;
+}
+
+export interface LazerDedupeResult {
+  dry_run: boolean;
+  cancelled: boolean;
+  lazer_files_root: string;
+  stable_roots: string[];
+  lazer_file_count: number;
+  lazer_total_size: number;
+  already_linked_count: number;
+  already_linked_size: number;
+  hashed_stable_count: number;
+  candidate_count: number;
+  reclaimable_size: number;
+  linked_count: number;
+  linked_size: number;
+  skipped_cross_volume_count: number;
+  skipped_cross_volume_size: number;
+  failed_count: number;
+  failed: LazerDedupeFailure[];
+}
+
 export interface Cached<T> {
   data: T;
   fetched_at: string;

@@ -229,6 +229,8 @@ pub fn run() {
             set_default_file_client,
             set_display_gamma,
             get_lazer_disk_usage,
+            dedupe_lazer_files,
+            cancel_lazer_dedupe,
             open_netease_music_search,
             convert_mania_beatmaps,
             inspect_beatmap_preview,
