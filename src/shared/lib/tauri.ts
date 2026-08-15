@@ -76,6 +76,8 @@ import type {
   TrainerResult,
   ObsRefreshResult,
   LazerDiskUsage,
+  LazerDedupeProgress,
+  LazerDedupeResult,
   ObsStatus,
   PlatformCapabilities,
   NewReplaysDetected,
@@ -135,6 +137,7 @@ async function call<T>(
 function browserPreviewValue<T>(command: string, args?: Record<string, unknown>): T | undefined {
   if (command === "get_capabilities") return { os: "windows", display_gamma: true, file_association: true } as T;
   if (command === "get_lazer_disk_usage") return { path: "C:\\osu!", total_size: 1610612736, unique_size: 536870912, file_count: 4096 } as T;
+  if (command === "dedupe_lazer_files") return { dry_run: args?.dryRun !== false, cancelled: false, lazer_files_root: "C:\\osu\\files", stable_roots: ["C:\\osu!\\Songs"], lazer_file_count: 4096, lazer_total_size: 1610612736, already_linked_count: 1024, already_linked_size: 402653184, hashed_stable_count: 2048, candidate_count: 819, reclaimable_size: 645922816, linked_count: 0, linked_size: 0, skipped_cross_volume_count: 0, skipped_cross_volume_size: 0, failed_count: 0, failed: [] } as T;
   const profile = {
     id: 10001, username: "Preview User", avatar_url: "https://a.ppy.sh/10001", country_code: "CN",
     is_active: true, is_online: true, is_supporter: true, playmode: "osu", statistics: {
@@ -207,7 +210,7 @@ function browserPreviewValue<T>(command: string, args?: Record<string, unknown>)
     ...(browserPreviewValue<AppSettings>("get_settings") ?? {}),
     ignored_update_version: args?.version,
   } as T;
-  if (["clear_profile_cache", "set_default_file_client", "set_display_gamma", "open_netease_music_search", "set_local_source", "reset_local_source", "start_tosu", "stop_tosu", "set_tosu_executable", "set_tosu_lyrics_executable", "cancel_online_beatmap_download", "begin_collection_task", "cancel_collection_task", "exit_app"].includes(command)) return null as T;
+  if (["clear_profile_cache", "set_default_file_client", "set_display_gamma", "cancel_lazer_dedupe", "open_netease_music_search", "set_local_source", "reset_local_source", "start_tosu", "stop_tosu", "set_tosu_executable", "set_tosu_lyrics_executable", "cancel_online_beatmap_download", "begin_collection_task", "cancel_collection_task", "exit_app"].includes(command)) return null as T;
   return undefined;
 }
 
@@ -215,6 +218,9 @@ export const desktopApi = {
   getAuthStatus: () => call<AuthStatus>("get_auth_status"),
   getCapabilities: () => call<PlatformCapabilities>("get_capabilities"),
   getLazerDiskUsage: () => call<LazerDiskUsage>("get_lazer_disk_usage"),
+  dedupeLazerFiles: (dryRun: boolean) =>
+    call<LazerDedupeResult>("dedupe_lazer_files", { dryRun }),
+  cancelLazerDedupe: () => call<void>("cancel_lazer_dedupe"),
   saveOAuthCredentials: (clientId: string, clientSecret: string) =>
     call<{ client_id: string; callback_url: string }>(
       "save_oauth_credentials",
@@ -499,6 +505,14 @@ export const desktopApi = {
   ): Promise<UnlistenFn> => {
     if (!isTauri()) return () => undefined;
     return listen<LocalScanProgress>("local-scan-progress", (event) =>
+      handler(event.payload),
+    );
+  },
+  onLazerDedupeProgress: async (
+    handler: (progress: LazerDedupeProgress) => void,
+  ): Promise<UnlistenFn> => {
+    if (!isTauri()) return () => undefined;
+    return listen<LazerDedupeProgress>("lazer-dedupe-progress", (event) =>
       handler(event.payload),
     );
   },

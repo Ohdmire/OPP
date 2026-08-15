@@ -247,6 +247,11 @@ impl LocalAnalysisService {
         Ok(resolved.status)
     }
 
+    /// 供其他模块（如工具页的 lazer 去重）读取带用户覆盖配置的已解析源路径。
+    pub fn resolved_source(&self, client: LocalClient) -> CommandResult<ResolvedSource> {
+        self.sources.resolve(client)
+    }
+
     pub fn set_source(
         &self,
         client: LocalClient,
