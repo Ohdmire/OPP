@@ -24,6 +24,7 @@ interface ModuleGuide {
 interface PageGuideCopy {
   id: string;
   title: string;
+  version?: number;
   summary: string;
   modules: ModuleGuide[];
 }
@@ -32,13 +33,15 @@ const copies: Record<string, PageGuideCopy> = {
   "/online/beatmaps": {
     id: "online-beatmaps",
     title: "在线谱面",
-    summary: "这个页面负责搜索、筛选、试听和批量下载官网谱面。引导会依次展开各筛选模块，但不会自动发起搜索或下载。",
+    version: 3,
+    summary: "按照“搜索与筛选—查看结果—试听或打开详情—加入队列—选择镜像下载”的顺序使用在线谱面。引导只会说明操作，不会替你搜索或下载。",
     modules: [
-      { title: "模式、分类与排序", purpose: "决定搜索哪个游戏模式、谱面状态和结果排序方式，是搜索范围的第一层控制。", example: "选择 osu! 模式、Ranked 分类和按热度排序，再继续设置其他条件。", targetText: "模式、分类与排序", expandTarget: true },
-      { title: "内容筛选", purpose: "按是否包含视频、Storyboard、是否玩过以及成绩等级等内容属性缩小结果。", example: "只想找未玩过且带视频的谱面时，在这里组合相应条件。", targetText: "内容筛选", expandTarget: true },
-      { title: "标题与日期", purpose: "按曲名、艺术家、Mapper、标签和创建日期查找特定内容。", example: "输入 Mapper 名称，并把日期限制在最近一年，然后点击搜索。", targetText: "标题与日期", expandTarget: true },
-      { title: "数值范围", purpose: "限制星数、BPM、长度、AR、OD、CS 等数值，适合精确寻找练习目标。", example: "查找 5.0–5.8 星、180–210 BPM、长度不超过 180 秒的谱面。", targetText: "数值范围", expandTarget: true },
-      { title: "结果、试听与批量下载", purpose: "搜索结果卡片用于查看谱面集和难度详情、试听音乐、加入收藏夹；勾选后可通过下载面板批量处理。", example: "先试听一张谱面，打开详情确认难度，再勾选两张谱面加入下载队列。", target: '[data-page-guide-content="true"]' },
+      { title: "先输入想找的内容", purpose: "搜索框支持曲名、艺术家、Mapper、标签或 ID。输入内容后点击右上角“应用筛选”，才会按当前条件重新查询。", example: "输入 Camellia，再点击“应用筛选”；如果只想浏览近期 Ranked，可以保留搜索框为空。", target: '[data-page-guide-online-search="true"]' },
+      { title: "设置常用筛选", purpose: "模式、状态、流派、语言、游玩状态和排序都在这里直接选择；当前游戏模式会作为默认值，但可以临时改成其他模式或全部。", example: "选择 osu!、Ranked、未玩过，并按热度排序，快速寻找适合开荒的热门谱面。", target: '[data-page-guide-online-core-filters="true"]' },
+      { title: "需要时再精确筛选", purpose: "“更多筛选”包含艺术家、标题、Mapper、标签、日期，以及星数、BPM、长度、AR、CS、OD、HP 等范围。设置完成后仍需点击“应用筛选”。", example: "寻找 5.0–5.8 星、180–210 BPM、长度不超过 180 秒的谱面。", target: '[data-page-guide-online-advanced="true"]', expandSelector: '[data-page-guide-online-advanced="true"]' },
+      { title: "浏览结果并确认谱面", purpose: "每张结果卡展示状态、Mapper、星数范围和难度。可以试听、打开完整详情、加入收藏夹，或用单张下载按钮立即下载。", example: "先试听一张谱面，再打开详情核对具体难度；确认合适后加入收藏夹或直接下载。", target: '[data-page-guide-online-results="true"]' },
+      { title: "批量加入下载队列", purpose: "点击卡片封面左上角可加入或移出队列；也可以把当前已加载结果全部加入。右侧面板还支持按当前筛选批量收集更多结果。", example: "挑选三张谱面加入队列，或选择收集前 100 条匹配结果，再检查队列内容。", target: '[data-page-guide-online-results="true"]' },
+      { title: "选择小夜并开始下载", purpose: "确认保存目录和下载源后开始下载。默认优先使用小夜（Sayobot）；当前源失败时，OPP 会自动尝试其他可用镜像。", example: "选择小夜、确认保存目录，点击“开始下载”；需要时可开启下载完成后自动交给 osu! 导入。", target: '[data-page-guide-online-download="true"]' },
     ],
   },
   "/collections": {
@@ -160,7 +163,7 @@ const copies: Record<string, PageGuideCopy> = {
       { title: "试听", purpose: "控制在线谱面和相似谱面的音频预览音量。", example: "先调到 40%，返回在线谱面试听，再按需要微调。", targetText: "试听" },
       { title: "游戏目录", purpose: "分别管理 Stable 和 Lazer 目录，是本地谱面、Skin、媒体与工具功能的数据基础。", example: "点击自动检测；若失败，手动选择包含 Songs 或对应数据文件的目录。", targetText: "游戏目录" },
       { title: "工具与缓存", purpose: "开启相似谱面高级设置、清理资料缓存并限制本地缩略图占用。", example: "开启高级设置，把缩略图缓存上限设为 512 MB。", targetText: "工具与缓存" },
-      { title: "谱面下载", purpose: "选择默认镜像、保存位置，以及下载完成后是否自动交给 osu! 导入。", example: "选择 Hinai、多源回退，设置 Downloads 文件夹，并开启下载后自动打开。", targetText: "谱面下载" },
+      { title: "谱面下载", purpose: "选择默认镜像、保存位置，以及下载完成后是否自动交给 osu! 导入。", example: "优先选择小夜，设置 Downloads 文件夹，并开启下载后自动打开。", targetText: "谱面下载" },
       { title: "关于与引导", purpose: "查看版本和项目仓库，并可重新启动软件总体引导。页面标题旁问号只重播设置页引导。", example: "点击“重新查看新手引导”复习总体功能；关闭后仍可用问号回到本页说明。", targetText: "关于" },
     ],
   },
@@ -213,7 +216,7 @@ export function getPageGuide(pathname: string): PageGuide | null {
   }
   const copy = copies[pathname];
   return copy
-    ? { id: copy.id, title: copy.title, version: CURRENT_PAGE_ONBOARDING_VERSION, steps: stepsFor(copy) }
+    ? { id: copy.id, title: copy.title, version: copy.version ?? CURRENT_PAGE_ONBOARDING_VERSION, steps: stepsFor(copy) }
     : null;
 }
 
