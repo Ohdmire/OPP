@@ -6,6 +6,7 @@ import {
   FileAudio2,
   FilePenLine,
   FolderSearch,
+  PackageOpen,
   Image,
   Layers3,
   LoaderCircle,
@@ -77,6 +78,22 @@ function SkinSwatches({ skin }: { skin: LocalSkinSummary }) {
 }
 
 function SkinListItem({ active, skin, onSelect }: { active: boolean; skin: LocalSkinSummary; onSelect: () => void }) {
+  const [exporting, setExporting] = useState(false);
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
+  const exportOsk = async () => {
+    const outDir = await desktopApi.chooseDirectory("选择 .osk 导出位置");
+    if (!outDir) return;
+    setExporting(true);
+    setExportNotice(null);
+    try {
+      const path = await desktopApi.exportLocalSkin(skin.resource.client, skin.resource.resource_id, outDir);
+      setExportNotice(`已导出：${path}`);
+    } catch (caught) {
+      setExportNotice(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setExporting(false);
+    }
+  };
   return (
     <div className={cn("w-full rounded-xl border p-4 text-left transition-colors", active ? "border-[var(--theme-primary-soft)] bg-[var(--theme-primary-muted)]" : "border-white/[0.06] bg-white/[0.025] hover:border-white/[0.12] hover:bg-white/[0.045]")}>
       <button className="w-full text-left" onClick={onSelect} type="button">
@@ -87,7 +104,18 @@ function SkinListItem({ active, skin, onSelect }: { active: boolean; skin: Local
         </div>
         <div className="mt-4 flex items-center justify-between text-[10px] text-slate-600"><span>{skin.resource_count === null ? "资源未知" : `${skin.resource_count} 个资源`}</span><span>{formatBytes(skin.total_bytes)}</span></div>
       </button>
-      <Button aria-label="在资源管理器中打开 Skin" className="mt-3 w-full" disabled={!skin.resource.logical_path} onClick={() => { const path = skin.resource.logical_path; if (path) void desktopApi.openLocalResourceInExplorer(skin.resource.client, path); }} size="sm"><FolderSearch className="size-3.5" />打开 Skin 文件</Button>
+      <div className="mt-3 flex gap-2">
+        {skin.resource.client === "stable" ? (
+          <>
+            <Button aria-label="在资源管理器中打开 Skin" className="flex-1" disabled={!skin.resource.logical_path} onClick={() => { const path = skin.resource.logical_path; if (path) void desktopApi.openLocalResourceInExplorer(skin.resource.client, path); }} size="sm"><FolderSearch className="size-3.5" />打开 Skin 文件</Button>
+            <Button aria-label="导出为 .osk 皮肤包" className="flex-1" disabled={exporting} loading={exporting} onClick={() => void exportOsk()} size="sm" variant="primary"><PackageOpen className="size-3.5" />导出 .osk</Button>
+          </>
+        ) : (
+          // Lazer 皮肤文件按哈希散落存储，没有可打开的皮肤目录，直接提供导出。
+          <Button aria-label="导出为 .osk 皮肤包" className="w-full" disabled={exporting} loading={exporting} onClick={() => void exportOsk()} size="sm" variant="primary"><PackageOpen className="size-3.5" />导出 .osk</Button>
+        )}
+      </div>
+      {exportNotice ? <p className="mt-2 truncate text-[11px] text-slate-500" title={exportNotice}>{exportNotice}</p> : null}
     </div>
   );
 }

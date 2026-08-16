@@ -133,6 +133,46 @@ pub async fn get_local_beatmap_background(
         })?
 }
 
+#[tauri::command]
+pub async fn export_local_beatmap_set(
+    client: LocalClient,
+    set_key: String,
+    out_dir: String,
+    state: State<'_, AppState>,
+) -> CommandResult<String> {
+    let service = Arc::clone(&state.local_analysis);
+    tokio::task::spawn_blocking(move || {
+        service.export_beatmap_set_osz(client, &set_key, Path::new(&out_dir))
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            "LOCAL_EXPORT_TASK_ERROR",
+            format!("谱面集导出任务异常结束：{error}"),
+        )
+    })?
+}
+
+#[tauri::command]
+pub async fn export_local_skin(
+    client: LocalClient,
+    skin_resource_id: String,
+    out_dir: String,
+    state: State<'_, AppState>,
+) -> CommandResult<String> {
+    let service = Arc::clone(&state.local_analysis);
+    tokio::task::spawn_blocking(move || {
+        service.export_skin_osk(client, &skin_resource_id, Path::new(&out_dir))
+    })
+    .await
+    .map_err(|error| {
+        CommandError::new(
+            "LOCAL_EXPORT_TASK_ERROR",
+            format!("Skin 导出任务异常结束：{error}"),
+        )
+    })?
+}
+
 #[tauri::command(async)]
 pub fn query_local_skins(
     query: SkinQuery,

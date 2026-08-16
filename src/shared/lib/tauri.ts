@@ -139,6 +139,8 @@ function browserPreviewValue<T>(command: string, args?: Record<string, unknown>)
   if (command === "get_capabilities") return { os: "windows", display_gamma: true, file_association: true } as T;
   if (command === "get_lazer_disk_usage") return { path: "C:\\osu!", total_size: 1610612736, unique_size: 536870912, file_count: 4096 } as T;
   if (command === "read_lazer_realm_beatmap_sets") return { realm_path: "C:\\osu!\\client.realm", table_count: 16, beatmap_set_count: 2, beatmap_sets: [{ id: "fc56eb02bba7428499af65e5c2c80c73", online_id: -1, artist: "cYsmix", title: "triangles", creator: "peppy", beatmap_count: 1, delete_pending: false, files: [{ filename: "audio.mp3", hash: "47b895484e7751f3ab429694ff6dbf21e774ab023e4f6c5b481476f04ff22f0f" }, { filename: "cYsmix - triangles (peppy) [peppy].osu", hash: "a1556d0801b3a6b175dda32ef546f0ec812b400499f575c44fccbe9c67f9b1e5" }] }] } as T;
+  if (command === "export_local_beatmap_set") return `${args?.outDir ?? "C:\\Export"}/export.osz` as T;
+  if (command === "export_local_skin") return `${args?.outDir ?? "C:\\Export"}/export.osk` as T;
   if (command === "dedupe_lazer_files") return { dry_run: args?.dryRun !== false, cancelled: false, lazer_files_root: "C:\\osu\\files", stable_roots: ["C:\\osu!\\Songs"], lazer_file_count: 4096, lazer_total_size: 1610612736, already_linked_count: 1024, already_linked_size: 402653184, hashed_stable_count: 2048, candidate_count: 819, reclaimable_size: 645922816, linked_count: 0, linked_size: 0, skipped_cross_volume_count: 0, skipped_cross_volume_size: 0, failed_count: 0, failed: [] } as T;
   const profile = {
     id: 10001, username: "Preview User", avatar_url: "https://a.ppy.sh/10001", country_code: "CN",
@@ -388,6 +390,10 @@ export const desktopApi = {
     call<Page<LocalSkinSummary>>("query_local_skins", { query }),
   getLocalSkinDetail: (client: OsuClient, resourceId: string) =>
     call<LocalSkinDetail>("get_local_skin_detail", { client, resourceId }),
+  exportLocalBeatmapSet: (client: OsuClient, setKey: string, outDir: string) =>
+    call<string>("export_local_beatmap_set", { client, setKey, outDir }),
+  exportLocalSkin: (client: OsuClient, resourceId: string, outDir: string) =>
+    call<string>("export_local_skin", { client, resourceId, outDir }),
   getLocalSkinPreview: (client: OsuClient, resourceId: string) =>
     call<LocalSkinPreview>("get_local_skin_preview", { client, resourceId }),
   getLocalSkinAsset: (

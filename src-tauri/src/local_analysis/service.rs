@@ -21,6 +21,7 @@ use image::{ImageFormat, ImageReader, Limits, codecs::jpeg::JpegEncoder, imageop
 use md5::{Digest, Md5};
 use rayon::prelude::*;
 use walkdir::WalkDir;
+use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 
 use crate::error::{CommandError, CommandResult};
 #[cfg(test)]
@@ -1173,6 +1174,117 @@ impl LocalAnalysisService {
         Ok(())
     }
 
+    /// 把一个谱面集导出为 .osz。Lazer 按 Realm 文件清单从内容寻址存储
+    /// 取回原始文件；Stable 直接打包谱面集目录。
+    pub fn export_beatmap_set_osz(
+        &self,
+        client: LocalClient,
+        set_key: &str,
+        out_dir: &Path,
+    ) -> CommandResult<String> {
+        let index = self.require_current_index(client)?;
+        let positions = index
+            .beatmap_sets
+            .get(set_key)
+            .filter(|positions| !positions.is_empty())
+            .ok_or_else(|| CommandError::new("LOCAL_RESOURCE_NOT_FOUND", "未找到该谱面集"))?;
+        let first = &index.entries[positions[0]];
+        let IndexedData::Beatmap { summary, .. } = &first.data else {
+            return Err(CommandError::new("LOCAL_RESOURCE_NOT_FOUND", "未找到该谱面集"));
+        };
+        let file_name = sanitize_export_name(&format!(
+            "{} - {} ({})",
+            summary.artist, summary.title, summary.creator
+        ));
+        let out_path = out_dir.join(format!("{file_name}.osz"));
+
+        let sources = match client {
+            LocalClient::Lazer => {
+                let files_root = self.lazer_files_root(client)?;
+                let files = positions
+                    .iter()
+                    .filter_map(|position| index.entries[*position].lazer_files.clone())
+                    .next()
+                    .ok_or_else(|| {
+                        CommandError::new(
+                            "LOCAL_EXPORT_UNAVAILABLE",
+                            "该谱面集缺少 Realm 文件清单，请重新扫描后重试",
+                        )
+                    })?;
+                files
+                    .iter()
+                    .map(|file| {
+                        (
+                            file.filename.clone(),
+                            files_root.join(lazer_realm::blob_relative_path(&file.hash)),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            }
+            LocalClient::Stable => {
+                let root = first
+                    .physical_path
+                    .parent()
+                    .ok_or_else(|| {
+                        CommandError::new("LOCAL_EXPORT_UNAVAILABLE", "谱面集目录不可用")
+                    })?
+                    .to_path_buf();
+                collect_directory_entries(&root)?
+            }
+        };
+        write_export_zip(&sources, &out_path)?;
+        Ok(out_path.to_string_lossy().into_owned())
+    }
+
+    /// 把一个皮肤导出为 .osk。Lazer 按 Realm 文件清单取回原始文件；
+    /// Stable 直接打包皮肤目录。
+    pub fn export_skin_osk(
+        &self,
+        client: LocalClient,
+        skin_resource_id: &str,
+        out_dir: &Path,
+    ) -> CommandResult<String> {
+        let index = self.require_current_index(client)?;
+        let entry = find_skin_entry(&index, skin_resource_id)?;
+        let IndexedData::Skin { detail } = &entry.data else {
+            return Err(CommandError::new("LOCAL_RESOURCE_NOT_FOUND", "未找到该 Skin 资源"));
+        };
+        let author = detail.summary.author.trim();
+        let base_name = if author.is_empty() || author.eq_ignore_ascii_case("unknown") {
+            detail.summary.name.clone()
+        } else {
+            format!("{} ({})", detail.summary.name, author)
+        };
+        let out_path = out_dir.join(format!("{}.osk", sanitize_export_name(&base_name)));
+
+        let sources = match client {
+            LocalClient::Lazer => {
+                let files_root = self.lazer_files_root(client)?;
+                let files = entry.lazer_files.clone().ok_or_else(|| {
+                    CommandError::new(
+                        "LOCAL_EXPORT_UNAVAILABLE",
+                        "该皮肤缺少 Realm 文件清单，请重新扫描后重试",
+                    )
+                })?;
+                files
+                    .iter()
+                    .map(|file| {
+                        (
+                            file.filename.clone(),
+                            files_root.join(lazer_realm::blob_relative_path(&file.hash)),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            }
+            LocalClient::Stable => {
+                let root = skin_root(entry)?;
+                collect_directory_entries(&root)?
+            }
+        };
+        write_export_zip(&sources, &out_path)?;
+        Ok(out_path.to_string_lossy().into_owned())
+    }
+
     fn index_skin_assets(
         &self,
         root: &Path,
@@ -1709,6 +1821,98 @@ fn process_candidate(client: LocalClient, candidate: &Candidate) -> IndexedEntry
         data,
         diagnostics,
     }
+}
+
+/// 清理导出文件名中的非法字符，并限制长度。
+fn sanitize_export_name(raw: &str) -> String {
+    let mut name: String = raw
+        .chars()
+        .map(|character| match character {
+            '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*' => '_',
+            other => other,
+        })
+        .take(120)
+        .collect();
+    name = name.trim().trim_end_matches('.').to_string();
+    if name.is_empty() {
+        "export".to_string()
+    } else {
+        name
+    }
+}
+
+/// 递归收集目录下所有文件，zip 条目名为相对路径（统一使用 `/`）。
+fn collect_directory_entries(root: &Path) -> CommandResult<Vec<(String, PathBuf)>> {
+    WalkDir::new(root)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().is_file())
+        .map(|entry| {
+            let relative = entry
+                .path()
+                .strip_prefix(root)
+                .map_err(|error| {
+                    CommandError::new(
+                        "LOCAL_EXPORT_UNAVAILABLE",
+                        format!("无法计算相对路径：{error}"),
+                    )
+                })?
+                .to_string_lossy()
+                .replace('\\', "/");
+            Ok((relative, entry.path().to_path_buf()))
+        })
+        .collect()
+}
+
+/// 已压缩格式（音频 / 图片 / 视频）使用存储模式，避免二次压缩浪费时间。
+fn zip_stored(name: &str) -> bool {
+    const STORED_EXTENSIONS: [&str; 9] = [
+        "mp3", "ogg", "wav", "jpg", "jpeg", "png", "webp", "gif", "mp4",
+    ];
+    std::path::Path::new(name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| {
+            STORED_EXTENSIONS
+                .contains(&value.to_ascii_lowercase().as_str())
+        })
+        .unwrap_or(false)
+}
+
+fn write_export_zip(sources: &[(String, PathBuf)], out_path: &Path) -> CommandResult<()> {
+    let file = fs::File::create(out_path).map_err(|error| {
+        CommandError::new("LOCAL_EXPORT_WRITE_ERROR", format!("无法创建导出文件：{error}"))
+    })?;
+    let mut archive = ZipWriter::new(file);
+    for (name, source) in sources {
+        let mut options = SimpleFileOptions::default().large_file(true);
+        if zip_stored(name) {
+            options = options.compression_method(CompressionMethod::Stored);
+        } else {
+            options = options.compression_method(CompressionMethod::Deflated);
+        }
+        archive
+            .start_file(name.clone(), options)
+            .map_err(|error| {
+                CommandError::new("LOCAL_EXPORT_WRITE_ERROR", format!("写入 zip 失败：{error}"))
+            })?;
+        let mut reader = fs::File::open(source).map_err(|error| {
+            CommandError::new(
+                "LOCAL_EXPORT_READ_ERROR",
+                format!("无法读取 {}：{error}", source.display()),
+            )
+        })?;
+        std::io::copy(&mut reader, &mut archive).map_err(|error| {
+            CommandError::new("LOCAL_EXPORT_WRITE_ERROR", format!("写入 zip 失败：{error}"))
+        })?;
+    }
+    archive
+        .finish()
+        .map_err(|error| {
+            CommandError::new("LOCAL_EXPORT_WRITE_ERROR", format!("完成 zip 失败：{error}"))
+        })?;
+    Ok(())
 }
 
 /// 由 Realm 登记的皮肤文件清单构建资源统计。
@@ -2357,6 +2561,24 @@ SliderTickRate:1
                 println!("lazer skin preview assets: {image_count} images, decoded: {decoded_image}");
                 assert!(image_count > 0);
                 assert!(decoded_image);
+
+                // 导出 .osz / .osk：写出后重新打开校验条目数与内容。
+                let export_dir = tempfile::tempdir().expect("export dir");
+                let osz_path = service
+                    .export_beatmap_set_osz(client, &sets.items[0].set_key, export_dir.path())
+                    .expect("acceptance osz export");
+                let osz = std::fs::File::open(&osz_path).expect("osz exists");
+                let osz_entries = zip::ZipArchive::new(osz).expect("osz readable").len();
+                println!("osz exported: {osz_path} ({osz_entries} entries)");
+                assert!(osz_entries >= sets.items[0].difficulties.len() + 1);
+
+                let osk_path = service
+                    .export_skin_osk(client, &skins.items[0].resource.resource_id, export_dir.path())
+                    .expect("acceptance osk export");
+                let osk = std::fs::File::open(&osk_path).expect("osk exists");
+                let osk_entries = zip::ZipArchive::new(osk).expect("osk readable").len();
+                println!("osk exported: {osk_path} ({osk_entries} entries)");
+                assert!(osk_entries > 1);
             }
             scanned += 1;
         }
