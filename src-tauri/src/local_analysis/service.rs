@@ -27,6 +27,7 @@ use crate::error::{CommandError, CommandResult};
 use crate::models::Ruleset;
 
 use super::{
+    lazer_realm,
     models::{
         BeatmapQuery, Completeness, LocalBeatmapDetail, LocalBeatmapSetSummary,
         LocalBeatmapSummary, LocalClient, LocalIndexLoadPhase, LocalIndexLoadStatus,
@@ -46,8 +47,9 @@ use service_data::{
     SkinAssetLocation, directory_stamp, load_index, modified_iso, persist_index, stamp,
 };
 use service_query::{
-    apply_direction, audio_mime, beatmap_matches, compare_beatmap_sets, enumerate_skin_assets,
-    find_skin_entry, insert_bounded, option_f64_order, skin_root, text_order,
+    apply_direction, audio_mime, beatmap_matches, compare_beatmap_sets, enumerate_lazer_skin_assets,
+    enumerate_skin_assets, find_skin_entry, insert_bounded, option_f64_order, skin_root,
+    text_order,
 };
 #[cfg(test)]
 use service_query::{compare_beatmaps, page};
@@ -538,20 +540,13 @@ impl LocalAnalysisService {
                     .iter()
                     .filter_map(|(summary, _)| summary.modified_at.clone())
                     .max();
-                let background_resource_id = (query.client == LocalClient::Stable)
-                    .then(|| {
-                        maps.iter().find_map(|(summary, detail)| {
-                            (!detail.background_file.trim().is_empty())
-                                .then(|| summary.resource.resource_id.clone())
-                        })
-                    })
-                    .flatten();
+                let background_resource_id = maps.iter().find_map(|(summary, detail)| {
+                    (!detail.background_file.trim().is_empty())
+                        .then(|| summary.resource.resource_id.clone())
+                });
                 Some(LocalBeatmapSetSummary {
                     set_key: set_key.clone(),
-                    completeness: match query.client {
-                        LocalClient::Stable => Completeness::Complete,
-                        LocalClient::Lazer => Completeness::Partial,
-                    },
+                    completeness: Completeness::Complete,
                     grouping_inferred: representative.set_grouping_inferred,
                     beatmap_set_id: representative.beatmap_set_id,
                     title: representative.title.clone(),
@@ -711,9 +706,6 @@ impl LocalAnalysisService {
         client: LocalClient,
         resource_id: &str,
     ) -> CommandResult<Option<String>> {
-        if client != LocalClient::Stable {
-            return Ok(None);
-        }
         let index = self.require_current_index(client)?;
         let entry = index
             .entries
@@ -734,18 +726,38 @@ impl LocalAnalysisService {
         if background_name.is_empty() {
             return Ok(None);
         }
-        let Some(beatmap_directory) = entry.physical_path.parent() else {
-            return Ok(None);
+        let background = match client {
+            LocalClient::Stable => {
+                let Some(beatmap_directory) = entry.physical_path.parent() else {
+                    return Ok(None);
+                };
+                let Ok(directory) = beatmap_directory.canonicalize() else {
+                    return Ok(None);
+                };
+                let Ok(background) = beatmap_directory.join(background_name).canonicalize()
+                else {
+                    return Ok(None);
+                };
+                if !background.starts_with(&directory) {
+                    return Ok(None);
+                }
+                background
+            }
+            // Lazer：背景文件在谱面集的 Realm 文件清单里按原始文件名匹配，
+            // 实际内容从 files/ 内容寻址目录按哈希取回。
+            LocalClient::Lazer => {
+                let Some(files) = entry.lazer_files.as_ref() else {
+                    return Ok(None);
+                };
+                let Some(file) = files.iter().find(|file| {
+                    file.filename.eq_ignore_ascii_case(background_name)
+                }) else {
+                    return Ok(None);
+                };
+                let files_root = self.lazer_files_root(client)?;
+                files_root.join(lazer_realm::blob_relative_path(&file.hash))
+            }
         };
-        let Ok(directory) = beatmap_directory.canonicalize() else {
-            return Ok(None);
-        };
-        let Ok(background) = beatmap_directory.join(background_name).canonicalize() else {
-            return Ok(None);
-        };
-        if !background.starts_with(&directory) {
-            return Ok(None);
-        }
         let Ok(metadata) = fs::metadata(&background) else {
             return Ok(None);
         };
@@ -878,16 +890,20 @@ impl LocalAnalysisService {
             IndexedData::Skin { detail } => detail.summary.completeness,
             _ => unreachable!("entry matched skin"),
         };
-        if client == LocalClient::Lazer {
-            return Ok(LocalSkinPreview {
-                skin_resource_id: resource_id.to_string(),
-                completeness,
-                images: Vec::new(),
-                sounds: Vec::new(),
-            });
-        }
-        let root = skin_root(entry)?;
-        let assets = self.index_skin_assets(&root, resource_id)?;
+        let assets = match client {
+            LocalClient::Lazer => {
+                let files_root = self.lazer_files_root(client)?;
+                let files = entry.lazer_files.clone().unwrap_or_default();
+                self.index_lazer_skin_assets(&files_root, &files, resource_id)?
+                    .into_iter()
+                    .map(|location: SkinAssetLocation| location.summary)
+                    .collect::<Vec<_>>()
+            }
+            LocalClient::Stable => {
+                let root = skin_root(entry)?;
+                self.index_skin_assets(&root, resource_id)?
+            }
+        };
         Ok(LocalSkinPreview {
             skin_resource_id: resource_id.to_string(),
             completeness,
@@ -909,27 +925,35 @@ impl LocalAnalysisService {
         skin_resource_id: &str,
         asset_resource_id: &str,
     ) -> CommandResult<LocalSkinAssetPayload> {
-        if client != LocalClient::Stable {
-            return Err(CommandError::new(
-                "LOCAL_SKIN_ASSET_UNAVAILABLE",
-                "Lazer 未读取 Realm，无法可靠确定该 Skin 的资源归属",
-            ));
-        }
         let index = self.require_current_index(client)?;
         let entry = find_skin_entry(&index, skin_resource_id)?;
-        let root = skin_root(entry)?;
-        let cached = self
-            .skin_assets
-            .read()
-            .map_err(|_| CommandError::new("LOCAL_INDEX_STATE_ERROR", "Skin 预览索引状态已损坏"))?
-            .get(asset_resource_id)
-            .filter(|asset| asset.skin_resource_id == skin_resource_id && asset.root == root)
-            .cloned();
-        let asset = match cached {
-            Some(asset) => asset,
-            None => {
-                self.index_skin_assets(&root, skin_resource_id)?;
-                self.skin_assets
+        // Lazer：皮肤资源按 Realm 登记的（文件名 → 哈希）清单解析，
+        // 实际文件从 files/ 内容寻址目录取回；Stable 仍按目录解析。
+        let (asset, path) = match client {
+            LocalClient::Lazer => {
+                let files_root = self.lazer_files_root(client)?;
+                let files = entry.lazer_files.clone().unwrap_or_default();
+                let locations =
+                    self.index_lazer_skin_assets(&files_root, &files, skin_resource_id)?;
+                let location = locations
+                    .into_iter()
+                    .find(|location| location.summary.resource_id == asset_resource_id)
+                    .ok_or_else(|| {
+                        CommandError::new("LOCAL_RESOURCE_NOT_FOUND", "未找到该 Skin 预览资源")
+                    })?;
+                let hash = location
+                    .lazer_hash
+                    .clone()
+                    .ok_or_else(|| {
+                        CommandError::new("LOCAL_RESOURCE_NOT_FOUND", "未找到该 Skin 预览资源")
+                    })?;
+                let path = files_root.join(lazer_realm::blob_relative_path(&hash));
+                (location.summary, path)
+            }
+            LocalClient::Stable => {
+                let root = skin_root(entry)?;
+                let cached = self
+                    .skin_assets
                     .read()
                     .map_err(|_| {
                         CommandError::new("LOCAL_INDEX_STATE_ERROR", "Skin 预览索引状态已损坏")
@@ -938,36 +962,59 @@ impl LocalAnalysisService {
                     .filter(|asset| {
                         asset.skin_resource_id == skin_resource_id && asset.root == root
                     })
-                    .cloned()
-                    .ok_or_else(|| {
-                        CommandError::new("LOCAL_RESOURCE_NOT_FOUND", "未找到该 Skin 预览资源")
-                    })?
+                    .cloned();
+                let asset = match cached {
+                    Some(asset) => asset,
+                    None => {
+                        self.index_skin_assets(&root, skin_resource_id)?;
+                        self.skin_assets
+                            .read()
+                            .map_err(|_| {
+                                CommandError::new(
+                                    "LOCAL_INDEX_STATE_ERROR",
+                                    "Skin 预览索引状态已损坏",
+                                )
+                            })?
+                            .get(asset_resource_id)
+                            .filter(|asset| {
+                                asset.skin_resource_id == skin_resource_id && asset.root == root
+                            })
+                            .cloned()
+                            .ok_or_else(|| {
+                                CommandError::new(
+                                    "LOCAL_RESOURCE_NOT_FOUND",
+                                    "未找到该 Skin 预览资源",
+                                )
+                            })?
+                    }
+                };
+                let asset = asset.summary;
+                let path = root.join(Path::new(&asset.logical_path));
+                let canonical_root = root.canonicalize().map_err(|error| {
+                    CommandError::new(
+                        "LOCAL_RESOURCE_READ_ERROR",
+                        format!("无法解析 Skin 目录：{error}"),
+                    )
+                })?;
+                let canonical_path = path.canonicalize().map_err(|error| {
+                    CommandError::new(
+                        "LOCAL_RESOURCE_READ_ERROR",
+                        format!("无法解析 Skin 资源：{error}"),
+                    )
+                })?;
+                if !canonical_path.starts_with(&canonical_root) {
+                    return Err(CommandError::new(
+                        "LOCAL_RESOURCE_OUTSIDE_ROOT",
+                        "Skin 资源位于允许目录之外",
+                    ));
+                }
+                (asset, canonical_path)
             }
         };
-        let asset = asset.summary;
-        let path = root.join(Path::new(&asset.logical_path));
-        let canonical_root = root.canonicalize().map_err(|error| {
-            CommandError::new(
-                "LOCAL_RESOURCE_READ_ERROR",
-                format!("无法解析 Skin 目录：{error}"),
-            )
-        })?;
-        let canonical_path = path.canonicalize().map_err(|error| {
-            CommandError::new(
-                "LOCAL_RESOURCE_READ_ERROR",
-                format!("无法解析 Skin 资源：{error}"),
-            )
-        })?;
-        if !canonical_path.starts_with(&canonical_root) {
-            return Err(CommandError::new(
-                "LOCAL_RESOURCE_OUTSIDE_ROOT",
-                "Skin 资源位于允许目录之外",
-            ));
-        }
 
         let (mime_type, bytes) = match asset.kind {
             SkinAssetKind::Image => {
-                let metadata = fs::metadata(&canonical_path).map_err(|error| {
+                let metadata = fs::metadata(&path).map_err(|error| {
                     CommandError::new(
                         "LOCAL_RESOURCE_READ_ERROR",
                         format!("无法读取 Skin 图片信息：{error}"),
@@ -979,7 +1026,7 @@ impl LocalAnalysisService {
                         "Skin 图片超过 32 MB 预览上限",
                     ));
                 }
-                let mut reader = ImageReader::open(&canonical_path)
+                let mut reader = ImageReader::open(&path)
                     .and_then(ImageReader::with_guessed_format)
                     .map_err(|error| {
                         CommandError::new(
@@ -1015,7 +1062,7 @@ impl LocalAnalysisService {
                 ("image/png".to_string(), cursor.into_inner())
             }
             SkinAssetKind::Audio => {
-                let bytes = fs::read(&canonical_path).map_err(|error| {
+                let bytes = fs::read(&path).map_err(|error| {
                     CommandError::new(
                         "LOCAL_RESOURCE_READ_ERROR",
                         format!("无法读取 Skin 音效：{error}"),
@@ -1053,7 +1100,7 @@ impl LocalAnalysisService {
         if client != LocalClient::Stable {
             return Err(CommandError::new(
                 "LOCAL_SKIN_ASSET_UNAVAILABLE",
-                "目前只能替换 Stable Skin 中可定位的资源",
+                "Lazer 皮肤文件以内容哈希存储，就地替换会破坏 Realm 登记与哈希的一致性，暂不支持替换",
             ));
         }
         let index = self.require_current_index(client)?;
@@ -1143,10 +1190,48 @@ impl LocalAnalysisService {
                     skin_resource_id: skin_resource_id.to_string(),
                     root: root.to_path_buf(),
                     summary: asset.clone(),
+                    lazer_hash: None,
                 },
             );
         }
         Ok(assets)
+    }
+
+    /// 为 lazer 皮肤建立资源索引：清单来自 Realm 登记的文件列表，
+    /// 每个条目携带内容哈希，读取时按 files/ 内容寻址解析。
+    fn index_lazer_skin_assets(
+        &self,
+        files_root: &Path,
+        files: &[lazer_realm::LazerRealmFile],
+        skin_resource_id: &str,
+    ) -> CommandResult<Vec<SkinAssetLocation>> {
+        let mut cache = self
+            .skin_assets
+            .write()
+            .map_err(|_| CommandError::new("LOCAL_INDEX_STATE_ERROR", "Skin 预览索引状态已损坏"))?;
+        let locations = enumerate_lazer_skin_assets(files, skin_resource_id)
+            .into_iter()
+            .map(|summary| {
+                let hash = files
+                    .iter()
+                    .find(|file| file.filename == summary.logical_path)
+                    .map(|file| file.hash.clone())
+                    .unwrap_or_default();
+                SkinAssetLocation {
+                    skin_resource_id: skin_resource_id.to_string(),
+                    root: files_root.to_path_buf(),
+                    summary,
+                    lazer_hash: Some(hash),
+                }
+            })
+            .collect::<Vec<_>>();
+        for location in &locations {
+            cache.insert(
+                location.summary.resource_id.clone(),
+                location.clone(),
+            );
+        }
+        Ok(locations)
     }
 
     fn current_index(&self, client: LocalClient) -> CommandResult<Option<Arc<LocalIndex>>> {
@@ -1163,6 +1248,15 @@ impl LocalAnalysisService {
             .ok_or_else(|| {
                 CommandError::new("LOCAL_SCAN_REQUIRED", format!("请先扫描 {client} 本地资源"))
             })
+    }
+
+    /// lazer 的 files/ 内容寻址根目录。
+    fn lazer_files_root(&self, client: LocalClient) -> CommandResult<PathBuf> {
+        let source = self.sources.resolve(client)?;
+        source
+            .repository_root
+            .clone()
+            .ok_or_else(|| CommandError::new("INVALID_LOCAL_SOURCE", "lazer files 仓库不可用"))
     }
 }
 
@@ -1308,57 +1402,88 @@ fn discover(
             }
         }
         LocalClient::Lazer => {
-            let root = source.repository_root.as_deref().ok_or_else(|| {
+            let files_root = source.repository_root.as_deref().ok_or_else(|| {
                 CommandError::new("INVALID_LOCAL_SOURCE", "lazer files 仓库不可用")
             })?;
-            for entry in WalkDir::new(root).follow_links(false) {
+            let data_root = files_root.parent().unwrap_or(files_root);
+            let realm_path = data_root.join("client.realm");
+            if !realm_path.is_file() {
+                return Err(CommandError::new(
+                    "REALM_NOT_FOUND",
+                    format!("未找到 client.realm：{}", realm_path.display()),
+                ));
+            }
+            // 以 Realm 为权威数据源：只索引 Realm 中登记的谱面 / 皮肤，
+            // 元数据、谱面集归属与文件清单都来自数据库而不是目录推断。
+            let realm = lazer_realm::read_realm_data(&realm_path).map_err(|message| {
+                CommandError::new("REALM_READ_FAILED", message)
+            })?;
+            for set in &realm.sets {
                 check_cancelled(cancel)?;
-                let entry = match entry {
-                    Ok(entry) => entry,
-                    Err(error) => {
+                let set = Arc::new(set.clone());
+                discovery.source_file_count += set.files.len();
+                discovery.source_bytes = discovery
+                    .source_bytes
+                    .saturating_add(set.files.iter().map(|file| file.size).sum::<u64>());
+                for beatmap in &set.beatmaps {
+                    let physical =
+                        files_root.join(lazer_realm::blob_relative_path(&beatmap.sha256));
+                    let Ok(metadata) = fs::metadata(&physical) else {
                         discovery.diagnostics.push(diagnostic(
-                            "DISCOVERY_ERROR",
-                            error.to_string(),
+                            "REALM_FILE_MISSING",
+                            format!("Realm 登记的文件不存在：{}", beatmap.sha256),
                             None,
                         ));
                         continue;
-                    }
-                };
-                if !entry.file_type().is_file() {
-                    continue;
+                    };
+                    discovery.candidates.push(Candidate {
+                        key: format!("lazer:{}", lazer_realm::blob_relative_path(&beatmap.sha256)),
+                        physical_path: physical,
+                        logical_path: beatmap.sha256.clone(),
+                        known_hash: Some(beatmap.sha256.clone()),
+                        stamp: stamp(&metadata),
+                        kind: CandidateKind::Beatmap,
+                        lazer_beatmap: Some(Box::new(beatmap.clone())),
+                        lazer_set: Some(Arc::clone(&set)),
+                        lazer_skin: None,
+                    });
                 }
-                let metadata = match entry.metadata() {
-                    Ok(metadata) => metadata,
-                    Err(error) => {
-                        discovery.diagnostics.push(diagnostic(
-                            "METADATA_ERROR",
-                            error.to_string(),
-                            Some(relative_path(root, entry.path())),
-                        ));
-                        continue;
-                    }
+                reporter.emit("discovery", discovery.candidates.len(), 0, 2.0, false);
+            }
+            for skin in &realm.skins {
+                check_cancelled(cancel)?;
+                let skin = Arc::new(skin.clone());
+                let Some(skin_ini) = skin.skin_ini.as_ref() else {
+                    continue;
                 };
-                discovery.source_file_count += 1;
-                discovery.source_bytes = discovery.source_bytes.saturating_add(metadata.len());
-                let logical = relative_path(root, entry.path());
-                let known_hash = entry
-                    .path()
-                    .file_name()
-                    .and_then(|value| value.to_str())
-                    .filter(|value| {
-                        value.len() == 64
-                            && value.chars().all(|character| character.is_ascii_hexdigit())
-                    })
-                    .map(|value| value.to_ascii_lowercase());
+                discovery.source_file_count += skin.files.len();
+                discovery.source_bytes = discovery
+                    .source_bytes
+                    .saturating_add(skin.files.iter().map(|file| file.size).sum::<u64>());
+                let physical =
+                    files_root.join(lazer_realm::blob_relative_path(&skin_ini.hash));
+                let Ok(metadata) = fs::metadata(&physical) else {
+                    discovery.diagnostics.push(diagnostic(
+                        "REALM_FILE_MISSING",
+                        format!("Realm 登记的文件不存在：{}", skin_ini.hash),
+                        None,
+                    ));
+                    continue;
+                };
                 discovery.candidates.push(Candidate {
-                    key: format!("lazer:{logical}"),
-                    physical_path: entry.path().to_path_buf(),
-                    logical_path: logical,
-                    known_hash,
+                    key: format!("lazer:{}", lazer_realm::blob_relative_path(&skin_ini.hash)),
+                    physical_path: physical,
+                    logical_path: skin_ini.hash.clone(),
+                    known_hash: Some(skin_ini.hash.clone()),
                     stamp: stamp(&metadata),
-                    kind: CandidateKind::Unknown,
+                    kind: CandidateKind::Skin {
+                        root: files_root.to_path_buf(),
+                    },
+                    lazer_beatmap: None,
+                    lazer_set: None,
+                    lazer_skin: Some(skin),
                 });
-                reporter.emit("discovery", discovery.source_file_count, 0, 2.0, false);
+                reporter.emit("discovery", discovery.candidates.len(), 0, 2.0, false);
             }
         }
     }
@@ -1426,6 +1551,9 @@ fn discover_stable_tree(
                 _ => stamp(&metadata),
             };
             discovery.candidates.push(Candidate {
+                lazer_beatmap: None,
+                lazer_set: None,
+                lazer_skin: None,
                 key: format!(
                     "stable:{}:{}",
                     if skins { "skin" } else { "beatmap" },
@@ -1446,6 +1574,7 @@ fn discover_stable_tree(
 /// 按候选类型解析单个文件；失败会编码为索引诊断而不是中止整个扫描。
 fn process_candidate(client: LocalClient, candidate: &Candidate) -> IndexedEntry {
     let mut diagnostics = Vec::new();
+    let mut lazer_files: Option<Vec<lazer_realm::LazerRealmFile>> = None;
     let data = match &candidate.kind {
         CandidateKind::Beatmap => match fs::read(&candidate.physical_path) {
             Ok(bytes) => match parse_beatmap(
@@ -1455,13 +1584,33 @@ fn process_candidate(client: LocalClient, candidate: &Candidate) -> IndexedEntry
                 modified_iso(&candidate.physical_path),
                 candidate.known_hash.as_deref(),
             ) {
-                Ok(parsed) => {
+                Ok(mut parsed) => {
                     if let Some(message) = parsed.warning {
                         diagnostics.push(diagnostic(
                             "DIFFICULTY_SKIPPED",
                             message,
                             Some(candidate.logical_path.clone()),
                         ));
+                    }
+                    // Lazer：用 Realm 的权威元数据覆盖推断结果——
+                    // 谱面集归属、unicode 元数据、在线 ID、MD5 全部来自数据库。
+                    if let (Some(beatmap), Some(set)) =
+                        (candidate.lazer_beatmap.as_ref(), candidate.lazer_set.as_ref())
+                    {
+                        parsed.summary.set_key = format!("realm:{}", set.id);
+                        parsed.summary.set_grouping_inferred = false;
+                        parsed.summary.beatmap_set_id =
+                            (set.online_id > 0).then_some(set.online_id as i32);
+                        parsed.summary.beatmap_id =
+                            (beatmap.online_id > 0).then_some(beatmap.online_id as i32);
+                        parsed.summary.artist = set.artist.clone();
+                        parsed.summary.artist_unicode = set.artist_unicode.clone();
+                        parsed.summary.title = set.title.clone();
+                        parsed.summary.title_unicode = set.title_unicode.clone();
+                        parsed.summary.creator = set.creator.clone();
+                        parsed.summary.resource.logical_path = None;
+                        parsed.detail.summary = parsed.summary.clone();
+                        lazer_files = Some(set.files.clone());
                     }
                     IndexedData::Beatmap {
                         summary: parsed.summary,
@@ -1487,24 +1636,41 @@ fn process_candidate(client: LocalClient, candidate: &Candidate) -> IndexedEntry
             }
         },
         CandidateKind::Skin { root } => match fs::read(&candidate.physical_path) {
-            Ok(bytes) => match parse_skin(
-                client,
-                &bytes,
-                &candidate.logical_path,
-                modified_iso(&candidate.physical_path),
-                candidate.known_hash.as_deref(),
-                Some(root),
-            ) {
-                Ok(detail) => IndexedData::Skin { detail },
-                Err(message) => {
-                    diagnostics.push(diagnostic(
-                        "SKIN_PARSE_ERROR",
-                        message,
-                        Some(candidate.logical_path.clone()),
-                    ));
-                    IndexedData::Ignored
+            Ok(bytes) => {
+                // Lazer：皮肤文件分散在内容寻址存储中，不能按目录枚举，
+                // 清单（inventory）改由 Realm 登记的文件列表填充。
+                let skin_root = (client == LocalClient::Stable).then_some(root.as_path());
+                match parse_skin(
+                    client,
+                    &bytes,
+                    &candidate.logical_path,
+                    modified_iso(&candidate.physical_path),
+                    candidate.known_hash.as_deref(),
+                    skin_root,
+                ) {
+                    Ok(mut detail) => {
+                        if let Some(skin) = candidate.lazer_skin.as_ref() {
+                            detail.summary.completeness = Completeness::Complete;
+                            detail.summary.resource.logical_path = None;
+                            detail.inventory = Some(lazer_skin_inventory(&skin.files));
+                            detail.summary.resource_count =
+                                detail.inventory.as_ref().map(|value| value.file_count);
+                            detail.summary.total_bytes =
+                                detail.inventory.as_ref().map(|value| value.total_bytes);
+                            lazer_files = Some(skin.files.clone());
+                        }
+                        IndexedData::Skin { detail }
+                    }
+                    Err(message) => {
+                        diagnostics.push(diagnostic(
+                            "SKIN_PARSE_ERROR",
+                            message,
+                            Some(candidate.logical_path.clone()),
+                        ));
+                        IndexedData::Ignored
+                    }
                 }
-            },
+            }
             Err(error) => {
                 diagnostics.push(diagnostic(
                     "RESOURCE_READ_ERROR",
@@ -1522,18 +1688,44 @@ fn process_candidate(client: LocalClient, candidate: &Candidate) -> IndexedEntry
         IndexedData::Ignored => candidate.known_hash.clone(),
     };
 
-    let beatmap_md5 = matches!(data, IndexedData::Beatmap { .. })
-        .then(|| fs::read(&candidate.physical_path).ok())
-        .flatten()
-        .map(|bytes| format!("{:x}", Md5::digest(bytes)));
+    // MD5 优先取 Realm 登记值（收藏夹 / 游戏会话按 MD5 查谱面依赖它），
+    // 缺失时回退为直接对文件计算。
+    let beatmap_md5 = match (&data, candidate.lazer_beatmap.as_ref()) {
+        (IndexedData::Beatmap { .. }, Some(plan)) if !plan.md5.is_empty() => {
+            Some(plan.md5.to_ascii_lowercase())
+        }
+        _ => matches!(data, IndexedData::Beatmap { .. })
+            .then(|| fs::read(&candidate.physical_path).ok())
+            .flatten()
+            .map(|bytes| format!("{:x}", Md5::digest(bytes))),
+    };
     IndexedEntry {
         key: candidate.key.clone(),
         physical_path: candidate.physical_path.clone(),
         stamp: candidate.stamp.clone(),
         content_hash,
         beatmap_md5,
+        lazer_files,
         data,
         diagnostics,
+    }
+}
+
+/// 由 Realm 登记的皮肤文件清单构建资源统计。
+fn lazer_skin_inventory(files: &[lazer_realm::LazerRealmFile]) -> super::models::SkinInventory {
+    let mut by_extension = BTreeMap::new();
+    for file in files {
+        let extension = std::path::Path::new(&file.filename)
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.to_ascii_lowercase())
+            .unwrap_or_default();
+        *by_extension.entry(extension).or_default() += 1;
+    }
+    super::models::SkinInventory {
+        file_count: files.len(),
+        total_bytes: files.iter().map(|file| file.size).sum(),
+        by_extension,
     }
 }
 
@@ -1644,10 +1836,8 @@ fn build_summary(
 
     LocalLibrarySummary {
         client,
-        completeness: match client {
-            LocalClient::Stable => Completeness::Complete,
-            LocalClient::Lazer => Completeness::Partial,
-        },
+        // Lazer 现在以 Realm 为权威数据源，索引完整性与 Stable 一致。
+        completeness: Completeness::Complete,
         source_root: source_root.to_string(),
         scanned_at: Utc::now().to_rfc3339(),
         beatmap_count,
@@ -2115,6 +2305,57 @@ SliderTickRate:1
                 println!("stable skin preview assets: {image_count} images, {sound_count} sounds");
                 assert!(image_count > 0);
                 assert!(sound_count > 0);
+                assert!(decoded_image);
+            }
+            if client == LocalClient::Lazer {
+                // Realm 驱动后：谱面集分组、皮肤预览、背景都应可用。
+                assert!(!summary.beatmap_set_count_inferred);
+                let sets = service
+                    .query_beatmap_sets(BeatmapQuery {
+                        client,
+                        limit: 5,
+                        ..BeatmapQuery::default()
+                    })
+                    .expect("acceptance lazer sets");
+                assert!(!sets.items.is_empty());
+                assert_eq!(sets.items[0].completeness, Completeness::Complete);
+                let mut decoded_background = false;
+                for set in &sets.items {
+                    for difficulty in &set.difficulties {
+                        if service
+                            .beatmap_background(client, &difficulty.resource.resource_id)
+                            .expect("acceptance background call")
+                            .is_some()
+                        {
+                            decoded_background = true;
+                        }
+                    }
+                }
+                println!("lazer background decoded: {decoded_background}");
+                let skins = service
+                    .query_skins(SkinQuery {
+                        client,
+                        limit: 500,
+                        ..SkinQuery::default()
+                    })
+                    .expect("acceptance lazer skins");
+                let mut image_count = 0usize;
+                let mut decoded_image = false;
+                for skin in &skins.items {
+                    let preview = service
+                        .skin_preview(client, &skin.resource.resource_id)
+                        .expect("acceptance lazer skin preview");
+                    image_count += preview.images.len();
+                    if !decoded_image {
+                        decoded_image = preview.images.iter().any(|asset| {
+                            service
+                                .skin_asset(client, &skin.resource.resource_id, &asset.resource_id)
+                                .is_ok()
+                        });
+                    }
+                }
+                println!("lazer skin preview assets: {image_count} images, decoded: {decoded_image}");
+                assert!(image_count > 0);
                 assert!(decoded_image);
             }
             scanned += 1;

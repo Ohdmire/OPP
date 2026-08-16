@@ -366,7 +366,7 @@ function SkinWorkspace({
             <EmptyState
               icon={<Image className="size-5" />}
               title="没有可关联的图片"
-              description={client === "lazer" ? "当前索引无法确定 Lazer Skin 的资源归属。" : "这个 Skin 中没有支持预览的图片。"}
+              description={"这个 Skin 中没有支持预览的图片。"}
             />
           )
         ) : view === "sounds" ? (
@@ -411,7 +411,7 @@ function SkinWorkspace({
             <EmptyState
               icon={<FileAudio2 className="size-5" />}
               title="没有可关联的音效"
-              description={client === "lazer" ? "当前索引无法确定 Lazer Skin 的资源归属。" : "这个 Skin 中没有 WAV、MP3 或 OGG 音效。"}
+              description={"这个 Skin 中没有 WAV、MP3 或 OGG 音效。"}
             />
           )
         ) : (
@@ -604,7 +604,7 @@ export function SkinPanel({ client }: { client: OsuClient }) {
         <EmptyState
           icon={<Palette className="size-5" />}
           title="没有匹配的 Skin"
-          description={client === "lazer" ? "当前 Lazer 索引中没有匹配的 legacy Skin 配置。" : "当前 Skins 目录中没有匹配的 skin.ini。"}
+          description={"当前索引中没有匹配的皮肤。"}
         />
       )}
     </div>

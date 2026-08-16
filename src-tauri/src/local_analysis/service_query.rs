@@ -67,6 +67,53 @@ pub(super) fn skin_root(entry: &IndexedEntry) -> CommandResult<PathBuf> {
         .ok_or_else(|| CommandError::new("LOCAL_RESOURCE_READ_ERROR", "Skin 目录无效"))
 }
 
+/// 由 Realm 登记的皮肤文件清单生成可预览资源（图片 / 音效）。
+/// resource_id 生成规则与 Stable 目录枚举完全一致，前端无需区分客户端。
+pub(super) fn enumerate_lazer_skin_assets(
+    files: &[super::lazer_realm::LazerRealmFile],
+    skin_resource_id: &str,
+) -> Vec<LocalSkinAssetSummary> {
+    let mut assets = files
+        .iter()
+        .filter_map(|file| {
+            let path = Path::new(&file.filename);
+            let extension = path
+                .extension()
+                .and_then(|value| value.to_str())?
+                .to_ascii_lowercase();
+            let kind = match extension.as_str() {
+                "bmp" | "gif" | "jpeg" | "jpg" | "png" | "webp" => SkinAssetKind::Image,
+                "mp3" | "ogg" | "wav" => SkinAssetKind::Audio,
+                _ => return None,
+            };
+            let logical_path = file.filename.replace('\\', "/");
+            let name = path
+                .file_name()
+                .map(|value| value.to_string_lossy().to_string())
+                .unwrap_or_else(|| logical_path.clone());
+            let category = skin_asset_category(&logical_path, kind).to_string();
+            let resource_id = format!(
+                "skin-asset:{}",
+                sha256(format!("{skin_resource_id}:{}", logical_path.to_lowercase()).as_bytes())
+            );
+            Some(LocalSkinAssetSummary {
+                resource_id,
+                kind,
+                name,
+                logical_path,
+                extension,
+                size: file.size,
+                category,
+            })
+        })
+        .collect::<Vec<_>>();
+    assets.sort_by(|left, right| {
+        text_order(&left.category, &right.category)
+            .then_with(|| text_order(&left.logical_path, &right.logical_path))
+    });
+    assets
+}
+
 pub(super) fn enumerate_skin_assets(
     root: &Path,
     skin_resource_id: &str,

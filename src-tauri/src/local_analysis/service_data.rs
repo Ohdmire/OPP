@@ -7,6 +7,7 @@ use std::{
     collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
     time::SystemTime,
 };
 
@@ -23,10 +24,11 @@ use super::super::{
     },
     parser::DIFFICULTY_ALGORITHM,
 };
+use super::lazer_realm::LazerRealmFile;
 use super::service_query::{compare_beatmaps, compare_skins};
 
 /// Bump this only when a serialized [`LocalIndex`] can no longer be read safely.
-pub(super) const INDEX_SCHEMA: u32 = 6;
+pub(super) const INDEX_SCHEMA: u32 = 7;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub(super) struct FileStamp {
@@ -54,6 +56,10 @@ pub(super) struct IndexedEntry {
     pub(super) content_hash: Option<String>,
     #[serde(default)]
     pub(super) beatmap_md5: Option<String>,
+    /// Lazer：该条目所属谱面集 / Skin 在 Realm 中登记的完整文件清单
+    /// （原始文件名 + 内容哈希），用于按需解析背景、音频与皮肤资源。
+    #[serde(default)]
+    pub(super) lazer_files: Option<Vec<LazerRealmFile>>,
     pub(super) data: IndexedData,
     pub(super) diagnostics: Vec<ScanDiagnostic>,
 }
@@ -154,6 +160,12 @@ pub(super) struct Candidate {
     pub(super) known_hash: Option<String>,
     pub(super) stamp: FileStamp,
     pub(super) kind: CandidateKind,
+    /// Lazer（Realm 驱动）：谱面候选携带的权威元数据与所属集文件清单。
+    pub(super) lazer_beatmap: Option<Box<super::lazer_realm::LazerRealmBeatmap>>,
+    /// Lazer（Realm 驱动）：谱面集级别的归属与元数据。
+    pub(super) lazer_set: Option<Arc<super::lazer_realm::LazerRealmSet>>,
+    /// Lazer（Realm 驱动）：皮肤候选携带的文件清单。
+    pub(super) lazer_skin: Option<Arc<super::lazer_realm::LazerRealmSkin>>,
 }
 
 #[derive(Debug, Clone)]
@@ -161,6 +173,9 @@ pub(super) struct SkinAssetLocation {
     pub(super) skin_resource_id: String,
     pub(super) root: PathBuf,
     pub(super) summary: LocalSkinAssetSummary,
+    /// Lazer：资源内容哈希；存在时资源路径按 files/ 内容寻址解析，
+    /// `root` 仅为来源记录，不参与路径拼接。
+    pub(super) lazer_hash: Option<String>,
 }
 
 pub(super) fn stamp(metadata: &fs::Metadata) -> FileStamp {

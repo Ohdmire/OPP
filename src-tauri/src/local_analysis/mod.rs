@@ -1,3 +1,4 @@
+pub(crate) mod lazer_realm;
 mod models;
 pub(crate) mod parser;
 mod service;

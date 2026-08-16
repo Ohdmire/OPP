@@ -548,10 +548,7 @@ pub fn parse_skin(
         summary,
         sections,
         inventory,
-        notice: (client == LocalClient::Lazer).then(|| {
-            "Lazer 未读取 client.realm；这里只展示可识别的 legacy skin 配置，无法确定完整资源归属。"
-                .into()
-        }),
+        notice: None,
     })
 }
 
