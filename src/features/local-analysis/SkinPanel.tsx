@@ -154,7 +154,9 @@ function ImagePreview({
           <span>{asset.category}</span>
           <span>{formatBytes(asset.size)}</span>
         </div>
-        <Button className="mt-2 w-full" onClick={() => onReplace(asset)} size="sm"><FilePenLine className="size-3.5" />替换</Button>
+        {client === "stable" ? (
+          <Button className="mt-2 w-full" onClick={() => onReplace(asset)} size="sm"><FilePenLine className="size-3.5" />替换</Button>
+        ) : null}
       </div>
     </article>
   );
@@ -215,7 +217,9 @@ function SoundPreview({
       ) : (
         <Volume2 className="size-4 text-slate-700" />
       )}
-      <Button aria-label={`替换 ${asset.name}`} onClick={() => onReplace(asset)} size="icon"><FilePenLine className="size-3.5" /></Button>
+      {client === "stable" ? (
+        <Button aria-label={`替换 ${asset.name}`} onClick={() => onReplace(asset)} size="icon"><FilePenLine className="size-3.5" /></Button>
+      ) : null}
     </div>
   );
 }
