@@ -1,6 +1,6 @@
 # OPP Linux 使用与构建
 
-OPP v0.4.2 支持 Linux 桌面环境。核心在线功能、本地资源、Stable/lazer 游戏会话、收藏夹、o!rdr、tosu/OBS 和常用工具可用；Danser、本地文件关联和显示器伽马当前仅支持 Windows。
+OPP v0.4.3 支持 Linux 桌面环境。核心在线功能、本地资源、Stable/lazer 游戏会话、收藏夹、o!rdr、tosu/OBS 和常用工具可用；Danser、本地文件关联和显示器伽马当前仅支持 Windows。
 
 ## 运行前准备
 
