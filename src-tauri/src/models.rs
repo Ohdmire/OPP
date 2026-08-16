@@ -406,6 +406,7 @@ impl Default for SimilarityPreferences {
 #[serde(rename_all = "lowercase")]
 pub enum BeatmapDownloadProvider {
     #[default]
+    Sayobot,
     Hinai,
     Catboy,
     Nerinyan,
@@ -655,19 +656,19 @@ mod tests {
     }
 
     #[test]
-    fn settings_default_to_hinai_downloads() {
+    fn settings_default_to_sayobot_downloads() {
         let settings: AppSettings =
             serde_json::from_value(serde_json::json!({})).expect("settings should parse");
 
         assert_eq!(
             settings.default_beatmap_download_provider,
-            BeatmapDownloadProvider::Hinai
+            BeatmapDownloadProvider::Sayobot
         );
         assert_eq!(
             serde_json::to_value(settings)
                 .expect("settings should serialize")
                 .get("default_beatmap_download_provider"),
-            Some(&serde_json::json!("hinai"))
+            Some(&serde_json::json!("sayobot"))
         );
     }
 

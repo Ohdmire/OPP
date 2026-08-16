@@ -30,8 +30,8 @@ pub fn download_file_name(item: &BeatmapDownloadItem, suggested: Option<&str>) -
 }
 
 /// Downloads a beatmapset through the selected mirror, then tries the other registered mirrors.
-/// Hinai itself implements a multi-source cascade; the remaining attempts are an additional OPP
-/// fallback if that public endpoint is unavailable.
+/// Sayobot is OPP's preferred mirror. Hinai itself implements a multi-source cascade; the remaining
+/// attempts are an additional OPP fallback if a public endpoint is unavailable.
 pub async fn download_with_adapters<F>(
     state: &AppState,
     beatmapset_id: u64,
@@ -43,9 +43,10 @@ where
     F: FnMut(u64, Option<u64>),
 {
     let adapters = match provider {
-        "hinai" => ["hinai", "catboy", "nerinyan"],
-        "catboy" => ["catboy", "hinai", "nerinyan"],
-        "nerinyan" => ["nerinyan", "hinai", "catboy"],
+        "sayobot" => ["sayobot", "hinai", "catboy", "nerinyan"],
+        "hinai" => ["hinai", "sayobot", "catboy", "nerinyan"],
+        "catboy" => ["catboy", "sayobot", "hinai", "nerinyan"],
+        "nerinyan" => ["nerinyan", "sayobot", "hinai", "catboy"],
         _ => {
             return Err(CommandError::new(
                 "DOWNLOAD_ADAPTER_DISABLED",

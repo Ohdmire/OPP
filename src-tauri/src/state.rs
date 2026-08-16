@@ -16,6 +16,7 @@ use crate::{
     online_beatmaps::providers::ProviderRegistry,
     osu_api::OsuApi,
     similarity::SimilarityRuntime,
+    skin_workshop::SkinWorkshopService,
     storage::StateStore,
     tosu::TosuRuntime,
 };
@@ -32,6 +33,7 @@ pub struct AppState {
     pub avatar_cache: AvatarCache,
     pub credentials: CredentialStore,
     pub local_analysis: Arc<LocalAnalysisService>,
+    pub skin_workshop: Arc<SkinWorkshopService>,
     pub collections: Arc<CollectionService>,
     pub similarity: Arc<SimilarityRuntime>,
     pub store: StateStore,
@@ -50,6 +52,10 @@ impl AppState {
     pub fn new(app_data_dir: &Path) -> CommandResult<Self> {
         let store = StateStore::load(app_data_dir)?;
         let local_analysis = Arc::new(LocalAnalysisService::new(app_data_dir)?);
+        let skin_workshop = Arc::new(SkinWorkshopService::new(
+            app_data_dir,
+            Arc::clone(&local_analysis),
+        )?);
         let collections = Arc::new(CollectionService::new(app_data_dir)?);
         local_analysis.set_thumbnail_cache_limit_mb(store.snapshot()?.settings.cache_limit_mb)?;
         Ok(Self {
@@ -58,6 +64,7 @@ impl AppState {
             avatar_cache: AvatarCache::new(app_data_dir)?,
             credentials: CredentialStore,
             local_analysis,
+            skin_workshop,
             collections,
             similarity: Arc::new(SimilarityRuntime::default()),
             store,

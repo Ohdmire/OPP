@@ -80,7 +80,7 @@ pub struct BeatmapDownloadRequest {
 }
 
 fn default_download_provider() -> String {
-    "hinai".into()
+    "sayobot".into()
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -36,9 +36,8 @@ OPP 是一个使用 Tauri、Rust 与 React 构建的跨平台 osu! 桌面工具�
 - 支持 Trainer 练习谱面生成和网易云音乐客户端搜索
 - 内置 osu!lazer 占用统计、文件关联、手速测试等实用工具
 
-当前算法口径为 [`rosu-pp 4.0.1`](https://github.com/MaxOhn/rosu-pp/tree/v4.0.1)，对应
-[`ppy/osu@28c846b`](https://github.com/ppy/osu/commit/28c846b4d9366484792e27f4729cd1afa2cdeb66)
-（2025-10-13）算法快照。
+当前算法口径为 [`Apeuriox/rosu-pp@pp-rework-202607`](https://github.com/Apeuriox/rosu-pp/tree/pp-rework-202607)，
+使用该分支提供的最新 pp rework 算法快照。
 
 ## 开始使用
 
@@ -164,7 +163,7 @@ OPP/
 - [tosuapp/tosu](https://github.com/tosuapp/tosu)
 - [HollisMeynell/tosu-lyrics](https://github.com/HollisMeynell/tosu-lyrics)
 - [Siflorite/mania-converter-rust](https://github.com/Siflorite/mania-converter-rust) (Apache-2.0)
-- [MaxOhn/rosu-pp](https://github.com/MaxOhn/rosu-pp)
+- [Apeuriox/rosu-pp (`pp-rework-202607`)](https://github.com/Apeuriox/rosu-pp/tree/pp-rework-202607)
 - [MaxOhn/rosu-map](https://github.com/MaxOhn/rosu-map)
 - [Tauri](https://github.com/tauri-apps/tauri)
 - [Ohdmire/osu-lazer-space-statistics](https://github.com/Ohdmire/osu-lazer-space-statistics)
