@@ -11,7 +11,7 @@ import { PageHeader } from "../../shared/components/PageHeader";
 import { Badge, Button, Card, SectionTitle } from "../../shared/components/ui";
 import { desktopApi, useCapabilities } from "../../shared/lib/tauri";
 
-import type { DefaultFileClients, LazerDedupeProgress, LazerDedupeResult, LazerDiskUsage, ManiaConversionItem, OsuClient } from "../../shared/types/osu";
+import type { DefaultFileClients, LazerDedupeProgress, LazerDedupeResult, LazerDiskUsage, LazerRealmReadResult, ManiaConversionItem, OsuClient } from "../../shared/types/osu";
 import type { BeatmapPreviewInspection, BeatmapPreviewResult } from "../../shared/types/osu";
 
 function formatByteSize(bytes: number) {
