@@ -9,6 +9,7 @@ import {
   CircleDot,
   ExternalLink,
   FolderSearch,
+  PackageOpen,
   Gauge,
   Heart,
   ImageIcon,
@@ -206,6 +207,22 @@ function BeatmapSetCard({
 }) {
   const [difficultyDialogOpen, setDifficultyDialogOpen] = useState(false);
   const [neteaseError, setNeteaseError] = useState<unknown>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
+  const exportOsz = async () => {
+    const outDir = await desktopApi.chooseDirectory("选择 .osz 导出位置");
+    if (!outDir) return;
+    setExporting(true);
+    setExportNotice(null);
+    try {
+      const path = await desktopApi.exportLocalBeatmapSet(client, set.set_key, outDir);
+      setExportNotice(`已导出：${path}`);
+    } catch (caught) {
+      setExportNotice(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setExporting(false);
+    }
+  };
   const starRange =
     set.min_stars === null
       ? "待计算"
@@ -248,15 +265,31 @@ function BeatmapSetCard({
         <div className="min-w-0 flex-1">
           <BeatmapDifficultyStrip difficulties={set.difficulties.map((difficulty) => ({ id: difficulty.resource.resource_id, mode: difficulty.ruleset, stars: difficulty.stars, label: difficulty.difficulty_name, onClick: () => onOpen(difficulty.resource.resource_id) }))} />
         </div>
-        <Button
-          aria-label="在资源管理器中打开谱面"
-          disabled={!set.difficulties[0]?.resource.logical_path}
-          onClick={() => { const path = set.difficulties[0]?.resource.logical_path; if (path) void desktopApi.openLocalResourceInExplorer(client, path); }}
-          size="sm"
-        >
-          <FolderSearch className="size-3.5" />
-          打开文件
-        </Button>
+        {client === "stable" ? (
+          <Button
+            aria-label="在资源管理器中打开谱面"
+            disabled={!set.difficulties[0]?.resource.logical_path}
+            onClick={() => { const path = set.difficulties[0]?.resource.logical_path; if (path) void desktopApi.openLocalResourceInExplorer(client, path); }}
+            size="sm"
+          >
+            <FolderSearch className="size-3.5" />
+            打开文件
+          </Button>
+        ) : (
+          // Lazer 文件按哈希散落存储，没有可打开的谱面集目录，直接提供导出。
+          <Button
+            aria-label="导出为 .osz 谱面包"
+            disabled={exporting}
+            loading={exporting}
+            onClick={() => void exportOsz()}
+            size="sm"
+            variant="primary"
+          >
+            <PackageOpen className="size-3.5" />
+            导出 .osz
+          </Button>
+        )}
+        {exportNotice ? <span className="max-w-56 truncate text-[11px] text-slate-500" title={exportNotice}>{exportNotice}</span> : null}
         {set.beatmap_set_id ? (
           <Button
             aria-label="在 osu! 官网打开谱面"

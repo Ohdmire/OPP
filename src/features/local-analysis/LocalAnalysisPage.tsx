@@ -116,7 +116,7 @@ function SourceBar({
             <Badge tone={source.valid ? "success" : "warning"}>
               {source.valid ? "已连接" : "需配置"}
             </Badge>
-            {source.client === "lazer" ? <Badge tone="warning">部分索引</Badge> : null}
+            {source.client === "lazer" ? <Badge tone="success">Realm 索引</Badge> : null}
             {section === "maps" && summary ? (
               <Badge>
                 {summary.calculation.engine} {summary.calculation.engine_version}

@@ -67,6 +67,14 @@ import type {
   ReplayRenderRequest,
   Score,
   SkinQuery,
+  SkinConfigDocument,
+  SkinPartPreview,
+  SkinTree,
+  SkinWorkshopAction,
+  SkinWorkshopAssetPayload,
+  SkinWorkshopMutationResult,
+  SkinWorkshopPreset,
+  SkinWorkshopWriteMode,
   SimilarityIndexStatus,
   SimilarityQueryRequest,
   SimilarityQueryResponse,
@@ -79,6 +87,7 @@ import type {
   TrainerResult,
   ObsRefreshResult,
   LazerDiskUsage,
+  LazerRealmReadResult,
   LazerDedupeProgress,
   LazerDedupeResult,
   ObsStatus,
@@ -140,6 +149,9 @@ async function call<T>(
 function browserPreviewValue<T>(command: string, args?: Record<string, unknown>): T | undefined {
   if (command === "get_capabilities") return { os: "windows", display_gamma: true, file_association: true } as T;
   if (command === "get_lazer_disk_usage") return { path: "C:\\osu!", total_size: 1610612736, unique_size: 536870912, file_count: 4096 } as T;
+  if (command === "read_lazer_realm_beatmap_sets") return { realm_path: "C:\\osu!\\client.realm", table_count: 16, beatmap_set_count: 2, beatmap_sets: [{ id: "fc56eb02bba7428499af65e5c2c80c73", online_id: -1, artist: "cYsmix", title: "triangles", creator: "peppy", beatmap_count: 1, delete_pending: false, files: [{ filename: "audio.mp3", hash: "47b895484e7751f3ab429694ff6dbf21e774ab023e4f6c5b481476f04ff22f0f" }, { filename: "cYsmix - triangles (peppy) [peppy].osu", hash: "a1556d0801b3a6b175dda32ef546f0ec812b400499f575c44fccbe9c67f9b1e5" }] }] } as T;
+  if (command === "export_local_beatmap_set") return `${args?.outDir ?? "C:\\Export"}/export.osz` as T;
+  if (command === "export_local_skin") return `${args?.outDir ?? "C:\\Export"}/export.osk` as T;
   if (command === "dedupe_lazer_files") return { dry_run: args?.dryRun !== false, cancelled: false, lazer_files_root: "C:\\osu\\files", stable_roots: ["C:\\osu!\\Songs"], lazer_file_count: 4096, lazer_total_size: 1610612736, already_linked_count: 1024, already_linked_size: 402653184, hashed_stable_count: 2048, candidate_count: 819, reclaimable_size: 645922816, linked_count: 0, linked_size: 0, skipped_cross_volume_count: 0, skipped_cross_volume_size: 0, failed_count: 0, failed: [] } as T;
   const profile = {
     id: 10001, username: "Preview User", avatar_url: "https://a.ppy.sh/10001", country_code: "CN",
@@ -221,6 +233,8 @@ export const desktopApi = {
   getAuthStatus: () => call<AuthStatus>("get_auth_status"),
   getCapabilities: () => call<PlatformCapabilities>("get_capabilities"),
   getLazerDiskUsage: () => call<LazerDiskUsage>("get_lazer_disk_usage"),
+  readLazerRealmBeatmapSets: () =>
+    call<LazerRealmReadResult>("read_lazer_realm_beatmap_sets"),
   dedupeLazerFiles: (dryRun: boolean) =>
     call<LazerDedupeResult>("dedupe_lazer_files", { dryRun }),
   cancelLazerDedupe: () => call<void>("cancel_lazer_dedupe"),
@@ -399,6 +413,10 @@ export const desktopApi = {
     call<Page<LocalSkinSummary>>("query_local_skins", { query }),
   getLocalSkinDetail: (client: OsuClient, resourceId: string) =>
     call<LocalSkinDetail>("get_local_skin_detail", { client, resourceId }),
+  exportLocalBeatmapSet: (client: OsuClient, setKey: string, outDir: string) =>
+    call<string>("export_local_beatmap_set", { client, setKey, outDir }),
+  exportLocalSkin: (client: OsuClient, resourceId: string, outDir: string) =>
+    call<string>("export_local_skin", { client, resourceId, outDir }),
   getLocalSkinPreview: (client: OsuClient, resourceId: string) =>
     call<LocalSkinPreview>("get_local_skin_preview", { client, resourceId }),
   getLocalSkinAsset: (
@@ -418,6 +436,25 @@ export const desktopApi = {
     const selected = await openDialog({ multiple: false, title: `选择 .${extension} 替换文件`, filters: [{ name: `${extension.toUpperCase()} 文件`, extensions: [extension] }] });
     return typeof selected === "string" ? selected : null;
   },
+  openSkinWorkshopPackage: (path: string) =>
+    call<LocalSkinSummary>("open_skin_workshop_package", { path }),
+  chooseSkinWorkshopPackage: async () => {
+    if (!isTauri()) return null;
+    const selected = await openDialog({ multiple: false, title: "打开 Skin 安装包", filters: [{ name: "osu! Skin", extensions: ["osk"] }] });
+    return typeof selected === "string" ? selected : null;
+  },
+  getSkinWorkshopTree: (client: OsuClient, skinResourceId: string) =>
+    call<SkinTree>("get_skin_workshop_tree", { client, skinResourceId }),
+  getSkinWorkshopPartPreview: (client: OsuClient, skinResourceId: string, partKey: string) =>
+    call<SkinPartPreview>("get_skin_workshop_part_preview", { client, skinResourceId, partKey }),
+  getSkinWorkshopAsset: (client: OsuClient, skinResourceId: string, assetId: string) =>
+    call<SkinWorkshopAssetPayload>("get_skin_workshop_asset", { client, skinResourceId, assetId }),
+  getSkinWorkshopConfig: (client: OsuClient, skinResourceId: string) =>
+    call<SkinConfigDocument>("get_skin_workshop_config", { client, skinResourceId }),
+  executeSkinWorkshopAction: (targetSkinResourceId: string, mode: SkinWorkshopWriteMode, action: SkinWorkshopAction) =>
+    call<SkinWorkshopMutationResult>("execute_skin_workshop_action", { targetSkinResourceId, mode, action }),
+  executeSkinWorkshopPreset: (targetSkinResourceId: string, mode: SkinWorkshopWriteMode, preset: SkinWorkshopPreset) =>
+    call<SkinWorkshopMutationResult>("execute_skin_workshop_preset", { targetSkinResourceId, mode, preset }),
   chooseLocalDirectory: async (defaultPath?: string | null) => {
     if (!isTauri()) {
       throw {

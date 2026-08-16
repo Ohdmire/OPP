@@ -9,6 +9,7 @@ const DataCenterPage = lazy(() => import("../features/profile/DataCenterPage").t
 const OnlineBeatmapsPage = lazy(() => import("../features/online-beatmaps/OnlineBeatmapsPage").then((module) => ({ default: module.OnlineBeatmapsPage })));
 const SimilarBeatmapsPage = lazy(() => import("../features/similar-beatmaps/SimilarBeatmapsPage").then((module) => ({ default: module.SimilarBeatmapsPage })));
 const LocalAnalysisPage = lazy(() => import("../features/local-analysis/LocalAnalysisPage").then((module) => ({ default: module.LocalAnalysisPage })));
+const SkinWorkshopPage = lazy(() => import("../features/skin-workshop/SkinWorkshopPage").then((module) => ({ default: module.SkinWorkshopPage })));
 const LocalMediaPage = lazy(() => import("../features/local-media/LocalMediaPage").then((module) => ({ default: module.LocalMediaPage })));
 const ReplayRenderPage = lazy(() => import("../features/local-media/ReplayRenderPage").then((module) => ({ default: module.ReplayRenderPage })));
 const SettingsPage = lazy(() => import("../features/settings/SettingsPage").then((module) => ({ default: module.SettingsPage })));
@@ -33,7 +34,7 @@ export function AppRoutes() {
           <Route path="/trainer" element={<TrainerPage />} />
           <Route path="/local" element={<Navigate replace to="/local/maps" />} />
           <Route path="/local/maps" element={<LocalAnalysisPage section="maps" />} />
-          <Route path="/local/skins" element={<LocalAnalysisPage section="skins" />} />
+          <Route path="/local/skins" element={<SkinWorkshopPage />} />
           <Route path="/local/media" element={<LocalMediaPage />} />
           <Route path="/local/media/screenshots" element={<Navigate replace to="/local/media?type=screenshot" />} />
           <Route path="/local/media/replays" element={<Navigate replace to="/local/media?type=replay" />} />
