@@ -48,7 +48,7 @@ fn find_skin_ini(root: &Path) -> Option<PathBuf> {
                 .is_some_and(|name| name.eq_ignore_ascii_case("skin.ini"))
         })
         .map(|entry| entry.path())
-}
+}   
 
 pub(crate) fn read_config(root: &Path) -> CommandResult<SkinConfigDocument> {
     let path = find_skin_ini(root).ok_or_else(|| {

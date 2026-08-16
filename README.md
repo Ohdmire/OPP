@@ -167,6 +167,7 @@ OPP/
 - [MaxOhn/rosu-map](https://github.com/MaxOhn/rosu-map)
 - [Tauri](https://github.com/tauri-apps/tauri)
 - [Ohdmire/osu-lazer-space-statistics](https://github.com/Ohdmire/osu-lazer-space-statistics)
+- [Ohdmire/realm-db-reader](https://github.com/Ohdmire/realm-db-reader)
 
 ## 特别鸣谢
 
