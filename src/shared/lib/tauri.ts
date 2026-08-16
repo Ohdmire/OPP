@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type {
   AppSettings,
@@ -9,6 +9,9 @@ import type {
   BeatmapDownloadProgress,
   BeatmapDownloadRequest,
   BeatmapDownloadResult,
+  BeatmapPreviewInspection,
+  BeatmapPreviewRequest,
+  BeatmapPreviewResult,
   CollectionCandidate,
   CollectionDownloadItem,
   CollectionFolder,
@@ -64,6 +67,14 @@ import type {
   ReplayRenderRequest,
   Score,
   SkinQuery,
+  SkinConfigDocument,
+  SkinPartPreview,
+  SkinTree,
+  SkinWorkshopAction,
+  SkinWorkshopAssetPayload,
+  SkinWorkshopMutationResult,
+  SkinWorkshopPreset,
+  SkinWorkshopWriteMode,
   SimilarityIndexStatus,
   SimilarityQueryRequest,
   SimilarityQueryResponse,
@@ -227,6 +238,18 @@ export const desktopApi = {
   dedupeLazerFiles: (dryRun: boolean) =>
     call<LazerDedupeResult>("dedupe_lazer_files", { dryRun }),
   cancelLazerDedupe: () => call<void>("cancel_lazer_dedupe"),
+
+  inspectBeatmapPreview: (bid: number) =>
+    call<BeatmapPreviewInspection>("inspect_beatmap_preview", { bid }),
+  generateBeatmapPreview: (request: BeatmapPreviewRequest) =>
+    call<BeatmapPreviewResult>("generate_beatmap_preview", { request }),
+  readBeatmapPreviewOutput: (path: string) =>
+    call<ArrayBuffer>("read_beatmap_preview_output", { path }),
+  saveBeatmapPreviewOutput: (source: string, destination: string) =>
+    call<string>("save_beatmap_preview_output", { source, destination }),
+  openBeatmapPreviewOutput: (path: string) =>
+    call<void>("open_beatmap_preview_output", { path }),
+
   saveOAuthCredentials: (clientId: string, clientSecret: string) =>
     call<{ client_id: string; callback_url: string }>(
       "save_oauth_credentials",
@@ -413,6 +436,25 @@ export const desktopApi = {
     const selected = await openDialog({ multiple: false, title: `选择 .${extension} 替换文件`, filters: [{ name: `${extension.toUpperCase()} 文件`, extensions: [extension] }] });
     return typeof selected === "string" ? selected : null;
   },
+  openSkinWorkshopPackage: (path: string) =>
+    call<LocalSkinSummary>("open_skin_workshop_package", { path }),
+  chooseSkinWorkshopPackage: async () => {
+    if (!isTauri()) return null;
+    const selected = await openDialog({ multiple: false, title: "打开 Skin 安装包", filters: [{ name: "osu! Skin", extensions: ["osk"] }] });
+    return typeof selected === "string" ? selected : null;
+  },
+  getSkinWorkshopTree: (client: OsuClient, skinResourceId: string) =>
+    call<SkinTree>("get_skin_workshop_tree", { client, skinResourceId }),
+  getSkinWorkshopPartPreview: (client: OsuClient, skinResourceId: string, partKey: string) =>
+    call<SkinPartPreview>("get_skin_workshop_part_preview", { client, skinResourceId, partKey }),
+  getSkinWorkshopAsset: (client: OsuClient, skinResourceId: string, assetId: string) =>
+    call<SkinWorkshopAssetPayload>("get_skin_workshop_asset", { client, skinResourceId, assetId }),
+  getSkinWorkshopConfig: (client: OsuClient, skinResourceId: string) =>
+    call<SkinConfigDocument>("get_skin_workshop_config", { client, skinResourceId }),
+  executeSkinWorkshopAction: (targetSkinResourceId: string, mode: SkinWorkshopWriteMode, action: SkinWorkshopAction) =>
+    call<SkinWorkshopMutationResult>("execute_skin_workshop_action", { targetSkinResourceId, mode, action }),
+  executeSkinWorkshopPreset: (targetSkinResourceId: string, mode: SkinWorkshopWriteMode, preset: SkinWorkshopPreset) =>
+    call<SkinWorkshopMutationResult>("execute_skin_workshop_preset", { targetSkinResourceId, mode, preset }),
   chooseLocalDirectory: async (defaultPath?: string | null) => {
     if (!isTauri()) {
       throw {
@@ -425,6 +467,15 @@ export const desktopApi = {
       multiple: false,
       defaultPath: defaultPath ?? undefined,
       title: "选择 osu! 本地目录",
+    });
+    return typeof selected === "string" ? selected : null;
+  },
+  chooseBeatmapPreviewDestination: async (fileName: string, extension: "gif" | "png") => {
+    if (!isTauri()) return null;
+    const selected = await saveDialog({
+      title: "保存铺面预览",
+      defaultPath: fileName,
+      filters: [{ name: extension === "gif" ? "GIF 动图" : "PNG 图片", extensions: [extension] }],
     });
     return typeof selected === "string" ? selected : null;
   },

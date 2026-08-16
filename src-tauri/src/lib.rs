@@ -13,6 +13,7 @@ mod platform;
 mod pp_calc;
 mod replay_render;
 mod similarity;
+mod skin_workshop;
 mod state;
 mod storage;
 mod tools;
@@ -65,6 +66,11 @@ use similarity::{
     configure_similarity_index, get_similarity_index_status, query_similar_beatmaps,
     recommend_similar_beatmaps,
 };
+use skin_workshop::{
+    execute_skin_workshop_action, execute_skin_workshop_preset, get_skin_workshop_asset,
+    get_skin_workshop_config, get_skin_workshop_part_preview, get_skin_workshop_tree,
+    open_skin_workshop_package,
+};
 use state::AppState;
 use tauri::{
     Manager,
@@ -72,9 +78,10 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 use tools::{
-    cancel_lazer_dedupe, convert_mania_beatmaps, dedupe_lazer_files, get_default_file_clients,
-    get_lazer_disk_usage, open_local_resource_in_explorer, read_lazer_realm_beatmap_sets,
-    set_default_file_client, set_display_gamma,
+    cancel_lazer_dedupe, convert_mania_beatmaps, dedupe_lazer_files, generate_beatmap_preview,
+    get_default_file_clients, get_lazer_disk_usage, inspect_beatmap_preview,
+    open_beatmap_preview_output, open_local_resource_in_explorer, read_beatmap_preview_output,
+    save_beatmap_preview_output, set_default_file_client, set_display_gamma,
 };
 use tosu::{
     get_tosu_logs, get_tosu_status, set_tosu_executable, set_tosu_lyrics_executable, start_tosu,
@@ -225,6 +232,13 @@ pub fn run() {
             get_local_skin_preview,
             get_local_skin_asset,
             replace_local_skin_asset,
+            open_skin_workshop_package,
+            execute_skin_workshop_action,
+            execute_skin_workshop_preset,
+            get_skin_workshop_tree,
+            get_skin_workshop_part_preview,
+            get_skin_workshop_asset,
+            get_skin_workshop_config,
             open_local_resource_in_explorer,
             get_default_file_clients,
             set_default_file_client,
@@ -235,6 +249,11 @@ pub fn run() {
             cancel_lazer_dedupe,
             open_netease_music_search,
             convert_mania_beatmaps,
+            inspect_beatmap_preview,
+            generate_beatmap_preview,
+            read_beatmap_preview_output,
+            save_beatmap_preview_output,
+            open_beatmap_preview_output,
             generate_trainer_beatmap,
             get_tosu_status,
             get_tosu_logs,

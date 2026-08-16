@@ -12,6 +12,7 @@ import {
   PackageOpen,
   Gauge,
   Heart,
+  ImageIcon,
   Hash,
   ListFilter,
   ListMusic,
@@ -42,6 +43,7 @@ import { desktopApi } from "../../shared/lib/tauri";
 import { DifficultyIcon, ModeIcon } from "../online-beatmaps/BeatmapVisuals";
 import { similarityRouteForLocalResource } from "../similar-beatmaps/navigation";
 import { openCollectionDialog } from "../collections/events";
+import { beatmapPreviewRoute } from "../tools/navigation";
 import type {
   BeatmapQuery,
   BeatmapSort,
@@ -161,7 +163,35 @@ function LocalDifficultyDialog({
   onOpen: (resourceId: string) => void;
   onFindSimilar: (resourceId: string) => void;
 }) {
-  return <Dialog.Root onOpenChange={(next) => !next && onClose()} open={open}><Dialog.Portal><Dialog.Overlay className="fixed inset-0 z-[120] bg-black/65 backdrop-blur-sm" /><Dialog.Content className="fixed left-1/2 top-1/2 z-[130] flex max-h-[min(800px,calc(100vh-32px))] w-[min(1080px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0d131f] shadow-2xl outline-none"><div className="flex items-start justify-between gap-5 border-b border-white/[0.08] p-6"><div className="min-w-0"><Dialog.Title className="truncate text-xl font-semibold text-white">{set.title_unicode || set.title}</Dialog.Title><Dialog.Description className="mt-1 truncate text-sm text-slate-400">{set.artist_unicode || set.artist} · {set.difficulties.length} 个难度</Dialog.Description></div><Dialog.Close aria-label="关闭难度列表" className="grid size-9 shrink-0 place-items-center rounded-xl border border-white/10 text-slate-400 transition hover:bg-white/[0.08] hover:text-white"><X className="size-4" /></Dialog.Close></div><div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6"><div className="space-y-3">{set.difficulties.map((difficulty) => <article className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4 transition hover:border-cyan-300/25 hover:bg-cyan-300/[0.04]" key={difficulty.resource.resource_id}><div className="flex flex-wrap items-start gap-4"><button className="min-w-0 flex-1 text-left" onClick={() => onOpen(difficulty.resource.resource_id)} type="button"><div className="flex items-center gap-2"><ModeIcon mode={difficulty.ruleset} /><DifficultyIcon mode={difficulty.ruleset} stars={difficulty.stars} /><h3 className="truncate text-base font-semibold text-white">[{difficulty.difficulty_name}]</h3></div><p className="mt-2 text-xs text-slate-500">{rulesetLabels[difficulty.ruleset]} · {difficulty.creator}</p></button><div className="grid flex-1 grid-cols-3 gap-x-5 gap-y-3 sm:grid-cols-6"><Metric icon={Gauge} label="AR / OD" value={`${difficulty.ar.toFixed(1)} / ${difficulty.od.toFixed(1)}`} /><Metric icon={CircleDot} label="CS" value={difficulty.cs.toFixed(1)} /><Metric icon={Zap} label="BPM" value={difficulty.bpm.toFixed(0)} /><Metric icon={Trophy} label="Max PP" value={difficulty.max_pp === null ? "—" : difficulty.max_pp.toFixed(1)} /><Metric icon={Timer} label="NPS" value={difficulty.average_nps.toFixed(1)} /><Metric icon={Hash} label="Objects" value={fullNumber(difficulty.object_count)} /></div></div><div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-white/[0.06] pt-3"><Button onClick={() => onOpen(difficulty.resource.resource_id)} size="sm" variant="secondary">查看详情</Button><Button onClick={() => onFindSimilar(difficulty.resource.resource_id)} size="sm" variant="primary"><ScanSearch className="size-3.5" />查找相似</Button><Button onClick={() => openCollectionDialog([{ beatmap_id: difficulty.beatmap_id, beatmapset_id: difficulty.beatmap_set_id, checksum: null, ruleset: difficulty.ruleset, difficulty_name: difficulty.difficulty_name, title: difficulty.title_unicode || difficulty.title, artist: difficulty.artist_unicode || difficulty.artist, creator: difficulty.creator, local_client: client, local_resource_id: difficulty.resource.resource_id }])} size="sm" variant="secondary"><Heart className="size-3.5" />加入收藏夹</Button><Button onClick={() => { const params = new URLSearchParams({ client, resource: difficulty.resource.resource_id }); window.location.hash = `/trainer?${params}`; }} size="sm" variant="primary"><WandSparkles className="size-3.5" />导入 Trainer</Button></div></article>)}</div></div></Dialog.Content></Dialog.Portal></Dialog.Root>;
+  const buttonClass = "w-full justify-center whitespace-nowrap px-2";
+  return (
+    <Dialog.Root onOpenChange={(next) => !next && onClose()} open={open}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[120] bg-black/65 backdrop-blur-sm" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-[130] flex max-h-[min(800px,calc(100vh-32px))] w-[min(1080px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0d131f] shadow-2xl outline-none">
+          <div className="flex items-start justify-between gap-5 border-b border-white/[0.08] p-6">
+            <div className="min-w-0"><Dialog.Title className="truncate text-xl font-semibold text-white">{set.title_unicode || set.title}</Dialog.Title><Dialog.Description className="mt-1 truncate text-sm text-slate-400">{set.artist_unicode || set.artist} · {set.difficulties.length} 个难度</Dialog.Description></div>
+            <Dialog.Close aria-label="关闭难度列表" className="grid size-9 shrink-0 place-items-center rounded-xl border border-white/10 text-slate-400 transition hover:bg-white/[0.08] hover:text-white"><X className="size-4" /></Dialog.Close>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6"><div className="space-y-3">
+            {set.difficulties.map((difficulty) => <article className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4 transition hover:border-cyan-300/25 hover:bg-cyan-300/[0.04]" key={difficulty.resource.resource_id}>
+              <div className="flex flex-wrap items-start gap-4">
+                <button className="min-w-0 flex-1 text-left" onClick={() => onOpen(difficulty.resource.resource_id)} type="button"><div className="flex items-center gap-2"><ModeIcon mode={difficulty.ruleset} /><DifficultyIcon mode={difficulty.ruleset} stars={difficulty.stars} /><h3 className="truncate text-base font-semibold text-white">[{difficulty.difficulty_name}]</h3></div><p className="mt-2 text-xs text-slate-500">{rulesetLabels[difficulty.ruleset]} · {difficulty.creator}</p></button>
+                <div className="grid flex-1 grid-cols-3 gap-x-5 gap-y-3 sm:grid-cols-6"><Metric icon={Gauge} label="AR / OD" value={`${difficulty.ar.toFixed(1)} / ${difficulty.od.toFixed(1)}`} /><Metric icon={CircleDot} label="CS" value={difficulty.cs.toFixed(1)} /><Metric icon={Zap} label="BPM" value={difficulty.bpm.toFixed(0)} /><Metric icon={Trophy} label="Max PP" value={difficulty.max_pp === null ? "—" : difficulty.max_pp.toFixed(1)} /><Metric icon={Timer} label="NPS" value={difficulty.average_nps.toFixed(1)} /><Metric icon={Hash} label="Objects" value={fullNumber(difficulty.object_count)} /></div>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2 border-t border-white/[0.06] pt-3 sm:grid-cols-3 xl:grid-cols-5">
+                <Button className={buttonClass} onClick={() => onOpen(difficulty.resource.resource_id)} size="sm" variant="secondary">查看详情</Button>
+                <Button className={buttonClass} onClick={() => onFindSimilar(difficulty.resource.resource_id)} size="sm" variant="primary"><ScanSearch className="size-3.5" />查找相似</Button>
+                <Button className={buttonClass} onClick={() => openCollectionDialog([{ beatmap_id: difficulty.beatmap_id, beatmapset_id: difficulty.beatmap_set_id, checksum: null, ruleset: difficulty.ruleset, difficulty_name: difficulty.difficulty_name, title: difficulty.title_unicode || difficulty.title, artist: difficulty.artist_unicode || difficulty.artist, creator: difficulty.creator, local_client: client, local_resource_id: difficulty.resource.resource_id }])} size="sm" variant="secondary"><Heart className="size-3.5" />加入收藏夹</Button>
+                <Button className={buttonClass} onClick={() => { const params = new URLSearchParams({ client, resource: difficulty.resource.resource_id }); window.location.hash = `/trainer?${params}`; }} size="sm" variant="primary"><WandSparkles className="size-3.5" />导入 Trainer</Button>
+                <Button className={buttonClass} disabled={!beatmapPreviewRoute(difficulty.beatmap_id)} onClick={() => { const route = beatmapPreviewRoute(difficulty.beatmap_id); if (route) window.location.hash = route; }} size="sm" title={difficulty.beatmap_id ? "前往工具集合生成铺面预览" : "该本地谱面没有 Beatmap ID，暂不支持生成预览"} variant="secondary"><ImageIcon className="size-3.5" />生成预览</Button>
+              </div>
+            </article>)}
+          </div></div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
 }
 
 function BeatmapSetCard({

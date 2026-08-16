@@ -880,6 +880,28 @@ impl LocalAnalysisService {
             .ok_or_else(|| CommandError::new("LOCAL_RESOURCE_NOT_FOUND", "未找到该 Skin 资源"))
     }
 
+    pub(crate) fn workshop_skin_root(
+        &self,
+        client: LocalClient,
+        resource_id: &str,
+    ) -> CommandResult<PathBuf> {
+        let index = self.require_current_index(client)?;
+        let entry = find_skin_entry(&index, resource_id)?;
+        skin_root(entry)
+    }
+
+    pub(crate) fn workshop_stable_skins_root(&self) -> CommandResult<PathBuf> {
+        self.sources
+            .resolve(LocalClient::Stable)?
+            .skin_root
+            .ok_or_else(|| CommandError::new("LOCAL_SOURCE_INVALID", "未配置 Stable Skins 目录"))
+    }
+
+    pub(crate) fn workshop_refresh_stable(&self) -> CommandResult<()> {
+        self.scan(LocalClient::Stable, true, Arc::new(|_| {}))
+            .map(|_| ())
+    }
+
     pub fn skin_preview(
         &self,
         client: LocalClient,

@@ -37,6 +37,10 @@ import { localSourcesKey, useLocalSources } from "../local-analysis/api";
 import { useSettings, settingsQueryKey } from "./api";
 import { defaultSimilarityPreferences } from "../similar-beatmaps/defaults";
 import { START_ONBOARDING_EVENT } from "../../shared/lib/onboardingEvents";
+import {
+  COMMUNITY_GROUP_MESSAGE,
+  COMMUNITY_GROUP_NUMBER,
+} from "../../shared/constants/community";
 import { requestManualUpdateCheck } from "../updates/events";
 
 const colors: Array<[ThemeColor, string, string]> = [
@@ -67,7 +71,7 @@ const base: AppSettings = {
   reduce_motion: false,
   similarity_index_directory: null,
   beatmap_download_directory: null,
-  default_beatmap_download_provider: "hinai",
+  default_beatmap_download_provider: "sayobot",
   open_downloaded_beatmaps_after_download: false,
   replay_export_directory: null,
   danser_executable_path: null,
@@ -489,7 +493,8 @@ export function SettingsPage() {
                 })}
                 value={settings.default_beatmap_download_provider}
               >
-                <option value="hinai">Hinai Mirror（推荐，多源回退）</option>
+                <option value="sayobot">小夜（Sayobot，推荐）</option>
+                <option value="hinai">Hinai Mirror（多源回退）</option>
                 <option value="catboy">Catboy</option>
                 <option value="nerinyan">Nerinyan</option>
               </select>
@@ -532,6 +537,12 @@ export function SettingsPage() {
                   <Gamepad2 className="size-4 text-[var(--theme-primary)]" />
                   OPP v{__APP_VERSION__}
                 </p>
+                <div className="mt-4 rounded-xl border border-white/[0.1] bg-white/[0.035] px-4 py-3">
+                  <p className="text-sm text-slate-300">{COMMUNITY_GROUP_MESSAGE}</p>
+                  <p className="mt-1 text-sm text-slate-400">
+                    交流群：<span className="select-all font-mono font-semibold text-[var(--theme-primary-light)]">{COMMUNITY_GROUP_NUMBER}</span>
+                  </p>
+                </div>
               </div>
               <div className="flex flex-wrap justify-end gap-2">
                 <Button disabled={updateBusy} loading={updateBusy} onClick={() => void checkForUpdates()} size="sm" variant="secondary">

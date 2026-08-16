@@ -140,7 +140,7 @@ function OnlineBeatmapsClient({ ruleset }: { ruleset: Ruleset }) {
     <div className="space-y-5">
       <OnlineBeatmapFilters loading={search.isFetching && !search.isFetchingNextPage} onChange={setDraft} onReset={reset} onSubmit={() => setActiveQuery({ ...draft, cursor_string: null })} query={draft} suggestions={searchSuggestions} />
       <div className="grid grid-cols-[minmax(0,1fr)_300px] items-start gap-5">
-        <section className="min-w-0">
+        <section className="min-w-0" data-page-guide-online-results="true">
           <div className="mb-4 flex min-h-14 items-center justify-between rounded-2xl border border-white/[0.08] bg-white/[0.025] px-5">
             <div className="text-sm text-slate-400">已加载 <strong className="font-mono text-slate-100">{items.length}</strong>{availableTotal !== null ? <> / 共 <strong className="font-mono text-slate-100">{availableTotal}</strong></> : null}</div>
             <Button disabled={!items.length} onClick={() => setQueue((current) => { const next = new Map(current); items.forEach((item) => { if (!item.availability?.download_disabled) next.set(item.id, item); }); return next; })} size="sm" variant="ghost"><CheckSquare2 className="size-4" />将当前结果全部加入队列</Button>

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { getPageGuide, needsPageOnboarding } from "./pageTourContent";
+import {
+  CURRENT_PAGE_ONBOARDING_VERSION,
+  getPageGuide,
+  needsPageOnboarding,
+} from "./pageTourContent";
 
 const guidedRoutes = [
   "/online/beatmaps",
@@ -33,5 +37,18 @@ describe("page tour content", () => {
     expect(needsPageOnboarding(1, guide!)).toBe(true);
     expect(needsPageOnboarding(guide!.version, guide!)).toBe(false);
     expect(getPageGuide("/unknown")).toBeNull();
+  });
+
+  it("uses a dedicated version for the redesigned online beatmap guide", () => {
+    const guide = getPageGuide("/online/beatmaps");
+    expect(guide?.version).toBe(3);
+    expect(guide?.steps.map((step) => step.target)).toEqual(expect.arrayContaining([
+      '[data-page-guide-online-search="true"]',
+      '[data-page-guide-online-core-filters="true"]',
+      '[data-page-guide-online-advanced="true"]',
+      '[data-page-guide-online-results="true"]',
+      '[data-page-guide-online-download="true"]',
+    ]));
+    expect(getPageGuide("/settings")?.version).toBe(CURRENT_PAGE_ONBOARDING_VERSION);
   });
 });
