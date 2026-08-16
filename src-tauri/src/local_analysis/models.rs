@@ -64,12 +64,13 @@ impl LocalCapabilities {
                 skin_resources: CapabilityLevel::Full,
                 realm_index: false,
             },
+            // Lazer 以 client.realm 为权威索引：谱面 / 皮肤 / 资源均完整可用。
             LocalClient::Lazer => Self {
-                beatmaps: CapabilityLevel::Partial,
+                beatmaps: CapabilityLevel::Full,
                 difficulty: CapabilityLevel::Full,
-                skins: CapabilityLevel::Partial,
-                skin_resources: CapabilityLevel::Unavailable,
-                realm_index: false,
+                skins: CapabilityLevel::Full,
+                skin_resources: CapabilityLevel::Full,
+                realm_index: true,
             },
         }
     }

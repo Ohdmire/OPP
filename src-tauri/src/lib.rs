@@ -43,11 +43,11 @@ use game_session::{
     start_game_monitor, start_game_session,
 };
 use local_analysis::{
-    cancel_local_scan, get_local_beatmap_background, get_local_beatmap_detail,
-    get_local_beatmap_path, get_local_index_status, get_local_skin_asset, get_local_skin_detail,
-    get_local_skin_preview, get_local_sources, get_local_summary, query_local_beatmap_sets,
-    query_local_beatmaps, query_local_skins, replace_local_skin_asset, reset_local_source,
-    scan_local_source, set_local_source,
+    cancel_local_scan, export_local_beatmap_set, export_local_skin, get_local_beatmap_background,
+    get_local_beatmap_detail, get_local_beatmap_path, get_local_index_status,
+    get_local_skin_asset, get_local_skin_detail, get_local_skin_preview, get_local_sources,
+    get_local_summary, query_local_beatmap_sets, query_local_beatmaps, query_local_skins,
+    replace_local_skin_asset, reset_local_source, scan_local_source, set_local_source,
 };
 use netease_music::open_netease_music_search;
 use obs::{
@@ -219,6 +219,8 @@ pub fn run() {
             reset_local_source,
             get_local_summary,
             scan_local_source,
+            export_local_beatmap_set,
+            export_local_skin,
             cancel_local_scan,
             query_local_beatmaps,
             query_local_beatmap_sets,
@@ -242,6 +244,7 @@ pub fn run() {
             set_default_file_client,
             set_display_gamma,
             get_lazer_disk_usage,
+            read_lazer_realm_beatmap_sets,
             dedupe_lazer_files,
             cancel_lazer_dedupe,
             open_netease_music_search,

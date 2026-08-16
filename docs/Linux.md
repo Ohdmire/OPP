@@ -10,7 +10,8 @@ Linux 桌面需要：
 - D-Bus 与 Secret Service 实现，例如 GNOME Keyring 或 KWallet，用于保存 OAuth Token、Client Secret 和 OBS 密码；
 - `osu-wine`（Stable）或 `osu-lazer`（lazer）启动命令；
 - 使用 tosu 时，PATH 中还需要 `tosu` 和 `pkexec`（PolicyKit）；
-- Trainer 变速或截取功能需要 `ffmpeg`。
+- Trainer 变速或截取功能需要 `ffmpeg`；
+- 应用内音频播放（皮肤音效预览、谱面试听等）由 WebKitGTK 的 GStreamer 后端解码输出，需要安装完整音频插件
 
 在 Debian/Ubuntu 上构建时，可先安装 Tauri 2 和凭据后端所需依赖：
 
@@ -27,6 +28,7 @@ sudo apt install \
   libayatana-appindicator3-dev \
   librsvg2-dev \
   libdbus-1-dev \
+  gstreamer1.0-plugins-good \
   pkg-config
 ```
 

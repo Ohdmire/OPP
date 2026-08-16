@@ -70,7 +70,7 @@ export function useLocalBeatmapBackground(
   return useQuery({
     queryKey: ["local-beatmap-background", client, resourceId],
     queryFn: () => desktopApi.getLocalBeatmapBackground(client, resourceId!),
-    enabled: client === "stable" && Boolean(resourceId),
+    enabled: Boolean(resourceId),
     staleTime: Number.POSITIVE_INFINITY,
     retry: false,
   });
