@@ -41,7 +41,7 @@ encoding_rs = "0.8"
 image = { version = "0.25.10", default-features = false, features = ["bmp", "gif", "jpeg", "png", "webp"] }
 rayon = "1"
 rosu-map = "0.2.1"
-rosu-pp = "4.0.1"
+rosu-pp = { git = "https://github.com/Apeuriox/rosu-pp", branch = "pp-rework-202607" }
 sha2 = "0.10"
 walkdir = "2"
 zip = "4"

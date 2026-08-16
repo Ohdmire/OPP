@@ -2927,7 +2927,7 @@ dependencies = [
  "png 0.18.1",
  "serde",
  "thiserror 2.0.19",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4331,8 +4331,7 @@ checksum = "cc58d42f8f2308b4b241de147827af84179d0a318de250495c7c5e47cb701cd9"
 [[package]]
 name = "rosu-pp"
 version = "4.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "697808a7bff3a12f18f519c7111de1df1846ae5b937561d56117658626cab978"
+source = "git+https://github.com/Apeuriox/rosu-pp?branch=pp-rework-202607#9a073d29611ef936b581a08d3c5b288ef5427301"
 dependencies = [
  "divan",
  "rosu-map",

@@ -37,8 +37,23 @@ pub(crate) fn copy_directory(source: &Path, target: &Path) -> CommandResult<()> 
     Ok(())
 }
 
+fn find_skin_ini(root: &Path) -> Option<PathBuf> {
+    fs::read_dir(root)
+        .ok()?
+        .filter_map(Result::ok)
+        .find(|entry| {
+            entry
+                .file_name()
+                .to_str()
+                .is_some_and(|name| name.eq_ignore_ascii_case("skin.ini"))
+        })
+        .map(|entry| entry.path())
+}
+
 pub(crate) fn read_config(root: &Path) -> CommandResult<SkinConfigDocument> {
-    let path = root.join("skin.ini");
+    let path = find_skin_ini(root).ok_or_else(|| {
+        CommandError::new("SKIN_CONFIG_NOT_FOUND", "未找到 skin.ini 文件")
+    })?;
     let bytes = fs::read(&path).map_err(|error| {
         CommandError::new(
             "SKIN_CONFIG_READ_ERROR",
@@ -58,7 +73,9 @@ pub(crate) fn read_config(root: &Path) -> CommandResult<SkinConfigDocument> {
 }
 
 pub(crate) fn write_config_source(root: &Path, source: &str) -> CommandResult<()> {
-    let path = root.join("skin.ini");
+    let path = find_skin_ini(root).ok_or_else(|| {
+        CommandError::new("SKIN_CONFIG_NOT_FOUND", "未找到 skin.ini 文件")
+    })?;
     let original = fs::read(&path).unwrap_or_default();
     let bytes = encode_like(&original, source);
     let temporary = root.join("skin.ini.opp-workshop");
